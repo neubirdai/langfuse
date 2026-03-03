@@ -862,9 +862,9 @@ export function WidgetForm({
           ? selectedMetadataKey.trim()
             ? [{ field: "metadata", key: selectedMetadataKey.trim() }]
             : [] // no key entered yet — send no dimension
-        : selectedDimension !== "none"
-          ? [{ field: selectedDimension }]
-          : [];
+          : selectedDimension !== "none"
+            ? [{ field: selectedDimension }]
+            : [];
 
     // Determine metrics based on chart type
     const queryMetrics =

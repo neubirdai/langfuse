@@ -1,0 +1,61 @@
+name: Build and Push neubirdai Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - nimit-metadata
+
+jobs:
+  build-push-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME_BYTECODE }}
+          password: ${{ secrets.DOCKER_PASSWORD_BYTECODE }}
+
+      - name: Set build ID
+        run: echo "NEXT_PUBLIC_BUILD_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build and push web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./web/Dockerfile
+          push: true
+          tags: docker.io/neubirdai/langfuse-web:latest
+          build-args: |
+            NEXT_PUBLIC_BUILD_ID=${{ env.NEXT_PUBLIC_BUILD_ID }}
+
+  build-push-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./worker/Dockerfile
+          push: true
+          tags: docker.io/neubirdai/langfuse-worker:latest
