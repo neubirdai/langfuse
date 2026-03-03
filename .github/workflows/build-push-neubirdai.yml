@@ -2,9 +2,6 @@ name: Build and Push neubirdai Images
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - nimit-metadata
 
 jobs:
   build-push-web:
