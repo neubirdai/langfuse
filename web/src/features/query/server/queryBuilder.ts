@@ -107,10 +107,38 @@ export class QueryBuilder {
   }
 
   private mapDimensions(
-    dimensions: Array<{ field: string }>,
+    dimensions: Array<{ field: string; key?: string }>,
     view: ViewDeclarationType,
   ): AppliedDimensionType[] {
     return dimensions.map((dimension) => {
+      // Handle metadata dimension specially — dynamic map key access
+      if (dimension.field === "metadata") {
+        if (!dimension.key) {
+          throw new InvalidRequestError(
+            "Metadata dimension requires a 'key' property (e.g. 'environment' or 'config.region')",
+          );
+        }
+        // Validate: only allow alphanumeric, dots, underscores, hyphens to prevent SQL injection
+        if (!/^[a-zA-Z0-9._-]+$/.test(dimension.key)) {
+          throw new InvalidRequestError(
+            `Invalid metadata key '${dimension.key}'. Only alphanumeric characters, dots, underscores, and hyphens are allowed.`,
+          );
+        }
+        const tableName = view.baseCte.split(" ")[0];
+        // Split on all dots — each segment is one level of JSON nesting.
+        // e.g. "feature_flags.enableResultCompression.constant_columns"
+        //   → JSONExtractString(metadata['feature_flags'], 'enableResultCompression', 'constant_columns')
+        // Note: keys whose names literally contain dots (e.g. OTel "service.name") cannot be
+        // accessed with this notation — use the top-level Map key only in that case.
+        const [topLevelKey, ...nestedParts] = dimension.key.split(".");
+        const sql =
+          nestedParts.length === 0
+            ? `${tableName}.metadata['${topLevelKey}']`
+            : `JSONExtractString(${tableName}.metadata['${topLevelKey}'], ${nestedParts.map((p) => `'${p}'`).join(", ")})`;
+        const alias = `metadata_${dimension.key.replace(/[.-]/g, "_")}`;
+        return { table: tableName, sql, alias };
+      }
+
       if (!(dimension.field in view.dimensions)) {
         throw new InvalidRequestError(
           `Invalid dimension ${dimension.field}. Must be one of ${Object.keys(view.dimensions)}`,

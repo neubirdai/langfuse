@@ -1,11 +1,6 @@
 name: SDK API Spec Generation
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'fern/**'
   workflow_dispatch:
 
 concurrency:

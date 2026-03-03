@@ -102,6 +102,7 @@ export type ViewVersion = z.infer<typeof viewVersions>;
 
 export const dimension = z.object({
   field: z.string(),
+  key: z.string().optional(), // required when field === "metadata"
 });
 
 export const metricAggregations = z.enum([

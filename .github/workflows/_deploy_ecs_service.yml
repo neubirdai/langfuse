@@ -1,5 +1,15 @@
 name: WorkflowCall - Deploy to ECS Service
 on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: string
+        description: Deployment environment
+        required: true
+      service:
+        type: string
+        description: Name of the service to be deployed, e.g. web-ingestion, web, or worker.
+        required: true
   workflow_call:
     inputs:
       environment:

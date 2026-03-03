@@ -223,7 +223,7 @@ export function WidgetForm({
     chartConfig?: ChartConfig;
     // Support for complete widget data (editing mode)
     metrics?: { measure: string; agg: string }[];
-    dimensions?: { field: string }[];
+    dimensions?: { field: string; key?: string }[];
     minVersion?: number;
   };
   projectId: string;
@@ -298,6 +298,11 @@ export function WidgetForm({
 
   const [selectedDimension, setSelectedDimension] = useState<string>(
     initialValues.dimension,
+  );
+
+  const [selectedMetadataKey, setSelectedMetadataKey] = useState<string>(
+    initialValues.dimensions?.filter((d) => d.field === "metadata")[0]?.key ??
+      "",
   );
 
   const selectedViewRef = useRef(selectedView);
@@ -853,9 +858,13 @@ export function WidgetForm({
     const queryDimensions =
       selectedChartType === "PIVOT_TABLE"
         ? pivotDimensions.map((field) => ({ field }))
-        : selectedDimension !== "none"
-          ? [{ field: selectedDimension }]
-          : [];
+        : selectedDimension === "metadata"
+          ? selectedMetadataKey.trim()
+            ? [{ field: "metadata", key: selectedMetadataKey.trim() }]
+            : [] // no key entered yet — send no dimension
+          : selectedDimension !== "none"
+            ? [{ field: selectedDimension }]
+            : [];
 
     // Determine metrics based on chart type
     const queryMetrics =
@@ -929,6 +938,7 @@ export function WidgetForm({
     defaultSortColumn,
     defaultSortOrder,
     previewSortState,
+    selectedMetadataKey,
   ]);
 
   const queryResult = api.dashboard.executeQuery.useQuery(
@@ -973,7 +983,12 @@ export function WidgetForm({
           // Regular chart processing
           const metricField = `${selectedAggregation}_${selectedMeasure}`;
           const metric = item[metricField];
-          const dimensionField = selectedDimension;
+          // For metadata dimensions, the result column is the alias (e.g. metadata_chain_name),
+          // not the field name "metadata"
+          const dimensionField =
+            selectedDimension === "metadata" && selectedMetadataKey.trim()
+              ? `metadata_${selectedMetadataKey.trim().replace(/[.-]/g, "_")}`
+              : selectedDimension;
           return {
             dimension:
               item[dimensionField] !== undefined && dimensionField !== "none"
@@ -998,6 +1013,7 @@ export function WidgetForm({
       selectedMeasure,
       selectedChartType,
       pivotDimensions,
+      selectedMetadataKey,
     ],
   );
 
@@ -1213,6 +1229,7 @@ export function WidgetForm({
                       setSelectedMeasure("count");
                       setSelectedAggregation("count");
                       setSelectedDimension("none");
+                      setSelectedMetadataKey("");
 
                       // Handle pivot table metrics - filter out invalid measures for the new view
                       if (selectedChartType === "PIVOT_TABLE") {
@@ -1518,7 +1535,10 @@ export function WidgetForm({
                     </Label>
                     <Select
                       value={selectedDimension}
-                      onValueChange={setSelectedDimension}
+                      onValueChange={(value) => {
+                        setSelectedDimension(value);
+                        if (value !== "metadata") setSelectedMetadataKey("");
+                      }}
                     >
                       <SelectTrigger id="dimension-select">
                         <SelectValue placeholder="Select a dimension" />
@@ -1540,8 +1560,27 @@ export function WidgetForm({
                             />
                           );
                         })}
+                        {(selectedView === "traces" ||
+                          selectedView === "observations") && (
+                          <SelectItem value="metadata">Metadata Key</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
+                    {selectedDimension === "metadata" && (
+                      <div className="space-y-1">
+                        <Input
+                          placeholder="e.g. environment or config.region"
+                          value={selectedMetadataKey}
+                          onChange={(e) =>
+                            setSelectedMetadataKey(e.target.value)
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Use dot notation for nested keys (e.g.{" "}
+                          <code>config.region</code>)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

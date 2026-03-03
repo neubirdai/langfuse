@@ -1,13 +1,6 @@
 name: License Compliance Check
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-  merge_group:
-  pull_request:
-    branches:
-      - "main"
 
 jobs:
   license_check:
