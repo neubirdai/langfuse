@@ -1,9 +1,6 @@
 name: Rebase Dependabot stale PRs
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:

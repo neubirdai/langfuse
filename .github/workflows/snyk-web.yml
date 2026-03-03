@@ -1,7 +1,6 @@
 name: Snyk Container - Web
 on:
-  push:
-    branches: ["production", "main"]
+  workflow_dispatch:
 
 jobs:
   snyk:
