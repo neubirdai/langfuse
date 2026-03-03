@@ -292,26 +292,55 @@ export class StringObjectFilter implements Filter {
     } else {
       // For observations/traces tables, use Map access: metadata[key]
       const column = `${prefix}${this.field}`;
+      const [topKey, ...nestedParts] = this.key.split(".");
+      const hasNestedKey = nestedParts.length > 0;
+
+      let valueAccessor: string;
+      let extraParams: Record<string, string> = {};
+
+      if (hasNestedKey) {
+        const varTopKeyName = `stringObjectTopKeyFilter${clickhouseCompliantRandomCharacters()}`;
+        const nestedVarNames = nestedParts.map(
+          () =>
+            `stringObjectJsonKeyFilter${clickhouseCompliantRandomCharacters()}`,
+        );
+        const nestedParamsSql = nestedVarNames
+          .map((v) => `{${v}: String}`)
+          .join(", ");
+        valueAccessor = `JSONExtractString(${column}[{${varTopKeyName}: String}], ${nestedParamsSql})`;
+        extraParams = { [varTopKeyName]: topKey };
+        nestedVarNames.forEach((v, i) => {
+          extraParams[v] = nestedParts[i];
+        });
+      } else {
+        valueAccessor = `${column}[{${varKeyName}: String}]`;
+        extraParams = { [varKeyName]: this.key };
+      }
 
       switch (this.operator) {
         case "=":
-          query = `${column}[{${varKeyName}: String}] = {${varValueName}: String}`;
+          query = `${valueAccessor} = {${varValueName}: String}`;
           break;
         case "contains":
-          query = `position(${column}[{${varKeyName}: String}], {${varValueName}: String}) > 0`;
+          query = `position(${valueAccessor}, {${varValueName}: String}) > 0`;
           break;
         case "does not contain":
-          query = `position(${column}[{${varKeyName}: String}], {${varValueName}: String}) = 0`;
+          query = `position(${valueAccessor}, {${varValueName}: String}) = 0`;
           break;
         case "starts with":
-          query = `startsWith(${column}[{${varKeyName}: String}], {${varValueName}: String})`;
+          query = `startsWith(${valueAccessor}, {${varValueName}: String})`;
           break;
         case "ends with":
-          query = `endsWith(${column}[{${varKeyName}: String}], {${varValueName}: String})`;
+          query = `endsWith(${valueAccessor}, {${varValueName}: String})`;
           break;
         default:
           throw new Error(`Unsupported operator: ${this.operator}`);
       }
+
+      return {
+        query,
+        params: { ...extraParams, [varValueName]: this.value },
+      };
     }
 
     return {
