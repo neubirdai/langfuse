@@ -12,7 +12,9 @@
     "deny": []
   },
   "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": ["sequential-thinking"],
+  "enabledMcpjsonServers": [
+    "sequential-thinking"
+  ],
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -35,5 +37,9 @@
         ]
       }
     ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }
