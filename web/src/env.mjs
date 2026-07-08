@@ -51,8 +51,10 @@ export const env = createEnv({
     // Add `.min(1) on ID and SECRET if you want to make sure they're not empty
     LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: z.enum(["true", "false"]).optional(),
     SALT: z.string({
-      required_error:
-        "A strong Salt is required to encrypt API keys securely. See: https://langfuse.com/self-hosting#deploy-the-container",
+      error: (issue) =>
+        issue.input === undefined
+          ? "A strong Salt is required to encrypt API keys securely. See: https://langfuse.com/self-hosting#deploy-the-container"
+          : "Invalid type",
     }),
     // Add newly signed up users to default org(s) and/or project(s) with role
     // Supports comma-separated IDs for multiple orgs/projects (e.g., "org1,org2,org3")
@@ -254,6 +256,9 @@ export const env = createEnv({
     CLICKHOUSE_USE_QUERY_CONDITION_CACHE: z
       .enum(["true", "false"])
       .default("false"),
+    LANGFUSE_ENABLE_SINGLE_LEVEL_QUERY_OPTIMIZATION: z
+      .enum(["true", "false"])
+      .default("false"),
     LANGFUSE_ROOT_EVENT_CONDITION_MAX_WINDOW_HOURS: z.coerce
       .number()
       .int()
@@ -349,6 +354,7 @@ export const env = createEnv({
     PLAIN_AUTHENTICATION_SECRET: z.string().optional(),
     PLAIN_API_KEY: z.string().optional(),
     PLAIN_CARDS_API_TOKEN: z.string().optional(),
+    PYLON_API_KEY: z.string().optional(),
 
     // UI customization - comma-separated list of visible product modules
     LANGFUSE_UI_VISIBLE_PRODUCT_MODULES: z.string().optional(),
@@ -393,6 +399,7 @@ export const env = createEnv({
       .enum(["true", "false"])
       .default("false"),
     LANGFUSE_API_TRACES_DEFAULT_FIELDS: z.string().optional(),
+    LANGFUSE_API_TRACEBYID_DEFAULT_FIELDS: z.string().optional(),
 
     // Events table migration
     LANGFUSE_ENABLE_EVENTS_TABLE_OBSERVATIONS: z
@@ -437,7 +444,7 @@ export const env = createEnv({
 
     // NEXT_PUBLIC_CLIENTVAR: z.string().min(1),
     NEXT_PUBLIC_LANGFUSE_CLOUD_REGION: z
-      .enum(["US", "EU", "STAGING", "DEV", "HIPAA"])
+      .enum(["US", "EU", "STAGING", "DEV", "HIPAA", "JP"])
       .optional(),
     NEXT_PUBLIC_DEMO_PROJECT_ID: z.string().optional(),
     NEXT_PUBLIC_DEMO_ORG_ID: z.string().optional(),
@@ -672,6 +679,7 @@ export const env = createEnv({
     PLAIN_AUTHENTICATION_SECRET: process.env.PLAIN_AUTHENTICATION_SECRET,
     PLAIN_API_KEY: process.env.PLAIN_API_KEY,
     PLAIN_CARDS_API_TOKEN: process.env.PLAIN_CARDS_API_TOKEN,
+    PYLON_API_KEY: process.env.PYLON_API_KEY,
     // clickhouse
     CLICKHOUSE_URL: process.env.CLICKHOUSE_URL,
     CLICKHOUSE_CLUSTER_NAME: process.env.CLICKHOUSE_CLUSTER_NAME,
@@ -683,6 +691,8 @@ export const env = createEnv({
       process.env.CLICKHOUSE_MAX_BYTES_BEFORE_EXTERNAL_GROUP_BY,
     CLICKHOUSE_USE_QUERY_CONDITION_CACHE:
       process.env.CLICKHOUSE_USE_QUERY_CONDITION_CACHE,
+    LANGFUSE_ENABLE_SINGLE_LEVEL_QUERY_OPTIMIZATION:
+      process.env.LANGFUSE_ENABLE_SINGLE_LEVEL_QUERY_OPTIMIZATION,
     LANGFUSE_ROOT_EVENT_CONDITION_MAX_WINDOW_HOURS:
       process.env.LANGFUSE_ROOT_EVENT_CONDITION_MAX_WINDOW_HOURS,
     // EE ui customization
@@ -772,6 +782,8 @@ export const env = createEnv({
       process.env.LANGFUSE_API_TRACES_REJECT_NO_DATE_RANGE,
     LANGFUSE_API_TRACES_DEFAULT_FIELDS:
       process.env.LANGFUSE_API_TRACES_DEFAULT_FIELDS,
+    LANGFUSE_API_TRACEBYID_DEFAULT_FIELDS:
+      process.env.LANGFUSE_API_TRACEBYID_DEFAULT_FIELDS,
     // Events table migration
     LANGFUSE_ENABLE_EVENTS_TABLE_OBSERVATIONS:
       process.env.LANGFUSE_ENABLE_EVENTS_TABLE_OBSERVATIONS,
