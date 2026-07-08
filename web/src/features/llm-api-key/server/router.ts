@@ -1,4 +1,4 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 import { auditLog } from "@/src/features/audit-logs/auditLog";
 import {
   CreateLlmApiKey,
@@ -20,6 +20,8 @@ import {
   VertexAIConfigSchema,
   BEDROCK_USE_DEFAULT_CREDENTIALS,
   VERTEXAI_USE_DEFAULT_CREDENTIALS,
+  EvaluatorBlockReason,
+  getEvaluatorBlockMetadata,
 } from "@langfuse/shared";
 import { encrypt, decrypt } from "@langfuse/shared/encryption";
 import {
@@ -28,6 +30,10 @@ import {
   LLMAdapter,
   logger,
   decryptAndParseExtraHeaders,
+  blockEvaluatorConfigsInTx,
+  EvaluatorBlockSource,
+  finalizeBlockedEvaluatorConfigBlocks,
+  validateLlmConnectionBaseURL,
 } from "@langfuse/shared/src/server";
 import { env } from "@/src/env.mjs";
 import { TRPCError } from "@trpc/server";
@@ -125,6 +131,27 @@ async function testLLMConnection(
   }
 }
 
+async function validateBaseURLForWrite(params: {
+  baseURL?: string | null;
+  errorPrefix?: string;
+}): Promise<void> {
+  if (!params.baseURL) {
+    return;
+  }
+
+  try {
+    await validateLlmConnectionBaseURL(params.baseURL);
+  } catch (error) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        error instanceof Error
+          ? `${params.errorPrefix ?? "Invalid base URL"}: ${error.message}`
+          : (params.errorPrefix ?? "Invalid base URL"),
+    });
+  }
+}
+
 export const llmApiKeyRouter = createTRPCRouter({
   create: protectedProjectProcedureWithoutTracing
     .input(CreateLlmApiKey)
@@ -134,6 +161,10 @@ export const llmApiKeyRouter = createTRPCRouter({
           session: ctx.session,
           projectId: input.projectId,
           scope: "llmApiKeys:create",
+        });
+
+        await validateBaseURLForWrite({
+          baseURL: input.baseURL,
         });
 
         // Validate that default credentials sentinel is only allowed for Bedrock/VertexAI in self-hosted deployments
@@ -226,34 +257,79 @@ export const llmApiKeyRouter = createTRPCRouter({
         },
       });
 
-      return ctx.prisma.$transaction(async (tx) => {
+      const result = await ctx.prisma.$transaction(async (tx) => {
         // Check if the llm api key is used for the default evaluation model
-        // If so, it will be deleted and we must invalidate all eval jobs that rely on it
         const defaultModel = await tx.defaultLlmModel.findFirst({
           where: {
             projectId: input.projectId,
           },
+          select: {
+            llmApiKeyId: true,
+          },
         });
 
+        const providerBlockedJobConfigIds = new Set<string>();
+        const defaultModelBlockedJobConfigIds = new Set<string>();
+
+        if (llmApiKey?.provider) {
+          const evalTemplates = await tx.evalTemplate.findMany({
+            where: {
+              OR: [{ projectId: input.projectId }, { projectId: null }],
+              provider: llmApiKey.provider,
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          const providerBlockResult = await blockEvaluatorConfigsInTx({
+            tx,
+            projectId: input.projectId,
+            where: {
+              evalTemplateId: {
+                in: evalTemplates.map((template) => template.id),
+              },
+            },
+            blockReason: EvaluatorBlockReason.LLM_CONNECTION_MISSING,
+            blockMessage: getEvaluatorBlockMetadata(
+              EvaluatorBlockReason.LLM_CONNECTION_MISSING,
+            ).message,
+          });
+
+          for (const configId of providerBlockResult.blockedJobConfigIds) {
+            providerBlockedJobConfigIds.add(configId);
+          }
+        }
+
         if (!!defaultModel && defaultModel.llmApiKeyId === llmApiKey?.id) {
-          // Invalidate all eval jobs that rely on the default model
           const evalTemplates = await tx.evalTemplate.findMany({
             where: {
               OR: [{ projectId: input.projectId }, { projectId: null }],
               provider: null,
               model: null,
             },
+            select: {
+              id: true,
+            },
           });
 
-          await tx.jobConfiguration.updateMany({
+          const defaultModelBlockResult = await blockEvaluatorConfigsInTx({
+            tx,
+            projectId: input.projectId,
             where: {
-              evalTemplateId: { in: evalTemplates.map((et) => et.id) },
-              projectId: input.projectId,
+              evalTemplateId: {
+                in: evalTemplates.map((template) => template.id),
+              },
             },
-            data: {
-              status: "INACTIVE",
-            },
+            blockReason: EvaluatorBlockReason.DEFAULT_EVAL_MODEL_MISSING,
+            blockMessage: getEvaluatorBlockMetadata(
+              EvaluatorBlockReason.DEFAULT_EVAL_MODEL_MISSING,
+            ).message,
           });
+
+          for (const configId of defaultModelBlockResult.blockedJobConfigIds) {
+            defaultModelBlockedJobConfigIds.add(configId);
+          }
         }
 
         await tx.llmApiKeys.delete({
@@ -271,8 +347,26 @@ export const llmApiKeyRouter = createTRPCRouter({
           action: "delete",
         });
 
-        return { success: true };
+        return {
+          providerBlockedJobConfigIds: Array.from(providerBlockedJobConfigIds),
+          defaultModelBlockedJobConfigIds: Array.from(
+            defaultModelBlockedJobConfigIds,
+          ),
+        };
       });
+
+      await finalizeBlockedEvaluatorConfigBlocks({
+        projectId: input.projectId,
+        source: EvaluatorBlockSource.LLM_API_KEY_DELETION,
+        blockedByReason: {
+          [EvaluatorBlockReason.LLM_CONNECTION_MISSING]:
+            result.providerBlockedJobConfigIds,
+          [EvaluatorBlockReason.DEFAULT_EVAL_MODEL_MISSING]:
+            result.defaultModelBlockedJobConfigIds,
+        },
+      });
+
+      return { success: true };
     }),
   all: protectedProjectProcedure
     .input(
@@ -331,7 +425,24 @@ export const llmApiKeyRouter = createTRPCRouter({
 
   test: protectedProjectProcedureWithoutTracing
     .input(CreateLlmApiKey)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      throwIfNoProjectAccess({
+        session: ctx.session,
+        projectId: input.projectId,
+        scope: "llmApiKeys:create",
+      });
+
+      if (input.baseURL) {
+        try {
+          await validateLlmConnectionBaseURL(input.baseURL);
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "Invalid base URL",
+          };
+        }
+      }
+
       return testLLMConnection({
         adapter: input.adapter,
         provider: input.provider,
@@ -346,13 +457,13 @@ export const llmApiKeyRouter = createTRPCRouter({
   testUpdate: protectedProjectProcedureWithoutTracing
     .input(UpdateLlmApiKey)
     .mutation(async ({ input, ctx }) => {
-      try {
-        throwIfNoProjectAccess({
-          session: ctx.session,
-          projectId: input.projectId,
-          scope: "llmApiKeys:read",
-        });
+      throwIfNoProjectAccess({
+        session: ctx.session,
+        projectId: input.projectId,
+        scope: "llmApiKeys:update",
+      });
 
+      try {
         // Get the existing key from the database
         const existingKey = await ctx.prisma.llmApiKeys.findUnique({
           where: {
@@ -368,25 +479,41 @@ export const llmApiKeyRouter = createTRPCRouter({
           });
         }
 
-        const decryptedSecretKey =
-          input.secretKey !== undefined &&
-          input.secretKey !== "" &&
-          input.secretKey !== null
-            ? input.secretKey
-            : decrypt(existingKey.secretKey);
+        const hasNewSecretKey =
+          typeof input.secretKey === "string" && input.secretKey.length > 0;
+        const baseURL = input.baseURL ?? existingKey.baseURL;
+        const isBaseURLChanged = baseURL !== existingKey.baseURL;
+
+        if (isBaseURLChanged && !hasNewSecretKey) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Secret key is required when changing the base URL",
+          });
+        }
+
+        if (input.baseURL && isBaseURLChanged) {
+          await validateLlmConnectionBaseURL(input.baseURL);
+        }
+
+        const secretKey = hasNewSecretKey
+          ? (input.secretKey as string)
+          : decrypt(existingKey.secretKey);
 
         // Merge existing key with provided input, giving priority to input
-        const secretKey = decryptedSecretKey;
         const adapter = input.adapter ?? (existingKey.adapter as LLMAdapter);
         const provider = input.provider ?? existingKey.provider;
-        const baseURL = input.baseURL ?? existingKey.baseURL;
         const customModels = input.customModels ?? existingKey.customModels;
         const config = input.config ?? existingKey.config;
+
+        // Never reuse stored headers across a destination change.
         const extraHeaders =
-          input.extraHeaders ??
-          (existingKey.extraHeaders
-            ? decryptAndParseExtraHeaders(existingKey.extraHeaders)
-            : undefined);
+          input.extraHeaders !== undefined
+            ? input.extraHeaders
+            : isBaseURLChanged
+              ? undefined
+              : existingKey.extraHeaders
+                ? decryptAndParseExtraHeaders(existingKey.extraHeaders)
+                : undefined;
 
         return testLLMConnection({
           adapter,
@@ -445,6 +572,16 @@ export const llmApiKeyRouter = createTRPCRouter({
 
         // Validate that default credentials sentinel is only allowed for Bedrock/VertexAI in self-hosted deployments
         const isLangfuseCloud = Boolean(env.NEXT_PUBLIC_LANGFUSE_CLOUD_REGION);
+        const isBaseURLChanged =
+          input.baseURL !== undefined
+            ? input.baseURL !== existingKey.baseURL
+            : false;
+
+        if (input.baseURL && isBaseURLChanged) {
+          await validateBaseURLForWrite({
+            baseURL: input.baseURL,
+          });
+        }
 
         if (input.secretKey === BEDROCK_USE_DEFAULT_CREDENTIALS) {
           if (isLangfuseCloud || input.adapter !== LLMAdapter.Bedrock) {

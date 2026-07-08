@@ -1,4 +1,4 @@
-import { z } from "zod/v4";
+import { z } from "zod";
 import { singleFilter } from "@langfuse/shared";
 
 export type ViewDeclarationType = z.infer<typeof viewDeclaration>;
@@ -30,6 +30,7 @@ export const viewDeclaration = z.object({
         })
         .optional(),
       highCardinality: z.boolean().optional(),
+      uiHidden: z.boolean().optional(),
       explodeArray: z.boolean().optional(),
       pairExpand: z
         .object({
