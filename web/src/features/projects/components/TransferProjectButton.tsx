@@ -76,7 +76,7 @@ export function TransferProjectButton() {
           "The project is successfully transferred to the new organization. Redirecting...",
       });
       await new Promise((resolve) => setTimeout(resolve, 5000));
-      void session.update();
+      session.update();
       window.location.href = "/";
     },
   });
@@ -107,7 +107,7 @@ export function TransferProjectButton() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
+          <DialogTitle className="text-lg font-bold">
             Transfer Project
           </DialogTitle>
           <Alert className="mt-2">

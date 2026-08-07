@@ -3,6 +3,8 @@ name: Rebase Dependabot stale PRs
 on:
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   rebase-dependabot:
     runs-on: ubuntu-latest

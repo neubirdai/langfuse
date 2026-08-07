@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { hash } from "bcryptjs";
 import { v4 } from "uuid";
 import { encrypt } from "../../src/encryption";
 import {
+  EvalTemplateSourceCodeLanguage,
+  EvalTemplateType,
   type JobConfiguration,
   JobExecutionStatus,
   PrismaClient,
@@ -30,14 +34,35 @@ import {
   generateEvalScoreId,
   generateEvalTraceId,
 } from "./utils/seed-helpers";
+import { seedInAppAgentDemoConversation } from "./utils/in-app-agent-seed";
 import { seedDatasetVersions } from "./seed-dataset-versions";
-import { seedMediaTraces } from "./seed-media";
 
 const options = {
   environment: { type: "string" },
 } as const;
 
 const prisma = new PrismaClient();
+const IN_APP_AGENT_SYSTEM_PROMPT_NAME = "in-app-agent-system-prompt";
+const IN_APP_AGENT_SYSTEM_PROMPT_PATH = resolve(
+  __dirname,
+  "../../../..",
+  "web/src/ee/features/in-app-agent/prompts/in-app-agent-system-prompt.txt",
+);
+
+// The path above resolves to `web/src` relative to this file, which only exists
+// in a monorepo checkout. In built/published packages (e.g. the worker image
+// that runs the seeder in deployed environments) the web source isn't present,
+// so fall back to an empty prompt instead of throwing at import time — the
+// in-app-agent demo prompt is optional seed content.
+let inAppAgentSystemPrompt = "";
+try {
+  inAppAgentSystemPrompt = readFileSync(
+    IN_APP_AGENT_SYSTEM_PROMPT_PATH,
+    "utf-8",
+  );
+} catch {
+  inAppAgentSystemPrompt = "";
+}
 
 async function main() {
   const environment = parseArgs({
@@ -55,7 +80,6 @@ async function main() {
       name: "Demo User",
       email: "demo@langfuse.com",
       password: await hash("password", 12),
-      featureFlags: ["experimentsV4Enabled"],
     },
     create: {
       id: seedUserId1,
@@ -63,7 +87,6 @@ async function main() {
       email: "demo@langfuse.com",
       password: await hash("password", 12),
       image: "https://static.langfuse.com/langfuse-dev%2Fexample-avatar.png",
-      featureFlags: ["experimentsV4Enabled"],
     },
   });
   const user2 = await prisma.user.upsert({
@@ -85,6 +108,7 @@ async function main() {
     where: { id: seedOrgId },
     update: {
       name: "Seed Org",
+      aiFeaturesEnabled: true,
       cloudConfig: {
         plan: "Team",
       },
@@ -92,6 +116,7 @@ async function main() {
     create: {
       id: seedOrgId,
       name: "Seed Org",
+      aiFeaturesEnabled: true,
       cloudConfig: {
         plan: "Team",
       },
@@ -110,6 +135,14 @@ async function main() {
       orgId: seedOrgId,
     },
   });
+
+  await upsertInAppAgentSystemPrompt(project1.id);
+  // Skip on examples/load: those paths seed this prompt via generatePrompts
+  // (SEED_PROMPT_VERSIONS), whose upsert takes the create branch against a
+  // pre-existing row and violates the (projectId, name, version) constraint.
+  if (environment !== "examples" && environment !== "load") {
+    await upsertNaturalLanguageFilterPrompt(project1.id);
+  }
 
   // Realistic support chat scenario
   await createSupportChatSession(project1);
@@ -162,7 +195,7 @@ async function main() {
     },
   });
 
-  await prisma.prompt.upsert({
+  const summaryPrompt = await prisma.prompt.upsert({
     where: {
       projectId_name_version: {
         projectId: seedProjectId,
@@ -179,6 +212,13 @@ async function main() {
       createdBy: "user-1",
     },
     update: {},
+  });
+
+  await seedInAppAgentDemoConversation({
+    prisma,
+    projectId: project1.id,
+    userId: user.id,
+    summaryPrompt,
   });
 
   const seedApiKey = {
@@ -243,6 +283,7 @@ async function main() {
       },
       update: {},
     });
+    await upsertInAppAgentSystemPrompt(project2.id);
 
     const secondKey = {
       id: "seed-api-key-2",
@@ -299,6 +340,8 @@ async function main() {
 
     // add eval objects
     for (const evalTemplate of SEED_EVALUATOR_TEMPLATES) {
+      const evalTemplateType = evalTemplate.type as EvalTemplateType;
+
       await prisma.evalTemplate.upsert({
         where: {
           projectId_name_version: {
@@ -312,12 +355,18 @@ async function main() {
           projectId: project1.id,
           name: evalTemplate.name,
           version: evalTemplate.version,
-          prompt: evalTemplate.prompt,
-          model: evalTemplate.model,
+          type: evalTemplateType,
+          prompt: evalTemplate.prompt ?? null,
+          model: evalTemplate.model ?? null,
           vars: evalTemplate.vars,
-          provider: evalTemplate.provider,
-          outputDefinition: evalTemplate.outputDefinition,
-          modelParams: evalTemplate.modelParams,
+          provider: evalTemplate.provider ?? null,
+          outputDefinition: evalTemplate.outputDefinition ?? undefined,
+          modelParams: evalTemplate.modelParams ?? undefined,
+          sourceCode: evalTemplate.sourceCode ?? null,
+          sourceCodeLanguage:
+            (evalTemplate.sourceCodeLanguage as
+              | EvalTemplateSourceCodeLanguage
+              | undefined) ?? null,
         },
         update: {},
       });
@@ -352,9 +401,6 @@ async function main() {
 
     await createDashboardsAndWidgets([project1, project2]);
     await seedDatasetVersions(prisma, [project1.id, project2.id]);
-
-    // Seed media test traces (uploads to MinIO + creates Media/TraceMedia records)
-    await seedMediaTraces(project1.id);
 
     await prisma.llmSchema.createMany({
       data: [
@@ -765,6 +811,68 @@ async function generatePromptsForProject(projects: Project[]) {
     }),
   );
   return promptIds;
+}
+
+async function upsertInAppAgentSystemPrompt(projectId: string) {
+  await prisma.prompt.upsert({
+    where: {
+      projectId_name_version: {
+        projectId,
+        name: IN_APP_AGENT_SYSTEM_PROMPT_NAME,
+        version: 1,
+      },
+    },
+    create: {
+      projectId,
+      createdBy: "user-1",
+      prompt: inAppAgentSystemPrompt,
+      name: IN_APP_AGENT_SYSTEM_PROMPT_NAME,
+      type: "text",
+      version: 1,
+      labels: ["production", "latest"],
+    },
+    update: {
+      prompt: inAppAgentSystemPrompt,
+      type: "text",
+      labels: ["production", "latest"],
+    },
+  });
+}
+
+// The legacy natural-language filter feature fetches this prompt from the
+// AI-features project at runtime; on self-referential deployments (previews)
+// that project is llm-app, so it must exist on the default seed path too.
+const NATURAL_LANGUAGE_FILTER_PROMPT_NAME = "get-filter-conditions-from-query";
+
+async function upsertNaturalLanguageFilterPrompt(projectId: string) {
+  const seedPrompt = SEED_PROMPT_VERSIONS.find(
+    (p) => p.name === NATURAL_LANGUAGE_FILTER_PROMPT_NAME,
+  );
+  if (!seedPrompt) return;
+
+  await prisma.prompt.upsert({
+    where: {
+      projectId_name_version: {
+        projectId,
+        name: seedPrompt.name,
+        version: seedPrompt.version,
+      },
+    },
+    create: {
+      projectId,
+      createdBy: seedPrompt.createdBy,
+      prompt: seedPrompt.prompt,
+      name: seedPrompt.name,
+      type: seedPrompt.type ?? "text",
+      version: seedPrompt.version,
+      labels: seedPrompt.labels,
+    },
+    update: {
+      prompt: seedPrompt.prompt,
+      type: seedPrompt.type ?? "text",
+      labels: seedPrompt.labels,
+    },
+  });
 }
 
 export const PROMPT_IDS: string[] = [];

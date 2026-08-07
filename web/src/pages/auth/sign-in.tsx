@@ -1,5 +1,5 @@
 import { type GetServerSideProps } from "next";
-import { LangfuseIcon } from "@/src/components/LangfuseLogo";
+import { LangfuseIcon } from "@/src/components/design-system/LangfuseIcon/LangfuseIcon";
 import { Button } from "@/src/components/ui/button";
 import {
   Form,
@@ -35,9 +35,11 @@ import { CloudPrivacyNotice } from "@/src/features/auth/components/AuthCloudPriv
 import { CloudRegionSwitch } from "@/src/features/auth/components/AuthCloudRegionSwitch";
 import { PasswordInput } from "@/src/components/ui/password-input";
 import { isAnySsoConfigured } from "@/src/ee/features/multi-tenant-sso/utils";
+import { isEmailVerificationRequired } from "@/src/features/auth-credentials/lib/credentialsUtils";
 import { Code, Key } from "lucide-react";
 import { useRouter } from "next/router";
 import { captureException } from "@sentry/nextjs";
+import { captureUnknownError } from "@/src/utils/captureUnknownError";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import useLocalStorage from "@/src/components/useLocalStorage";
 import { AuthProviderButton } from "@/src/features/auth/components/AuthProviderButton";
@@ -46,7 +48,7 @@ import { useLangfuseCloudRegion } from "@/src/features/organizations/hooks";
 import { getSafeRedirectPath } from "@/src/utils/redirect";
 
 const credentialAuthForm = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(8, {
     message: "Password must be at least 8 characters long",
   }),
@@ -90,6 +92,7 @@ export type PageProps = {
   };
   runningOnHuggingFaceSpaces: boolean;
   signUpDisabled: boolean;
+  emailVerificationRequired: boolean;
 };
 
 // Also used in src/pages/auth/sign-up.tsx
@@ -173,6 +176,7 @@ export const getServerSideProps: GetServerSideProps<PageProps> = async () => {
         sso,
       },
       signUpDisabled: env.AUTH_DISABLE_SIGNUP === "true",
+      emailVerificationRequired: isEmailVerificationRequired(),
       runningOnHuggingFaceSpaces: env.NEXTAUTH_URL?.replace(
         "/api/auth",
         "",
@@ -217,7 +221,7 @@ export function SSOButtons({
         // do not reset loadingProvider here, as the page will reload
       })
       .catch((error) => {
-        console.error(error);
+        captureUnknownError("auth.signIn.provider", error, { provider });
         setProviderSigningIn(null);
       });
   };
@@ -373,7 +377,7 @@ export function SSOButtons({
               onClick={() => {
                 capture("sign_in:button_click", { provider: "keycloak" });
                 onProviderSelect?.("keycloak");
-                void signIn("keycloak");
+                signIn("keycloak");
               }}
               loading={providerSigningIn === "keycloak"}
               showLastUsedBadge={
@@ -389,7 +393,7 @@ export function SSOButtons({
                 onClick={() => {
                   capture("sign_in:button_click", { provider: "workos" });
                   onProviderSelect?.("workos");
-                  void signIn("workos", undefined, {
+                  signIn("workos", undefined, {
                     connection: (
                       authProviders.workos as { connectionId: string }
                     ).connectionId,
@@ -409,7 +413,7 @@ export function SSOButtons({
                 onClick={() => {
                   capture("sign_in:button_click", { provider: "workos" });
                   onProviderSelect?.("workos");
-                  void signIn("workos", undefined, {
+                  signIn("workos", undefined, {
                     organization: (
                       authProviders.workos as { organizationId: string }
                     ).organizationId,
@@ -433,7 +437,7 @@ export function SSOButtons({
                   if (organization) {
                     capture("sign_in:button_click", { provider: "workos" });
                     onProviderSelect?.("workos");
-                    void signIn("workos", undefined, {
+                    signIn("workos", undefined, {
                       organization,
                     });
                   }
@@ -453,7 +457,7 @@ export function SSOButtons({
                   if (connection) {
                     capture("sign_in:button_click", { provider: "workos" });
                     onProviderSelect?.("workos");
-                    void signIn("workos", undefined, {
+                    signIn("workos", undefined, {
                       connection,
                     });
                   }
@@ -515,7 +519,7 @@ export function useHuggingFaceRedirect(runningOnHuggingFaceSpaces: boolean) {
       typeof window !== "undefined" &&
       isInIframe()
     ) {
-      void router.push("/auth/hf-spaces");
+      router.push("/auth/hf-spaces");
     }
   }, [router, runningOnHuggingFaceSpaces]);
 }
@@ -637,8 +641,7 @@ export default function SignIn({
         );
       }
     } catch (error) {
-      captureException(error);
-      console.error(error);
+      captureUnknownError("auth.signIn.credentials", error);
       setCredentialsFormError("An unexpected error occurred.");
     }
   }
@@ -657,7 +660,7 @@ export default function SignIn({
     credentialsForm.clearErrors();
 
     // Ensure email is valid before hitting the API
-    const emailSchema = z.string().email();
+    const emailSchema = z.email();
     const email = emailSchema.safeParse(credentialsForm.getValues("email"));
     if (!email.success) {
       credentialsForm.setError("email", {
@@ -688,7 +691,7 @@ export default function SignIn({
         // Store the SSO provider as the last used auth method
         setLastUsedAuthMethod(providerId as NextAuthProvider);
 
-        void signIn(providerId);
+        signIn(providerId);
         return; // stop further execution – page redirect expected
       }
 
@@ -707,7 +710,7 @@ export default function SignIn({
         }
       }, 100);
     } catch (error) {
-      console.error(error);
+      captureUnknownError("auth.signIn.checkSso", error);
       setCredentialsFormError(
         "Unable to check SSO configuration. Please try again.",
       );
@@ -723,7 +726,9 @@ export default function SignIn({
       </Head>
       <div className="flex flex-1 flex-col py-6 sm:min-h-full sm:justify-center sm:px-6 sm:py-12 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <LangfuseIcon className="mx-auto" />
+          <div className="mx-auto w-fit">
+            <LangfuseIcon />
+          </div>
           <h2 className="text-primary mt-4 text-center text-2xl leading-9 font-bold tracking-tight">
             Sign in to your account
           </h2>
@@ -735,7 +740,7 @@ export default function SignIn({
             page (CMD + SHIFT + R) or clear your browser cache.{" "}
             <a
               href="mailto:support@langfuse.com"
-              className="text-primary-accent hover:text-hover-primary-accent cursor-pointer text-xs font-medium whitespace-nowrap"
+              className="text-link hover:text-link-hover cursor-pointer text-xs font-bold whitespace-nowrap"
             >
               (contact us)
             </a>
@@ -757,7 +762,7 @@ export default function SignIn({
                         ? credentialsForm.handleSubmit(onCredentialsSubmit)
                         : (e) => {
                             e.preventDefault();
-                            void handleContinue();
+                            handleContinue();
                           }
                     }
                   >
@@ -792,7 +797,7 @@ export default function SignIn({
                               Password{" "}
                               <Link
                                 href="/auth/reset-password"
-                                className="text-primary-accent hover:text-hover-primary-accent ml-1 text-xs"
+                                className="text-link hover:text-link-hover ml-1 text-xs"
                                 tabIndex={-1}
                                 title="What is this?"
                               >
@@ -842,7 +847,7 @@ export default function SignIn({
               </div>
             )}
             {credentialsFormError ? (
-              <div className="text-destructive text-center text-sm font-medium">
+              <div className="text-destructive text-center text-sm font-bold">
                 {credentialsFormError}
                 <br />
                 Contact support if this error is unexpected.{" "}
@@ -864,7 +869,7 @@ export default function SignIn({
               No account yet?{" "}
               <Link
                 href={`/auth/sign-up${router.asPath.includes("?") ? router.asPath.substring(router.asPath.indexOf("?")) : ""}`}
-                className="text-primary-accent hover:text-hover-primary-accent leading-6 font-semibold"
+                className="text-link hover:text-link-hover leading-6 font-bold"
               >
                 Sign up
               </Link>

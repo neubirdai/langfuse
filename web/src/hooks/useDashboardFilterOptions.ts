@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { api } from "@/src/utils/api";
+import { normalizeSingleValueOptions } from "@/src/features/filters/lib/filter-transform";
 import {
   toAbsoluteTimeRange,
   type TimeRange,
@@ -10,11 +11,6 @@ type UseDashboardFilterOptionsParams = {
   isBetaEnabled: boolean;
   timeRange: TimeRange;
 };
-
-const toNameOption = (n: { value: string; count: string | number }) => ({
-  value: n.value,
-  count: Number(n.count),
-});
 
 export function useDashboardFilterOptions({
   projectId,
@@ -34,22 +30,22 @@ export function useDashboardFilterOptions({
     [timeRange],
   );
 
-  const startTimeFilter = useMemo(
+  const traceTimestampFilter = useMemo(
     () =>
       absoluteTimeRange
         ? [
             {
-              column: "startTime",
+              column: "timestamp",
               type: "datetime" as const,
-              operator: ">" as const,
+              operator: ">=" as const,
               value: absoluteTimeRange.from,
             },
             ...(absoluteTimeRange.to
               ? [
                   {
-                    column: "startTime",
+                    column: "timestamp",
                     type: "datetime" as const,
-                    operator: "<" as const,
+                    operator: "<=" as const,
                     value: absoluteTimeRange.to,
                   },
                 ]
@@ -59,21 +55,49 @@ export function useDashboardFilterOptions({
     [absoluteTimeRange],
   );
 
+  const startTimeFilter = useMemo(
+    () =>
+      absoluteTimeRange
+        ? [
+            {
+              column: "startTime",
+              type: "datetime" as const,
+              operator: ">=" as const,
+              value: absoluteTimeRange.from,
+            },
+            ...(absoluteTimeRange.to
+              ? [
+                  {
+                    column: "startTime",
+                    type: "datetime" as const,
+                    operator: "<=" as const,
+                    value: absoluteTimeRange.to,
+                  },
+                ]
+              : []),
+          ]
+        : undefined,
+    [absoluteTimeRange],
+  );
+
+  // Gate on projectId: on a direct URL load the first render happens before
+  // the router query hydrates, and firing with projectId=undefined surfaces
+  // a "Bad Request" toast.
   const traceFilterOptions = api.traces.filterOptions.useQuery(
-    { projectId },
-    { ...commonQueryOptions, enabled: !isBetaEnabled },
+    { projectId, timestampFilter: traceTimestampFilter },
+    { ...commonQueryOptions, enabled: Boolean(projectId) && !isBetaEnabled },
   );
 
   const eventsFilterOptions = api.events.filterOptions.useQuery(
     { projectId, startTimeFilter },
-    { ...commonQueryOptions, enabled: isBetaEnabled },
+    { ...commonQueryOptions, enabled: Boolean(projectId) && isBetaEnabled },
   );
 
   const nameOptions = useMemo(
     () =>
       isBetaEnabled
-        ? (eventsFilterOptions.data?.traceName?.map(toNameOption) ?? [])
-        : (traceFilterOptions.data?.name?.map(toNameOption) ?? []),
+        ? normalizeSingleValueOptions(eventsFilterOptions.data?.traceName)
+        : normalizeSingleValueOptions(traceFilterOptions.data?.name),
     [
       isBetaEnabled,
       eventsFilterOptions.data?.traceName,

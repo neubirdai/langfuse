@@ -1,7 +1,11 @@
-import { eventsTableCols } from "@langfuse/shared";
-import type { FilterConfig } from "@/src/features/filters/lib/filter-config";
+import { eventsTableCols, type FilterState } from "@langfuse/shared";
+import {
+  omitFilterFacets,
+  type FilterConfig,
+} from "@/src/features/filters/lib/filter-config";
 import type { ColumnToBackendKeyMap } from "@/src/features/filters/lib/filter-transform";
 import { renderFilterIcon } from "@/src/components/ItemBadge";
+import { renderLevelIcon } from "@/src/components/level-colors";
 
 // Helper function to get column name from eventsTableCols by ID
 export const getEventsColumnName = (id: string): string => {
@@ -9,7 +13,7 @@ export const getEventsColumnName = (id: string): string => {
   if (!column) {
     throw new Error(`Column ${id} not found in eventsTableCols`);
   }
-  return column?.name;
+  return column.name;
 };
 
 /**
@@ -20,12 +24,71 @@ export const OBSERVATION_EVENTS_COLUMN_TO_BACKEND_KEY: ColumnToBackendKeyMap = {
   // No mapping needed currently - events table column names align with UI
 };
 
+const isBooleanEqualityOperator = (operator: string): operator is "=" | "<>" =>
+  operator === "=" || operator === "<>";
+
+export const migrateLegacyRootObservationFilters = (
+  filters: FilterState,
+): FilterState => {
+  const hasRootObservationFilter = filters.some(
+    (filter) =>
+      filter.column === "isRootObservation" &&
+      filter.type === "boolean" &&
+      isBooleanEqualityOperator(filter.operator),
+  );
+
+  return filters.flatMap((filter) => {
+    if (
+      filter.column === "isRootObservation" &&
+      filter.type === "boolean" &&
+      isBooleanEqualityOperator(filter.operator)
+    ) {
+      return [
+        {
+          ...filter,
+          operator: "=" as const,
+          value: filter.operator === "<>" ? !filter.value : filter.value,
+        },
+      ];
+    }
+
+    if (
+      (filter.column === "hasParentObservation" ||
+        filter.column === "Has Parent Observation") &&
+      filter.type === "boolean" &&
+      isBooleanEqualityOperator(filter.operator)
+    ) {
+      if (hasRootObservationFilter) {
+        return [];
+      }
+
+      return [
+        {
+          ...filter,
+          column: "isRootObservation",
+          operator: "=" as const,
+          value: filter.operator === "=" ? !filter.value : filter.value,
+        },
+      ];
+    }
+
+    return [filter];
+  });
+};
+
+export type ObservationEventsOmittableFilterColumn =
+  | "sessionId"
+  | "userId"
+  | "promptName";
+
 export const observationEventsFilterConfig: FilterConfig = {
   tableName: "observations-events",
 
   columnDefinitions: eventsTableCols,
 
-  defaultExpanded: ["environment", "name", "hasParentObservation", "type"],
+  defaultExpanded: ["environment", "name", "isRootObservation", "type"],
+
+  migrateFilterState: migrateLegacyRootObservationFilters,
 
   facets: [
     {
@@ -37,15 +100,19 @@ export const observationEventsFilterConfig: FilterConfig = {
       type: "categorical" as const,
       column: "type",
       label: getEventsColumnName("type"),
+      help: {
+        description:
+          "Observation types classify the work captured within a trace, such as generations, spans, tools, chains, and agents.",
+        href: "https://langfuse.com/docs/observability/features/observation-types",
+      },
       renderIcon: renderFilterIcon,
     },
     {
       type: "boolean" as const,
-      column: "hasParentObservation",
+      column: "isRootObservation",
       label: "Is Root Observation",
       tooltip:
-        "A root observation is the top-level observation in a trace. It has no parent observation ID. Filter to 'True' to see only root-level observations.",
-      invertValue: true, // "True" = hasParentObservation=false (is root)
+        "A root observation is top-level in a trace or marked as an app root by the SDK. Filter to 'True' to see root-level observations.",
     },
     {
       type: "categorical" as const,
@@ -58,9 +125,19 @@ export const observationEventsFilterConfig: FilterConfig = {
       label: getEventsColumnName("name"),
     },
     {
+      // Tags are a primary, user-defined filter — keep them near the identity
+      // facets at the top of the sidebar rather than buried mid-list (LFE-10494).
+      type: "categorical" as const,
+      column: "traceTags",
+      label: getEventsColumnName("traceTags"),
+    },
+    {
+      // Display relabel to "Status" (see traces-config); column id stays
+      // `level` until the cross-surface rename lands.
       type: "categorical" as const,
       column: "level",
-      label: getEventsColumnName("level"),
+      label: "Status",
+      renderIcon: renderLevelIcon,
     },
     {
       type: "categorical" as const,
@@ -76,11 +153,6 @@ export const observationEventsFilterConfig: FilterConfig = {
       type: "categorical" as const,
       column: "promptName",
       label: getEventsColumnName("promptName"),
-    },
-    {
-      type: "categorical" as const,
-      column: "traceTags",
-      label: getEventsColumnName("traceTags"),
     },
     {
       type: "stringKeyValue" as const,
@@ -212,6 +284,12 @@ export const observationEventsFilterConfig: FilterConfig = {
       min: 0,
       max: 25,
     },
+    // The "Scores" facets are level-agnostic: their filter matches a score at
+    // observation OR trace level (LFE-10596), and their options list all score
+    // names. The trace-only `trace_scores_avg` / `trace_score_categories` /
+    // `trace_score_booleans` columns stay valid (search bar `traceScores.` +
+    // existing saved views) but are no longer offered as separate sidebar
+    // facets — one "Scores" group.
     {
       type: "keyValue" as const,
       column: "score_categories",
@@ -223,14 +301,9 @@ export const observationEventsFilterConfig: FilterConfig = {
       label: "Numeric Scores",
     },
     {
-      type: "keyValue" as const,
-      column: "trace_score_categories",
-      label: "Trace Categorical Scores",
-    },
-    {
-      type: "numericKeyValue" as const,
-      column: "trace_scores_avg",
-      label: "Trace Numeric Scores",
+      type: "booleanKeyValue" as const,
+      column: "score_booleans",
+      label: "Boolean Scores",
     },
     {
       type: "numeric" as const,
@@ -246,3 +319,9 @@ export const observationEventsFilterConfig: FilterConfig = {
     },
   ],
 };
+
+export function getObservationEventsFilterConfig(
+  omittedFilter: ObservationEventsOmittableFilterColumn[] = [],
+): FilterConfig {
+  return omitFilterFacets(observationEventsFilterConfig, omittedFilter);
+}
