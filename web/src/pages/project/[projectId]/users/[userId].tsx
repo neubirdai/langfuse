@@ -150,9 +150,9 @@ export default function UserPage() {
                     key={tab}
                     className={cn(
                       tab === currentTab
-                        ? "border-primary-accent text-primary-accent"
-                        : "text-muted-foreground hover:border-border hover:text-primary border-transparent",
-                      "border-b-2 px-4 py-3 text-sm font-medium whitespace-nowrap",
+                        ? "border-primary-accent text-foreground"
+                        : "text-muted-foreground hover:border-border hover:text-foreground border-transparent",
+                      "border-b-2 px-4 py-3 text-sm font-bold whitespace-nowrap",
                     )}
                     aria-current={tab === currentTab ? "page" : undefined}
                     onClick={() => handleTabChange(tab)}
@@ -180,7 +180,7 @@ function ScoresTab({ userId, projectId }: TabProps) {
     <ScoresTable
       projectId={projectId}
       userId={userId}
-      omittedFilter={["User ID"]}
+      hiddenColumns={["userId"]}
     />
   );
 }
@@ -189,14 +189,20 @@ function TracesTab({ userId, projectId }: TabProps) {
   const { isBetaEnabled } = useV4Beta();
 
   if (isBetaEnabled) {
-    return <ObservationsEventsTable projectId={projectId} userId={userId} />;
+    return (
+      <ObservationsEventsTable
+        projectId={projectId}
+        userId={userId}
+        omittedFilter={["userId"]}
+      />
+    );
   }
 
   return (
     <TracesTable
       projectId={projectId}
       userId={userId}
-      omittedFilter={["User ID"]}
+      omittedFilter={["userId"]}
     />
   );
 }
@@ -208,7 +214,7 @@ function SessionsTab({ userId, projectId }: TabProps) {
     <SessionsTable
       projectId={projectId}
       userId={userId}
-      omittedFilter={["User IDs"]}
+      omittedFilter={["userIds"]}
       isBetaEnabled={isBetaEnabled}
     />
   );

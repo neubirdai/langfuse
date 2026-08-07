@@ -32,7 +32,6 @@ import { StringNoHTML } from "@langfuse/shared";
 import Link from "next/link";
 import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import { showErrorToast } from "@/src/features/notifications/showErrorToast";
-import { env } from "@/src/env.mjs";
 
 const displayNameSchema = z.object({
   name: StringNoHTML.min(1, "Name cannot be empty").max(
@@ -170,7 +169,7 @@ function DeleteAccountButton() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
+          <DialogTitle className="text-lg font-bold">
             Delete Account
           </DialogTitle>
           <DialogDescription>
@@ -185,7 +184,7 @@ function DeleteAccountButton() {
                     <li key={org.id}>
                       <Link
                         href={`/organization/${org.id}/settings`}
-                        className="text-primary hover:text-primary/80 font-semibold underline"
+                        className="text-primary hover:text-primary/80 font-bold underline"
                       >
                         {org.name}
                       </Link>
@@ -287,11 +286,7 @@ const getAccountSettingsPages = (userEmail: string): AccountSettingsPage[] => [
               process.
             </p>
             <Button asChild variant="secondary">
-              <Link
-                href={`${env.NEXT_PUBLIC_BASE_PATH ?? ""}/auth/reset-password`}
-              >
-                Change Password
-              </Link>
+              <Link href="/auth/reset-password">Change Password</Link>
             </Button>
           </Card>
         </div>

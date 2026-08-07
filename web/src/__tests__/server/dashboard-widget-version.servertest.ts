@@ -1,14 +1,20 @@
-/** @jest-environment node */
-
 import { v4 as uuidv4 } from "uuid";
 import { createOrgProjectAndApiKey } from "@langfuse/shared/src/server";
 import { DashboardService } from "@langfuse/shared/src/server";
 import { DashboardWidgetViews } from "@langfuse/shared/src/db";
 import { prisma } from "@langfuse/shared/src/db";
+import {
+  LANGFUSE_HOME_DASHBOARD_DEFINITION,
+  LANGFUSE_HOME_DASHBOARD_ID,
+} from "@langfuse/shared";
 import { appRouter } from "@/src/server/api/root";
 import { createInnerTRPCContext } from "@/src/server/api/trpc";
 import type { Session } from "next-auth";
-import { requiresV2 } from "@/src/features/query/dataModel";
+import { requiresV2 } from "@langfuse/shared/query";
+import {
+  mapLegacyUiTableFilterToView,
+  mapWidgetUiTableFilterToView,
+} from "@/src/features/dashboard/lib/dashboardUiTableToViewMapping";
 
 describe("dashboard widget minVersion", () => {
   let projectId: string;
@@ -54,6 +60,7 @@ describe("dashboard widget minVersion", () => {
             cloudConfig: undefined,
             metadata: {},
             aiFeaturesEnabled: false,
+            aiTelemetryEnabled: true,
             projects: [
               {
                 id: projectId,
@@ -63,6 +70,7 @@ describe("dashboard widget minVersion", () => {
                 name: "Test Project",
                 hasTraces: true,
                 metadata: {},
+                createdAt: new Date().toISOString(),
               },
             ],
           },
@@ -72,6 +80,8 @@ describe("dashboard widget minVersion", () => {
           templateFlag: true,
           v4BetaToggleVisible: false,
           observationEvals: false,
+          experimentsV4Enabled: false,
+          searchBar: false,
         },
         admin: true,
       },
@@ -97,25 +107,111 @@ describe("dashboard widget minVersion", () => {
   describe("requiresV2", () => {
     it.each([
       // v2-only dimensions
-      ["observations", [{ field: "costType" }], [], true],
-      ["observations", [{ field: "usageType" }], [], true],
+      ["observations", [{ field: "costType" }], [], [], true],
+      ["observations", [{ field: "usageType" }], [], [], true],
       // v2-only measures
-      ["observations", [], [{ measure: "costByType" }], true],
-      ["observations", [], [{ measure: "usageByType" }], true],
-      ["observations", [], [{ measure: "traceId" }], true],
+      ["observations", [], [{ measure: "costByType" }], [], true],
+      ["observations", [], [{ measure: "usageByType" }], [], true],
+      ["observations", [], [{ measure: "traceId" }], [], true],
+      // v2-only filters
+      [
+        "observations",
+        [],
+        [{ measure: "count" }],
+        [{ column: "release" }],
+        true,
+      ],
+      // v2-only experiment filters
+      [
+        "observations",
+        [],
+        [{ measure: "count" }],
+        [{ column: "experimentId" }],
+        true,
+      ],
+      [
+        "observations",
+        [],
+        [{ measure: "count" }],
+        [{ column: "experimentName" }],
+        true,
+      ],
+      [
+        "observations",
+        [],
+        [{ measure: "count" }],
+        [{ column: "experimentDatasetId" }],
+        true,
+      ],
       // v1-compatible fields
-      ["observations", [{ field: "name" }], [{ measure: "count" }], false],
+      [
+        "observations",
+        [{ field: "name" }],
+        [{ measure: "count" }],
+        [{ column: "traceRelease" }],
+        false,
+      ],
       // views where v1 and v2 share all fields
-      ["traces", [{ field: "name" }], [{ measure: "count" }], false],
-      ["scores-numeric", [{ field: "name" }], [{ measure: "count" }], false],
+      ["traces", [{ field: "name" }], [{ measure: "count" }], [], false],
+      [
+        "scores-numeric",
+        [{ field: "name" }],
+        [{ measure: "count" }],
+        [],
+        false,
+      ],
       // unknown view
-      ["nonexistent", [{ field: "name" }], [{ measure: "count" }], false],
+      ["nonexistent", [{ field: "name" }], [{ measure: "count" }], [], false],
     ])(
-      "requiresV2(%s, dims=%j, measures=%j) → %s",
-      (view, dimensions, measures, expected) => {
-        expect(requiresV2({ view, dimensions, measures })).toBe(expected);
+      "requiresV2(%s, dims=%j, measures=%j, filters=%j) → %s",
+      (view, dimensions, measures, filters, expected) => {
+        expect(requiresV2({ view, dimensions, measures, filters })).toBe(
+          expected,
+        );
       },
     );
+  });
+
+  describe("observations release filter mapping", () => {
+    it("keeps legacy observations Release filters on traceRelease for v1 compatibility", () => {
+      expect(
+        mapLegacyUiTableFilterToView("observations", [
+          {
+            column: "Release",
+            operator: "=",
+            value: "2026.04",
+            type: "string",
+          },
+        ]),
+      ).toEqual([
+        {
+          column: "traceRelease",
+          operator: "=",
+          value: "2026.04",
+          type: "string",
+        },
+      ]);
+    });
+
+    it("maps Observation Release to the v2-only release field", () => {
+      expect(
+        mapWidgetUiTableFilterToView("observations", [
+          {
+            column: "Observation Release",
+            operator: "=",
+            value: "2026.04",
+            type: "string",
+          },
+        ]),
+      ).toEqual([
+        {
+          column: "release",
+          operator: "=",
+          value: "2026.04",
+          type: "string",
+        },
+      ]);
+    });
   });
 
   // ── Service layer tests ─────────────────────────────────────────────
@@ -240,6 +336,203 @@ describe("dashboard widget minVersion", () => {
       expect(copiedWidget!.minVersion).toBe(2);
       expect(copiedWidget!.owner).toBe("PROJECT");
     });
+
+    it("should round-trip preset placements in the dashboard definition", async () => {
+      const dashboard = await DashboardService.createDashboard(
+        projectId,
+        "Preset Dashboard",
+        "A dashboard mixing widget and preset placements",
+        userId,
+      );
+
+      const definition = {
+        widgets: [
+          {
+            type: "widget" as const,
+            id: "placement-widget",
+            widgetId: uuidv4(),
+            x: 0,
+            y: 0,
+            x_size: 6,
+            y_size: 4,
+          },
+          {
+            type: "preset" as const,
+            id: "placement-preset",
+            presetId: "home-traces",
+            x: 6,
+            y: 0,
+            x_size: 6,
+            y_size: 4,
+          },
+        ],
+      };
+
+      await DashboardService.updateDashboardDefinition(
+        dashboard.id,
+        projectId,
+        definition,
+        userId,
+      );
+
+      const fetched = await DashboardService.getDashboard(
+        dashboard.id,
+        projectId,
+      );
+
+      expect(fetched).not.toBeNull();
+      expect(fetched!.definition.widgets).toEqual(definition.widgets);
+    });
+  });
+
+  describe("home dashboard pointer", () => {
+    beforeAll(async () => {
+      // The worker upserts the curated Home dashboard at startup; ensure it
+      // exists in this test database.
+      await prisma.dashboard.upsert({
+        where: { id: LANGFUSE_HOME_DASHBOARD_ID },
+        update: {},
+        create: {
+          id: LANGFUSE_HOME_DASHBOARD_ID,
+          projectId: null,
+          name: "Langfuse Home",
+          description: "Curated home dashboard",
+          definition: LANGFUSE_HOME_DASHBOARD_DEFINITION,
+        },
+      });
+    });
+
+    afterEach(async () => {
+      // Pointer state is project-level; reset so tests stay independent.
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { homeDashboardId: null },
+      });
+    });
+
+    it("falls back to the curated default when no pointer is set", async () => {
+      const caller = makeCaller();
+
+      const res = await caller.dashboard.getHomeDashboard({ projectId });
+
+      expect(res.homeDashboardId).toBeNull();
+      expect(res.dashboard?.id).toBe(LANGFUSE_HOME_DASHBOARD_ID);
+      expect(res.dashboard?.owner).toBe("LANGFUSE");
+    });
+
+    it("resolves a set pointer and clears back to the default", async () => {
+      const caller = makeCaller();
+      const dashboard = await DashboardService.createDashboard(
+        projectId,
+        "My Home",
+        "Project home dashboard",
+        userId,
+      );
+
+      await caller.dashboard.setHomeDashboard({
+        projectId,
+        dashboardId: dashboard.id,
+      });
+      const res = await caller.dashboard.getHomeDashboard({ projectId });
+      expect(res.homeDashboardId).toBe(dashboard.id);
+      expect(res.dashboard?.id).toBe(dashboard.id);
+      expect(res.dashboard?.owner).toBe("PROJECT");
+
+      await caller.dashboard.setHomeDashboard({ projectId, dashboardId: null });
+      const cleared = await caller.dashboard.getHomeDashboard({ projectId });
+      expect(cleared.homeDashboardId).toBeNull();
+      expect(cleared.dashboard?.id).toBe(LANGFUSE_HOME_DASHBOARD_ID);
+    });
+
+    it("rejects pointing at a nonexistent dashboard", async () => {
+      const caller = makeCaller();
+
+      await expect(
+        caller.dashboard.setHomeDashboard({
+          projectId,
+          dashboardId: uuidv4(),
+        }),
+      ).rejects.toThrow("Dashboard not found");
+    });
+
+    it("falls back to the curated default when the pointed dashboard is deleted", async () => {
+      const caller = makeCaller();
+      const dashboard = await DashboardService.createDashboard(
+        projectId,
+        "Doomed Home",
+        "Will be deleted",
+        userId,
+      );
+      await caller.dashboard.setHomeDashboard({
+        projectId,
+        dashboardId: dashboard.id,
+      });
+
+      await DashboardService.deleteDashboard(dashboard.id, projectId);
+
+      // The FK is ON DELETE SET NULL, so the pointer clears at the DB level.
+      const res = await caller.dashboard.getHomeDashboard({ projectId });
+      expect(res.homeDashboardId).toBeNull();
+      expect(res.dashboard?.id).toBe(LANGFUSE_HOME_DASHBOARD_ID);
+    });
+
+    it("numbers clone names when copies already exist", async () => {
+      const caller = makeCaller();
+      const source = await DashboardService.createDashboard(
+        projectId,
+        "Numbering Source",
+        "Clone naming test",
+        userId,
+      );
+
+      const first = await caller.dashboard.cloneDashboard({
+        projectId,
+        dashboardId: source.id,
+      });
+      const second = await caller.dashboard.cloneDashboard({
+        projectId,
+        dashboardId: source.id,
+      });
+      const third = await caller.dashboard.cloneDashboard({
+        projectId,
+        dashboardId: source.id,
+      });
+
+      expect(first.name).toBe("Numbering Source (Clone)");
+      expect(second.name).toBe("Numbering Source (Clone 2)");
+      expect(third.name).toBe("Numbering Source (Clone 3)");
+    });
+
+    it("clones with a definition override and sets the clone as home", async () => {
+      const caller = makeCaller();
+      const overrideDefinition = {
+        widgets: [
+          {
+            type: "preset" as const,
+            id: "home-traces",
+            presetId: "home-traces",
+            x: 0,
+            y: 0,
+            x_size: 6,
+            y_size: 4,
+          },
+        ],
+      };
+
+      const clone = await caller.dashboard.cloneDashboard({
+        projectId,
+        dashboardId: LANGFUSE_HOME_DASHBOARD_ID,
+        definition: overrideDefinition,
+        setAsHome: true,
+      });
+
+      expect(clone.owner).toBe("PROJECT");
+      expect(clone.definition.widgets).toEqual(overrideDefinition.widgets);
+
+      const res = await caller.dashboard.getHomeDashboard({ projectId });
+      expect(res.homeDashboardId).toBe(clone.id);
+      expect(res.dashboard?.id).toBe(clone.id);
+    });
   });
 
   // ── tRPC measure-aggregation validation ──────────────────────────────
@@ -248,6 +541,29 @@ describe("dashboard widget minVersion", () => {
   // validateMetricAggregations guard that lives in the tRPC router.
 
   describe("tRPC measure-aggregation validation", () => {
+    it("should return stored metrics from get without additional client-side parsing", async () => {
+      const caller = makeCaller();
+      const created = await caller.dashboardWidgets.create({
+        projectId,
+        name: "Get Widget",
+        description: "fetch metrics unchanged",
+        view: "observations",
+        dimensions: [],
+        metrics: [{ measure: "count", agg: "count" }],
+        filters: [],
+        chartType: "NUMBER",
+        chartConfig: { type: "NUMBER" },
+        minVersion: 2,
+      });
+
+      const fetched = await caller.dashboardWidgets.get({
+        projectId,
+        widgetId: created.widget.id,
+      });
+
+      expect(fetched.metrics).toEqual([{ measure: "count", agg: "count" }]);
+    });
+
     it("should reject invalid aggregation on a string measure", async () => {
       const caller = makeCaller();
       await expect(

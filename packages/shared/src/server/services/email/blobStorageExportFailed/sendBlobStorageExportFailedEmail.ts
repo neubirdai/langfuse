@@ -1,6 +1,5 @@
-import { createTransport } from "nodemailer";
-import { parseConnectionUrl } from "nodemailer/lib/shared/index.js";
 import { render } from "@react-email/render";
+import { createMailTransport } from "../transport";
 import { z } from "zod";
 import { sanitizeEmailSubject } from "../../../../utils/zod";
 import { logger } from "../../../logger";
@@ -19,6 +18,9 @@ export type SendBlobStorageExportFailedEmailParams = {
   projectName: string;
   settingsUrl: string;
   receiverEmails: string[];
+  // When true, the export was disabled after repeated failures (needs the
+  // customer to fix config and re-enable) rather than a transient failure.
+  disabled?: boolean;
 };
 
 export const sendBlobStorageExportFailedEmail = async ({
@@ -26,6 +28,7 @@ export const sendBlobStorageExportFailedEmail = async ({
   projectName,
   settingsUrl,
   receiverEmails,
+  disabled = false,
 }: SendBlobStorageExportFailedEmailParams) => {
   if (!env.EMAIL_FROM_ADDRESS || !env.SMTP_CONNECTION_URL) {
     logger.error(
@@ -39,13 +42,16 @@ export const sendBlobStorageExportFailedEmail = async ({
   }
 
   try {
-    const mailer = createTransport(parseConnectionUrl(env.SMTP_CONNECTION_URL));
+    const mailer = createMailTransport(env.SMTP_CONNECTION_URL);
     const safeProjectName = sanitizeEmailSubject(projectName);
-    const subject = `Blob storage export failed for "${safeProjectName}" – action required`;
+    const subject = disabled
+      ? `Blob storage export disabled for "${safeProjectName}" – action required`
+      : `Blob storage export failed for "${safeProjectName}"`;
     const html = await render(
       BlobStorageExportFailedEmailTemplate({
         projectName: safeProjectName,
         settingsUrl,
+        disabled,
       }),
     );
 
@@ -61,7 +67,7 @@ export const sendBlobStorageExportFailedEmail = async ({
     };
 
     if (env.CLOUD_CRM_EMAIL) {
-      const emailSchema = z.string().email();
+      const emailSchema = z.email();
       const validationResult = emailSchema.safeParse(env.CLOUD_CRM_EMAIL);
 
       if (validationResult.success) {

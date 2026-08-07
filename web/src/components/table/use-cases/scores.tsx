@@ -5,16 +5,25 @@ import {
   DataTableControlsProvider,
   DataTableControls,
 } from "@/src/components/table/data-table-controls";
+import {
+  TableBadgeLoadingCell,
+  TableTextLoadingCell,
+} from "@/src/components/table/loading-cells";
 import { ResizableFilterLayout } from "@/src/components/table/resizable-filter-layout";
 import TableLink from "@/src/components/table/table-link";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
 import { IOTableCell } from "../../ui/IOTableCell";
 import { Avatar, AvatarImage } from "@/src/components/ui/avatar";
 import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
-import { useSidebarFilterState } from "@/src/features/filters/hooks/useSidebarFilterState";
 import {
-  scoreFilterConfig,
+  type UseSidebarFilterStateOptions,
+  useSidebarFilterState,
+} from "@/src/features/filters/hooks/useSidebarFilterState";
+import { usePeekTableState } from "@/src/components/table/peek/contexts/PeekTableStateContext";
+import {
+  getScoreFilterConfig,
   SCORE_COLUMN_TO_BACKEND_KEY,
+  type ScoresTableHiddenColumn,
 } from "@/src/features/filters/config/scores-config";
 import { DEFAULT_SIDEBAR_IMPLICIT_ENVIRONMENT_CONFIG } from "@/src/features/filters/constants/internal-environments";
 import { transformFiltersForBackend } from "@/src/features/filters/lib/filter-transform";
@@ -23,6 +32,7 @@ import { useOrderByState } from "@/src/features/orderBy/hooks/useOrderByState";
 import { useTableDateRange } from "@/src/hooks/useTableDateRange";
 import { toAbsoluteTimeRange } from "@/src/utils/date-range-utils";
 import { api } from "@/src/utils/api";
+import { TableHeaderControls } from "@/src/components/table/table-header-controls";
 
 import type { RouterOutput } from "@/src/utils/types";
 import {
@@ -53,15 +63,22 @@ import { useTableViewManager } from "@/src/components/table/table-view-presets/h
 import TableIdOrName from "@/src/components/table/table-id";
 import { usePaginationState } from "@/src/hooks/usePaginationState";
 import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
-import { Skeleton } from "@/src/components/ui/skeleton";
+import {
+  ScoreTag,
+  scoreLevelFromScore,
+  type ScoreLevel,
+} from "@/src/components/score-tag";
 
 export type ScoresTableRow = {
   id: string;
   traceId?: string;
   sessionId?: string;
+  datasetRunId?: string;
   timestamp: Date;
   source: string;
   name: string;
+  /** Derived from the score's context ids (scoreLevelFromScore). */
+  level: ScoreLevel;
   dataType: ScoreDataTypeType;
   value: string;
   author: {
@@ -78,6 +95,23 @@ export type ScoresTableRow = {
   traceTags?: string[];
   environment?: string;
   executionTraceId?: string;
+};
+
+export type ScoresTableProps = {
+  projectId: string;
+  userId?: string;
+  traceId?: string;
+  observationId?: string;
+  hiddenColumns?: ScoresTableHiddenColumn[];
+  localStorageSuffix?: string;
+  disableUrlPersistence?: boolean;
+  /**
+   * When true, render the time-range picker and auto-refresh button in the
+   * page header (next to the title) via the header controls slot, instead of
+   * inside the table toolbar. Only used when the table is the primary content
+   * of a `Page`.
+   */
+  showControlsInPageHeader?: boolean;
 };
 
 function createFilterState(
@@ -104,16 +138,18 @@ export default function ScoresTable({
   hiddenColumns = [],
   localStorageSuffix = "",
   disableUrlPersistence = false,
-}: {
-  projectId: string;
-  userId?: string;
-  traceId?: string;
-  observationId?: string;
-  omittedFilter?: string[];
-  hiddenColumns?: string[];
-  localStorageSuffix?: string;
-  disableUrlPersistence?: boolean;
-}) {
+  showControlsInPageHeader = false,
+}: ScoresTableProps) {
+  const peekContext = usePeekTableState();
+
+  const scoresFilterConfig = useMemo(
+    () => getScoreFilterConfig(hiddenColumns),
+    [hiddenColumns],
+  );
+  const hiddenColumnSet = useMemo(
+    () => new Set<string>(hiddenColumns),
+    [hiddenColumns],
+  );
   const { isBetaEnabled } = useV4Beta();
   // In v4beta, scores must exclusively use events-backed endpoints (no traces-table route).
   const useEventsBackedScores = isBetaEnabled;
@@ -190,9 +226,20 @@ export default function ScoresTable({
       });
     },
     onSettled: () => {
-      void utils.scores.all.invalidate();
-      void utils.scores.allFromEvents.invalidate();
-      void utils.scores.countAllFromEvents.invalidate();
+      utils.scores.all.invalidate();
+      utils.scores.allFromEvents.invalidate();
+      utils.scores.countAllFromEvents.invalidate();
+
+      if (traceId) {
+        utils.traces.byIdWithObservationsAndScores.invalidate({
+          projectId,
+          traceId,
+        });
+        utils.events.scoresForTrace.invalidate({
+          projectId,
+          traceId,
+        });
+      }
     },
   });
 
@@ -271,6 +318,7 @@ export default function ScoresTable({
           value: sv.value,
           count: sv.count !== undefined ? Number(sv.count) : undefined,
         })) ?? undefined,
+      booleanValue: filterOptions.data?.booleanValue ?? undefined,
       traceName:
         filterOptions.data?.traceName?.map((tn) => ({
           value: tn.value,
@@ -287,16 +335,41 @@ export default function ScoresTable({
     [filterOptions.data, environmentOptions],
   );
 
-  const queryFilter = useSidebarFilterState(
-    scoreFilterConfig,
-    newFilterOptions,
-    {
-      loading: filterOptions.isPending || environmentFilterOptions.isPending,
-      disableUrlPersistence,
-      sessionFilterContextId: projectId,
-      // Sidebar-only implicit environment defaults
+  const isSidebarFilterLoading =
+    filterOptions.isPending || environmentFilterOptions.isPending;
+
+  const queryFilterOptions: UseSidebarFilterStateOptions = useMemo(() => {
+    const baseOptions = {
+      loading: isSidebarFilterLoading,
       implicitDefaultConfig: DEFAULT_SIDEBAR_IMPLICIT_ENVIRONMENT_CONFIG,
-    },
+    };
+
+    if (peekContext) {
+      return {
+        ...baseOptions,
+        stateLocation: "peekContext",
+        context: peekContext,
+      };
+    }
+
+    if (disableUrlPersistence) {
+      return {
+        ...baseOptions,
+        stateLocation: "memory",
+      };
+    }
+
+    return {
+      ...baseOptions,
+      stateLocation: "urlAndSessionStorage",
+      sessionFilterContextId: projectId,
+    };
+  }, [disableUrlPersistence, isSidebarFilterLoading, peekContext, projectId]);
+
+  const queryFilter = useSidebarFilterState(
+    scoresFilterConfig,
+    newFilterOptions,
+    queryFilterOptions,
   );
 
   // Create ref-based wrapper to avoid stale closure when queryFilter updates
@@ -322,14 +395,12 @@ export default function ScoresTable({
   const backendFilterState = transformFiltersForBackend(
     filterState,
     SCORE_COLUMN_TO_BACKEND_KEY,
-    scoreFilterConfig.columnDefinitions,
+    scoresFilterConfig.columnDefinitions,
   );
 
   const getCountPayload = {
     projectId,
     filter: backendFilterState,
-    page: 0,
-    limit: 1,
     orderBy: null,
   };
 
@@ -384,6 +455,7 @@ export default function ScoresTable({
     projectId,
     tableName: "scores",
     setSelectedRows,
+    setSelectAll,
   });
 
   const rawColumns: LangfuseColumnDef<ScoresTableRow>[] = [
@@ -411,9 +483,10 @@ export default function ScoresTable({
       enableHiding: true,
       enableSorting: true,
       size: 150,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         if (isBetaEnabled && !scoreMetrics.data)
-          return <Skeleton className="h-3 w-1/2" />;
+          return <TableTextLoadingCell />;
         const value = row.getValue("traceName") as ScoresTableRow["traceName"];
         const filter = encodeURIComponent(
           `name;stringOptions;;any of;${value}`,
@@ -505,12 +578,14 @@ export default function ScoresTable({
       id: "environment",
       size: 150,
       enableHiding: true,
+      loadingCell: <TableBadgeLoadingCell />,
       cell: ({ row }) => {
         const value = row.getValue("environment") as string | undefined;
         return value ? (
           <Badge
             variant="secondary"
             className="max-w-fit truncate rounded-sm px-1 font-normal"
+            title={value}
           >
             {value}
           </Badge>
@@ -528,9 +603,10 @@ export default function ScoresTable({
       enableHiding: true,
       enableSorting: true,
       size: 100,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         if (isBetaEnabled && !scoreMetrics.data)
-          return <Skeleton className="h-3 w-1/2" />;
+          return <TableTextLoadingCell />;
         const value = row.getValue("userId");
         return typeof value === "string" ? (
           <>
@@ -571,6 +647,22 @@ export default function ScoresTable({
       size: 150,
     },
     {
+      accessorKey: "level",
+      header: "Level",
+      id: "level",
+      enableHiding: true,
+      // Derived client-side from the score's context ids — not a sortable
+      // backend column.
+      enableSorting: false,
+      size: 110,
+      cell: ({ row }) => {
+        // Level tag (LFE-10596): trace- vs observation- (vs session-) level
+        // scores look identical here otherwise.
+        const level: ScoresTableRow["level"] = row.getValue("level");
+        return <ScoreTag level={level} />;
+      },
+    },
+    {
       accessorKey: "dataType",
       header: "Data Type",
       id: "dataType",
@@ -591,6 +683,13 @@ export default function ScoresTable({
       header: "Metadata",
       id: "metadata",
       size: 400,
+      loadingCell: () => (
+        <IOTableCell
+          isLoading
+          data={undefined}
+          singleLine={rowHeight === "s"}
+        />
+      ),
       headerTooltip: {
         description: "Add metadata to scores to track additional information.",
         // TODO: docs for metadata on scores
@@ -614,6 +713,13 @@ export default function ScoresTable({
       id: "comment",
       enableHiding: true,
       size: 400,
+      loadingCell: () => (
+        <IOTableCell
+          isLoading
+          data={undefined}
+          singleLine={rowHeight === "s"}
+        />
+      ),
       cell: ({ row }) => {
         const value = row.getValue("comment") as ScoresTableRow["comment"];
         return (
@@ -674,12 +780,14 @@ export default function ScoresTable({
       size: 250,
       enableHiding: true,
       defaultHidden: true,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         if (isBetaEnabled && !scoreMetrics.data)
-          return <Skeleton className="h-3 w-1/2" />;
+          return <TableTextLoadingCell />;
         const traceTags: string[] | undefined = row.getValue("traceTags");
         return (
-          traceTags && (
+          traceTags &&
+          traceTags.length > 0 && (
             <div
               className={cn(
                 "flex gap-x-2 gap-y-1",
@@ -714,7 +822,7 @@ export default function ScoresTable({
   ];
 
   const columns = rawColumns.filter(
-    (c) => !!c.id && !hiddenColumns.includes(c.id),
+    (c) => !!c.id && !hiddenColumnSet.has(c.id),
   );
 
   const [columnVisibility, setColumnVisibility] =
@@ -736,6 +844,7 @@ export default function ScoresTable({
       timestamp: score.timestamp,
       source: score.source,
       name: score.name,
+      level: scoreLevelFromScore(score),
       dataType: score.dataType,
       value:
         isNumericDataType(score.dataType) && isPresent(score.value)
@@ -751,6 +860,7 @@ export default function ScoresTable({
       comment: score.comment ?? undefined,
       observationId: score.observationId ?? undefined,
       sessionId: score.sessionId ?? undefined,
+      datasetRunId: score.datasetRunId ?? undefined,
       traceId: score.traceId ?? undefined,
       traceName: score.traceName ?? undefined,
       userId: score.traceUserId ?? undefined,
@@ -781,6 +891,7 @@ export default function ScoresTable({
         timestamp: score.timestamp,
         source: score.source,
         name: score.name,
+        level: scoreLevelFromScore(score),
         dataType: score.dataType,
         value:
           isNumericDataType(score.dataType) && isPresent(score.value)
@@ -796,6 +907,7 @@ export default function ScoresTable({
         comment: score.comment ?? undefined,
         observationId: score.observationId ?? undefined,
         sessionId: score.sessionId ?? undefined,
+        datasetRunId: score.datasetRunId ?? undefined,
         traceId: score.traceId ?? undefined,
         traceName: meta?.traceName ?? undefined,
         userId: meta?.userId ?? undefined,
@@ -814,22 +926,45 @@ export default function ScoresTable({
     stateUpdaters: {
       setOrderBy: setOrderByState,
       setFilters: setFiltersWrapper,
+      setExpandedFilters: queryFilter.onExpandedChange,
       setColumnOrder: setColumnOrder,
       setColumnVisibility: setColumnVisibility,
     },
     validationContext: {
       columns,
-      filterColumnDefinition: scoreFilterConfig.columnDefinitions,
+      filterColumnDefinition: scoresFilterConfig.columnDefinitions,
+      expandableFilterColumns: scoresFilterConfig.facets.map(
+        (facet) => facet.column,
+      ),
     },
     currentFilterState: queryFilter.explicitFilterState,
+    currentExpandedFilters: queryFilter.expanded,
   });
+
+  const visibleSelectedScoreIds = useMemo(
+    () =>
+      Object.keys(selectedRows).filter((scoreId) =>
+        scores.data?.scores.map((s) => s.id).includes(scoreId),
+      ),
+    [selectedRows, scores.data?.scores],
+  );
+
+  const selectedScoreCount = selectAll
+    ? totalCount
+    : visibleSelectedScoreIds.length;
 
   return (
     <DataTableControlsProvider
-      tableName={scoreFilterConfig.tableName}
-      defaultSidebarCollapsed={scoreFilterConfig.defaultSidebarCollapsed}
+      tableName={scoresFilterConfig.tableName}
+      defaultSidebarCollapsed={scoresFilterConfig.defaultSidebarCollapsed}
     >
       <div className="flex h-full w-full flex-col">
+        {showControlsInPageHeader && (
+          <TableHeaderControls
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+          />
+        )}
         {/* Toolbar spanning full width */}
         <DataTableToolbar
           columns={columns}
@@ -844,14 +979,17 @@ export default function ScoresTable({
             controllers: viewControllers,
           }}
           actionButtons={[
-            Object.keys(selectedRows).filter((scoreId) =>
-              scores.data?.scores.map((s) => s.id).includes(scoreId),
-            ).length > 0 ? (
+            visibleSelectedScoreIds.length > 0 || selectAll ? (
               <TableActionMenu
                 key="scores-multi-select-actions"
                 projectId={projectId}
                 actions={tableActions}
                 tableName={BatchExportTableName.Scores}
+                selectedCount={selectedScoreCount}
+                onClearSelection={() => {
+                  setSelectedRows({});
+                  setSelectAll(false);
+                }}
               />
             ) : null,
             <BatchExportTableButton
@@ -862,14 +1000,12 @@ export default function ScoresTable({
           ]}
           rowHeight={rowHeight}
           setRowHeight={setRowHeight}
-          timeRange={timeRange}
-          setTimeRange={setTimeRange}
+          timeRange={showControlsInPageHeader ? undefined : timeRange}
+          setTimeRange={showControlsInPageHeader ? undefined : setTimeRange}
           multiSelect={{
             selectAll,
             setSelectAll,
-            selectedRowIds: Object.keys(selectedRows).filter((scoreId) =>
-              scores.data?.scores.map((s) => s.id).includes(scoreId),
-            ),
+            selectedRowIds: visibleSelectedScoreIds,
             setRowSelection: setSelectedRows,
             totalCount,
             ...paginationState,
@@ -878,11 +1014,15 @@ export default function ScoresTable({
 
         {/* Content area with sidebar and table */}
         <ResizableFilterLayout>
-          <DataTableControls queryFilter={queryFilter} />
+          <DataTableControls
+            // Remount the sidebar when the saved view changes so the new view's filters replace any stale draft UI state.
+            key={viewControllers.selectedViewId ?? "no-view"}
+            queryFilter={queryFilter}
+          />
 
           <div className="flex flex-1 flex-col overflow-hidden">
             <DataTable
-              tableName={"scores"}
+              tableName="scores"
               columns={columns}
               noResultsMessage={
                 <div className="flex flex-col items-center">
@@ -920,6 +1060,7 @@ export default function ScoresTable({
               setOrderBy={setOrderByState}
               orderBy={orderByState}
               rowSelection={selectedRows}
+              highlightAllRows={selectAll}
               setRowSelection={setSelectedRows}
               columnVisibility={columnVisibility}
               onColumnVisibilityChange={setColumnVisibility}

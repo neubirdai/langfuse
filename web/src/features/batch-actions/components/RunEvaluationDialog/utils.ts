@@ -1,11 +1,13 @@
 import {
-  extractValueFromObject,
+  extractValueFromObjectAsString,
+  zipToolCallsFromRecord,
   type BatchActionQuery,
   type ObservationVariableMapping,
 } from "@langfuse/shared";
 import { type RouterOutputs } from "@/src/utils/api";
 
 type ObservationPreview = RouterOutputs["observations"]["byId"];
+type EventPreview = RouterOutputs["events"]["batchIO"][number];
 
 const PROMPT_PREVIEW_CHAR_LIMIT = 2000;
 
@@ -30,7 +32,7 @@ export function stringifyPreviewValue(value: unknown): string {
 export function renderPromptPreviewFromObservation(params: {
   prompt: string | null | undefined;
   variableMapping: ObservationVariableMapping[];
-  observation: ObservationPreview;
+  observation: ObservationPreview | EventPreview;
 }): string {
   const { prompt, variableMapping, observation } = params;
 
@@ -38,11 +40,21 @@ export function renderPromptPreviewFromObservation(params: {
     return "Template has no prompt.";
   }
 
+  // Both source records carry tool calls in the raw storage shape (name-less
+  // JSON strings + parallel names); zip so a toolCalls mapping previews the
+  // named objects the evaluator runtime receives. Zipped lazily: this runs
+  // per evaluator row per render, and most mappings never reference toolCalls.
+  const observationWithToolCalls = variableMapping.some(
+    (mapping) => mapping.selectedColumnId === "toolCalls",
+  )
+    ? { ...observation, toolCalls: zipToolCallsFromRecord(observation) }
+    : observation;
+
   const variableValues = new Map<string, string>();
 
   for (const mapping of variableMapping) {
-    const { value } = extractValueFromObject(
-      observation,
+    const { value } = extractValueFromObjectAsString(
+      observationWithToolCalls,
       mapping.selectedColumnId,
       mapping.jsonSelector ?? undefined,
     );

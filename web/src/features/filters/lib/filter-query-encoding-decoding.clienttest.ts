@@ -164,6 +164,21 @@ describe("Filter Query Encoding & Decoding (Legacy Format)", () => {
       );
     });
 
+    it("should encode booleanObject filter", () => {
+      const filters: FilterState = [
+        {
+          column: "score_booleans",
+          type: "booleanObject",
+          operator: "=",
+          key: "flag",
+          value: true,
+        },
+      ];
+      expect(encodeFilters(filters)).toBe(
+        "score_booleans;booleanObject;flag;=;true",
+      );
+    });
+
     it("should encode stringObject filter", () => {
       const filters: FilterState = [
         {
@@ -356,6 +371,20 @@ describe("Filter Query Encoding & Decoding (Legacy Format)", () => {
       ]);
     });
 
+    it("should decode booleanObject filter", () => {
+      const query = "score_booleans;booleanObject;flag;=;true";
+      const decoded = decodeFilters(query);
+      expect(decoded).toEqual([
+        {
+          column: "score_booleans",
+          type: "booleanObject",
+          operator: "=",
+          key: "flag",
+          value: true,
+        },
+      ]);
+    });
+
     it("should decode stringObject filter", () => {
       const query = "metadata;stringObject;environment;contains;production";
       const decoded = decodeFilters(query);
@@ -418,6 +447,19 @@ describe("Filter Query Encoding & Decoding (Legacy Format)", () => {
           type: "stringOptions",
           operator: "any of",
           value: [""],
+        },
+      ]);
+    });
+
+    it("should decode arrayOptions none-of filter with empty values", () => {
+      const result = decodeFilters("tags;arrayOptions;;none of;");
+
+      expect(result).toEqual([
+        {
+          column: "tags",
+          type: "arrayOptions",
+          operator: "none of",
+          value: [],
         },
       ]);
     });
@@ -495,6 +537,22 @@ describe("Filter Query Encoding & Decoding (Legacy Format)", () => {
       const deserialized = decodeFilters(serialized);
 
       expect(deserialized).toEqual(filterWithEmptyString);
+    });
+
+    it("should maintain consistency for empty arrayOptions none-of filters", () => {
+      const filterWithPendingNoneSelection: FilterState = [
+        {
+          column: "tags",
+          type: "arrayOptions",
+          operator: "none of",
+          value: [],
+        },
+      ];
+
+      const serialized = encodeFilters(filterWithPendingNoneSelection);
+      const deserialized = decodeFilters(serialized);
+
+      expect(deserialized).toEqual(filterWithPendingNoneSelection);
     });
 
     it("should maintain consistency for values containing pipes", () => {

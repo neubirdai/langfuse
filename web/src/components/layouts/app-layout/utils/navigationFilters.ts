@@ -7,15 +7,13 @@ import type { Route } from "@/src/components/layouts/routes";
 import type { NavigationFilterContext } from "./navigationFilters.types";
 import { hasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { hasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
-import type { User } from "next-auth";
-import type { Flag } from "@/src/features/feature-flags/types";
-import { getExperimentsAccess } from "@/src/features/experiments/utils/experimentsAccess";
+import type { Session } from "next-auth";
 
 /** Organization type from user session (can be null when not in project/org context) */
-type Organization = User["organizations"][number] | null | undefined;
-
-// Admin-only flags that don't respect experimental features
-const adminOnlyFlags: Flag[] = ["experimentsV4Enabled"];
+type Organization =
+  | NonNullable<Session["user"]>["organizations"][number]
+  | null
+  | undefined;
 
 /**
  * Individual filter functions - each handles one concern
@@ -73,32 +71,16 @@ export const filters = {
    * - Experimental features enabled
    * - User is cloud admin
    * - User has specific feature flag
-   * - For v4Beta: show to all cloud users and keep it visible for opted-in users outside cloud
    */
   featureFlags: (route: Route, ctx: NavigationFilterContext): Route | null => {
     if (route.featureFlag === undefined) return route;
 
-    if (route.featureFlag && adminOnlyFlags.includes(route.featureFlag)) {
-      const access = getExperimentsAccess({
-        isLangfuseCloud: ctx.isLangfuseCloud,
-        isV4BetaEnabled: ctx.session?.user?.v4BetaEnabled === true,
-        isAdmin: ctx.cloudAdmin,
-        isFeatureEnabledOnUser:
-          ctx.session?.user?.featureFlags?.[route.featureFlag] === true,
-      });
-
-      return access.isEnabled ? route : null;
+    if (route.featureFlag === "experimentsV4Enabled") {
+      return ctx.session?.user?.v4BetaEnabled === true ? route : null;
     }
 
     if (route.featureFlag === "v4BetaToggleVisible") {
-      const hasOptedIn = ctx.session?.user?.v4BetaEnabled === true;
-
-      return ctx.isLangfuseCloud ||
-        ctx.enableExperimentalFeatures ||
-        ctx.cloudAdmin ||
-        hasOptedIn
-        ? route
-        : null;
+      return ctx.session?.user?.canToggleV4 === true ? route : null;
     }
 
     const hasFlag =
@@ -179,12 +161,17 @@ export const filters = {
    */
   customShow: (
     route: Route,
-    _ctx: NavigationFilterContext,
+    ctx: NavigationFilterContext,
     organization: Organization,
   ): Route | null => {
     if (!route.show) return route;
     // Convert null to undefined for route.show compatibility
-    return route.show({ organization: organization ?? undefined })
+    return route.show({
+      organization: organization ?? undefined,
+      projectId: ctx.routerProjectId,
+      isLangfuseCloud: ctx.isLangfuseCloud,
+      v4WriteMode: ctx.session?.environment?.v4WriteMode,
+    })
       ? route
       : null;
   },

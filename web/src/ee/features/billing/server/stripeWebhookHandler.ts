@@ -23,6 +23,7 @@ import {
 import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { type StripeSubscriptionMetadata } from "@/src/ee/features/billing/utils/stripeSubscriptionMetadata";
 import { mapStripeProductIdToPlan } from "@/src/ee/features/billing/utils/stripeCatalogue";
+import { syncOrgPlanChangeToSfdc } from "@/src/ee/features/sfdc-sync/server";
 
 /**
  * Stripe webhook handler for managing subscription events, billing alerts, and invoice notifications.
@@ -464,7 +465,7 @@ export async function createDefaultSpendAlerts({
   }
 }
 
-async function handleSubscriptionChanged(
+export async function handleSubscriptionChanged(
   subscription: Stripe.Subscription,
   action: "created" | "deleted" | "updated",
 ) {
@@ -632,12 +633,21 @@ async function handleSubscriptionChanged(
       },
     };
 
+    // Only clear free-tier suspension when payment is credibly current.
+    // Stripe fires subscription.created/updated for non-paying states too
+    // (incomplete, past_due, unpaid, ...); unblocking on those would let a
+    // failed-payment org resume ingestion. The worker's hourly threshold job
+    // remains the fallback that reconciles this column from usage + plan.
+    const isPaidAndCurrent =
+      subscription.status === "active" || subscription.status === "trialing";
+
     await prisma.organization.update({
       where: {
         id: parsedOrg.id,
       },
       data: {
         cloudConfig: updatedCloudConfig,
+        ...(isPaidAndCurrent ? { cloudFreeTierUsageThresholdState: null } : {}),
       },
     });
 
@@ -667,7 +677,7 @@ async function handleSubscriptionChanged(
     // Invalidate API keys in Redis for it to be updated
     await invalidateCachedOrgApiKeys(parsedOrg.id);
 
-    void auditLog({
+    auditLog({
       session: {
         user: { id: "stripe-webhook" },
         orgId: parsedOrg.id,
@@ -678,6 +688,17 @@ async function handleSubscriptionChanged(
       action: `BillingService.subscription.${action}`,
       before: parsedOrg.cloudConfig,
       after: updatedCloudConfig,
+    });
+
+    await syncOrgPlanChangeToSfdc({
+      orgBeforeUpdate: parsedOrg,
+      updatedCloudConfig,
+      // On "created" the anchor was just re-persisted from this subscription;
+      // mirror that value here since parsedOrg still holds the stale one.
+      billingCycleAnchor:
+        action === "created" && subscription.billing_cycle_anchor
+          ? new Date(subscription.billing_cycle_anchor * 1000)
+          : parsedOrg.cloudBillingCycleAnchor,
     });
   } else if (action === "deleted") {
     // When subscription is deleted, only keep customerId and remove all other subscription fields
@@ -705,7 +726,7 @@ async function handleSubscriptionChanged(
     await updateOrgBillingCycleAnchor(parsedOrg.id);
     await invalidateCachedOrgApiKeys(parsedOrg.id);
 
-    void auditLog({
+    auditLog({
       session: {
         user: { id: "stripe-webhook" },
         orgId: parsedOrg.id,
@@ -716,6 +737,14 @@ async function handleSubscriptionChanged(
       action: "BillingService.subscription.deleted",
       before: parsedOrg.cloudConfig,
       after: updatedCloudConfig,
+    });
+
+    // Downgrade to Hobby: convertedToPaidAt is omitted for Hobby pushes, so
+    // the (just reset) anchor value is irrelevant here.
+    await syncOrgPlanChangeToSfdc({
+      orgBeforeUpdate: parsedOrg,
+      updatedCloudConfig,
+      billingCycleAnchor: null,
     });
   }
 

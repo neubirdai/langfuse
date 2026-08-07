@@ -244,7 +244,7 @@ export function ScoreConfigsTable({ projectId }: { projectId: string }) {
       />
       <SettingsTableCard>
         <DataTable
-          tableName={"scoreConfigs"}
+          tableName="scoreConfigs"
           columns={columns}
           data={
             configs.isPending
@@ -284,6 +284,7 @@ export function ScoreConfigsTable({ projectId }: { projectId: string }) {
           columnOrder={columnOrder}
           onColumnOrderChange={setColumnOrder}
           rowHeight={rowHeight}
+          cellPadding="comfortable"
           className="gap-2"
         />
       </SettingsTableCard>

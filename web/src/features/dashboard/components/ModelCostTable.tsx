@@ -6,14 +6,12 @@ import { DashboardTable } from "@/src/features/dashboard/components/cards/Dashbo
 import { type FilterState, getGenerationLikeTypes } from "@langfuse/shared";
 import { compactNumberFormatter } from "@/src/utils/numbers";
 import { TotalMetric } from "./TotalMetric";
-import { totalCostDashboardFormatted } from "@/src/features/dashboard/lib/dashboard-utils";
+import { costFormatter } from "@/src/utils/numbers";
 import { truncate } from "@/src/utils/string";
-import {
-  type QueryType,
-  type ViewVersion,
-  mapLegacyUiTableFilterToView,
-} from "@/src/features/query";
+import { type QueryType, type ViewVersion } from "@langfuse/shared/query";
+import { mapLegacyUiTableFilterToView } from "@/src/features/dashboard/lib/dashboardUiTableToViewMapping";
 import { useScheduledDashboardExecuteQuery } from "@/src/hooks/useDashboardQueryScheduler";
+import { cn } from "@/src/utils/tailwind";
 
 export const ModelCostTable = ({
   className,
@@ -97,7 +95,7 @@ export const ModelCostTable = ({
           </RightAlignedCell>,
           <RightAlignedCell key={`${i}-cost`}>
             {item.sum_totalCost
-              ? totalCostDashboardFormatted(item.sum_totalCost as number)
+              ? costFormatter(item.sum_totalCost as number)
               : "$0"}
           </RightAlignedCell>,
         ])
@@ -105,7 +103,11 @@ export const ModelCostTable = ({
 
   return (
     <DashboardCard
-      className={className}
+      // h-full pins the card to the tile so the table fits its rows to the
+      // AVAILABLE height instead of overflowing; min-h-0 lets the flex column
+      // shrink so the row area scrolls internally. (LFE-11035)
+      className={cn(className, "h-full")}
+      cardContentClassName="min-h-0"
       title="Model costs"
       isLoading={isLoading || metrics.isLoading}
     >
@@ -120,7 +122,7 @@ export const ModelCostTable = ({
         collapse={{ collapsed: 5, expanded: 20 }}
       >
         <TotalMetric
-          metric={totalCostDashboardFormatted(totalTokenCost)}
+          metric={costFormatter(totalTokenCost)}
           description="Total cost"
         >
           <DocPopup
