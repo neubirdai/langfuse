@@ -1,13 +1,36 @@
 name: Build and Push neubirdai Images
 
 on:
+  # Manual trigger with optional git tag
   workflow_dispatch:
+    inputs:
+      git_tag:
+        description: "Git tag version for image tagging (e.g., v2.75.2) - optional, defaults to latest only"
+        required: false
+        type: string
+
+  # Allow calling from other workflows
+  workflow_call:
+    inputs:
+      git_tag:
+        description: "Git tag version for image tagging"
+        required: false
+        type: string
 
 jobs:
   build-push-web:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Log build start
+        run: |
+          echo "::group::Build Configuration"
+          echo "Building web image for neubirdai/langfuse-web"
+          echo "Git tag: ${{ inputs.git_tag || 'not specified' }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "::endgroup::"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -23,20 +46,58 @@ jobs:
       - name: Set build ID
         run: echo "NEXT_PUBLIC_BUILD_ID=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
+      - name: Prepare image tags
+        id: tags
+        run: |
+          echo "::group::Preparing Image Tags"
+
+          # Always include latest tag
+          TAGS="docker.io/neubirdai/langfuse-web:latest"
+
+          # Add version tag if git_tag is provided
+          if [ -n "${{ inputs.git_tag }}" ]; then
+            VERSION_TAG="${{ inputs.git_tag }}"
+            TAGS="$TAGS,docker.io/neubirdai/langfuse-web:$VERSION_TAG"
+            echo "::notice::Will tag with version: $VERSION_TAG"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Image tags to be applied:"
+          echo "$TAGS" | tr ',' '\n' | sed 's/^/  - /'
+
+          echo "::endgroup::"
+
       - name: Build and push web image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./web/Dockerfile
           push: true
-          tags: docker.io/neubirdai/langfuse-web:latest
+          tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             NEXT_PUBLIC_BUILD_ID=${{ env.NEXT_PUBLIC_BUILD_ID }}
+
+      - name: Verify web image push
+        run: |
+          echo "::group::Push Verification"
+          echo "✅ Web image built and pushed successfully"
+          echo "Tags applied:"
+          echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/  - /'
+          echo "::endgroup::"
 
   build-push-worker:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Log build start
+        run: |
+          echo "::group::Build Configuration"
+          echo "Building worker image for neubirdai/langfuse-worker"
+          echo "Git tag: ${{ inputs.git_tag || 'not specified' }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "::endgroup::"
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -49,10 +110,71 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Prepare image tags
+        id: tags
+        run: |
+          echo "::group::Preparing Image Tags"
+
+          # Always include latest tag
+          TAGS="docker.io/neubirdai/langfuse-worker:latest"
+
+          # Add version tag if git_tag is provided
+          if [ -n "${{ inputs.git_tag }}" ]; then
+            VERSION_TAG="${{ inputs.git_tag }}"
+            TAGS="$TAGS,docker.io/neubirdai/langfuse-worker:$VERSION_TAG"
+            echo "::notice::Will tag with version: $VERSION_TAG"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Image tags to be applied:"
+          echo "$TAGS" | tr ',' '\n' | sed 's/^/  - /'
+
+          echo "::endgroup::"
+
       - name: Build and push worker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./worker/Dockerfile
           push: true
-          tags: docker.io/neubirdai/langfuse-worker:latest
+          tags: ${{ steps.tags.outputs.tags }}
+
+      - name: Verify worker image push
+        run: |
+          echo "::group::Push Verification"
+          echo "✅ Worker image built and pushed successfully"
+          echo "Tags applied:"
+          echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n' | sed 's/^/  - /'
+          echo "::endgroup::"
+
+  summary:
+    needs: [build-push-web, build-push-worker]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Build summary
+        run: |
+          echo "### Docker Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: neubirdai/langfuse-*" >> $GITHUB_STEP_SUMMARY
+          echo "**Git Tag**: ${{ inputs.git_tag || 'not specified (latest only)' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit SHA**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.build-push-web.result }}" = "success" ] && [ "${{ needs.build-push-worker.result }}" = "success" ]; then
+            echo "**Status**: ✅ All images built and pushed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Images Published:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`neubirdai/langfuse-web:latest\`" >> $GITHUB_STEP_SUMMARY
+            echo "- \`neubirdai/langfuse-worker:latest\`" >> $GITHUB_STEP_SUMMARY
+            
+            if [ -n "${{ inputs.git_tag }}" ]; then
+              echo "- \`neubirdai/langfuse-web:${{ inputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+              echo "- \`neubirdai/langfuse-worker:${{ inputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "**Status**: ❌ Build failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- Web build: ${{ needs.build-push-web.result }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Worker build: ${{ needs.build-push-worker.result }}" >> $GITHUB_STEP_SUMMARY
+          fi
