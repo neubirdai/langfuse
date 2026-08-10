@@ -1,4 +1,4 @@
-name: Upgrade from Upstream Langfuse
+name: Neubird - Upgrade from Upstream Langfuse
 
 on:
   # Manual trigger with git tag input
@@ -265,8 +265,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Merge conflicts in Langfuse upgrade to ${tag}`,
-              body: issueBody,
-              labels: ['merge-conflict', 'upgrade']
+              body: issueBody
             });
 
             core.setFailed(`Merge conflicts detected in ${conflictCount} file(s). Issue created for manual resolution.`);
@@ -282,8 +281,38 @@ jobs:
 
           echo "::endgroup::"
 
-      - name: Create Pull Request
+      - name: Check for changes
         if: steps.check-conflicts.outputs.has_conflicts == 'false' && steps.create-branch.outputs.branch_exists == 'false'
+        id: check-changes
+        run: |
+          echo "::group::Checking for changes"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          # Check if there are any differences between the branch and main
+          if git diff --quiet origin/main.."$BRANCH_NAME"; then
+            echo "::warning::No changes detected between $BRANCH_NAME and main"
+            echo "::notice::Repository is already up-to-date with the target tag"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "::notice::Changes detected, proceeding with PR creation"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "::endgroup::"
+
+      - name: Clean up branch with no changes
+        if: steps.check-changes.outputs.has_changes == 'false'
+        run: |
+          echo "::group::Cleaning up branch"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          echo "Deleting branch $BRANCH_NAME (no changes to merge)"
+          git push origin --delete "$BRANCH_NAME" || echo "Branch deletion skipped or failed"
+
+          echo "::endgroup::"
+
+      - name: Create Pull Request
+        if: steps.check-changes.outputs.has_changes == 'true'
         id: create-pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -321,8 +350,7 @@ jobs:
             --title "Upgrade Langfuse to $TAG" \
             --body "$PR_BODY" \
             --base main \
-            --head "$BRANCH_NAME" \
-            --label "upgrade,dependencies")
+            --head "$BRANCH_NAME")
 
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "::notice::Pull request created: $PR_URL"
@@ -429,6 +457,12 @@ jobs:
             echo "A GitHub issue has been created for manual resolution." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.create-branch.outputs.branch_exists }}" = "true" ]; then
             echo "**Status**: ⚠️ Branch already exists" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.check-changes.outputs.has_changes }}" = "false" ]; then
+            echo "**Status**: ℹ️ No Changes - Already Up-to-Date" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Repository is already up-to-date with tag \`${{ steps.set-tag.outputs.git_tag }}\`." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No pull request needed - no differences detected between main and the upstream tag." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.auto-merge.outputs.merge_status }}" = "success" ]; then
             echo "**Status**: ✅ Success - PR Auto-merged" >> $GITHUB_STEP_SUMMARY
             echo "**PR**: ${{ steps.create-pr.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
@@ -483,6 +517,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Upgrade workflow failed for ${tag}`,
-              body: issueBody,
-              labels: ['workflow-failure', 'upgrade']
+              body: issueBody
             });
