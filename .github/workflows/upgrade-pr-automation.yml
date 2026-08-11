@@ -19,6 +19,11 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
       - name: Log PR event
         run: |
           echo "::notice::Upgrade PR automation triggered"
@@ -69,7 +74,8 @@ jobs:
 
           # Look for auto-merge indicator in PR body or title
           if echo "$PR_BODY" | grep -q "auto-merge: enabled" || \
-            echo "$PR_BODY" | grep -q "\[auto-merge\]"; then
+             echo "$PR_BODY" | grep -q "auto-merge: true" || \
+             echo "$PR_BODY" | grep -q "\[auto-merge\]"; then
             echo "auto_merge=true" >> $GITHUB_OUTPUT
             echo "::notice::Auto-merge enabled (found in PR body)"
           else
@@ -202,22 +208,29 @@ jobs:
           echo "::group::Auto-merging Pull Request"
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          # Retry merge to handle race conditions
-          RETRIES=3
+          # Wait longer for required checks to complete
+          echo "Waiting 2 minutes for required checks to complete..."
+          sleep 120
+
+          # Retry merge to handle race conditions and check delays
+          RETRIES=5
           for attempt in $(seq 1 $RETRIES); do
             echo "Merge attempt $attempt of $RETRIES..."
-            if gh pr merge "$PR_NUMBER" --squash --admin; then
+            # Remove --admin flag to respect branch protection (or keep it if you trust the upgrade process)
+            # Option 1: Respect checks (recommended) - use: gh pr merge "$PR_NUMBER" --squash --auto
+            # Option 2: Bypass checks (faster but risky) - use: gh pr merge "$PR_NUMBER" --squash --admin
+            if gh pr merge "$PR_NUMBER" --squash --auto; then
               echo "merge_status=success" >> $GITHUB_OUTPUT
               echo "::notice::PR merged successfully"
               echo "::endgroup::"
               exit 0
             else
               if [ $attempt -lt $RETRIES ]; then
-                echo "::warning::Merge failed, retrying in 5 seconds..."
-                sleep 5
+                echo "::warning::Merge failed, retrying in 10 seconds..."
+                sleep 10
               else
                 echo "merge_status=failed" >> $GITHUB_OUTPUT
-                echo "::warning::Failed to merge after $RETRIES attempts"
+                echo "::warning::Failed to merge after $RETRIES attempts (checks may not be passing)"
                 echo "::endgroup::"
                 exit 0
               fi
