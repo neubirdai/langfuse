@@ -153,75 +153,72 @@ jobs:
           echo "  - Or delete the branch to retry: git push origin --delete ${{ steps.create-branch.outputs.branch_name }}"
           exit 1
 
-      - name: Merge upstream tag
-        id: merge-tag
-        if: steps.create-branch.outputs.branch_exists == 'false'
-        run: |
-          echo "::group::Merging upstream tag"
-          TAG="${{ steps.set-tag.outputs.git_tag }}"
-          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
-
-          echo "Attempting to merge tag $TAG..."
-
-          # Attempt merge with custom commit message
-          if git merge "$TAG" -m "Merge tag '$TAG' into $BRANCH_NAME"; then
-            echo "::notice::Merge completed successfully"
-            echo "merge_status=success" >> $GITHUB_OUTPUT
-          else
-            MERGE_EXIT_CODE=$?
-            echo "::warning::Merge completed with exit code: $MERGE_EXIT_CODE"
-            echo "merge_status=conflict" >> $GITHUB_OUTPUT
-          fi
-
-          echo "::endgroup::"
-
-      - name: Push upgrade branch
+      - name: Push clean upgrade branch
         if: steps.create-branch.outputs.branch_exists == 'false'
         run: |
           echo "::group::Pushing upgrade branch"
           BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
 
-          # Push branch even if there are conflicts
-          # This allows users to checkout the branch and resolve conflicts locally
+          # Push clean branch (before merge attempt)
+          # This provides a stable starting point for manual merge
           git push origin "$BRANCH_NAME"
-          echo "::notice::Successfully pushed branch $BRANCH_NAME"
+          echo "::notice::Successfully pushed clean branch $BRANCH_NAME"
 
           echo "::endgroup::"
 
-      - name: Check for conflicts
-        id: check-conflicts
+      - name: Attempt merge to detect conflicts
+        id: merge-tag
         if: steps.create-branch.outputs.branch_exists == 'false'
         run: |
-          echo "::group::Checking for merge conflicts"
+          echo "::group::Testing merge (detecting conflicts)"
+          TAG="${{ steps.set-tag.outputs.git_tag }}"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
 
-          # Check if there are any unmerged paths
-          if git ls-files -u | grep -q .; then
-            echo "::warning::Merge conflicts detected!"
+          echo "Attempting to merge tag $TAG to detect potential conflicts..."
+
+          # Attempt merge with custom commit message
+          if git merge "$TAG" -m "Merge tag '$TAG' into $BRANCH_NAME"; then
+            echo "::notice::Merge completed successfully - no conflicts"
+            echo "merge_status=success" >> $GITHUB_OUTPUT
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+          else
+            MERGE_EXIT_CODE=$?
+            echo "::warning::Merge has conflicts (exit code: $MERGE_EXIT_CODE)"
+            echo "merge_status=conflict" >> $GITHUB_OUTPUT
             echo "has_conflicts=true" >> $GITHUB_OUTPUT
             
-            # List all conflicted files
-            echo "Conflicted files:"
-            git diff --name-only --diff-filter=U | tee /tmp/conflicted_files.txt
+            # List conflicted files
+            if git ls-files -u | grep -q .; then
+              echo "Conflicted files detected:"
+              CONFLICTED_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')
+              echo "conflicted_files=$CONFLICTED_FILES" >> $GITHUB_OUTPUT
+              
+              CONFLICT_COUNT=$(git diff --name-only --diff-filter=U | wc -l)
+              echo "conflict_count=$CONFLICT_COUNT" >> $GITHUB_OUTPUT
+              git diff --name-only --diff-filter=U
+            fi
             
-            # Store conflict details
-            CONFLICTED_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')
-            echo "conflicted_files=$CONFLICTED_FILES" >> $GITHUB_OUTPUT
-            
-            # Get conflict count
-            CONFLICT_COUNT=$(git diff --name-only --diff-filter=U | wc -l)
-            echo "conflict_count=$CONFLICT_COUNT" >> $GITHUB_OUTPUT
-            
-            echo "::warning::Found $CONFLICT_COUNT conflicted file(s)"
-            echo "::notice::Branch has been pushed for manual conflict resolution"
-          else
-            echo "::notice::No merge conflicts detected"
-            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            # Abort the merge - user will do it locally
+            git merge --abort
+            echo "::notice::Merge aborted - user will merge locally on clean branch"
           fi
 
           echo "::endgroup::"
 
+      - name: Push successful merge
+        if: steps.merge-tag.outputs.has_conflicts == 'false' && steps.create-branch.outputs.branch_exists == 'false'
+        run: |
+          echo "::group::Pushing merged changes"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          # Push the successfully merged branch
+          git push origin "$BRANCH_NAME" --force
+          echo "::notice::Successfully pushed merged branch $BRANCH_NAME"
+
+          echo "::endgroup::"
+
       - name: Check for changes
-        if: steps.check-conflicts.outputs.has_conflicts == 'false' && steps.create-branch.outputs.branch_exists == 'false'
+        if: steps.merge-tag.outputs.has_conflicts == 'false' && steps.create-branch.outputs.branch_exists == 'false'
         id: check-changes
         run: |
           echo "::group::Checking for changes"
@@ -305,51 +302,75 @@ jobs:
           echo "**Auto-merge**: ${{ steps.set-tag.outputs.auto_merge }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" = "true" ]; then
+          if [ "${{ steps.merge-tag.outputs.has_conflicts }}" = "true" ]; then
             echo "**Status**: ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
-            echo "**Branch**: \`${{ steps.create-branch.outputs.branch_name }}\` (pushed to remote)" >> $GITHUB_STEP_SUMMARY
-            echo "**Conflicted Files**: ${{ steps.check-conflicts.outputs.conflict_count }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch**: \`${{ steps.create-branch.outputs.branch_name }}\` (clean branch pushed - merge locally)" >> $GITHUB_STEP_SUMMARY
+            echo "**Upstream Tag**: \`${{ steps.set-tag.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ steps.merge-tag.outputs.conflict_count }}" ]; then
+              echo "**Estimated Conflicted Files**: ${{ steps.merge-tag.outputs.conflict_count }}" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Conflicted Files" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ steps.merge-tag.outputs.conflicted_files }}" ]; then
+              echo "### Potentially Conflicted Files" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "${{ steps.merge-tag.outputs.conflicted_files }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "### Complete Manual Upgrade Steps" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Good news**: A clean branch \`${{ steps.create-branch.outputs.branch_name }}\` has been created and pushed!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**1. Checkout the branch:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git fetch origin" >> $GITHUB_STEP_SUMMARY
+            echo "git checkout ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.check-conflicts.outputs.conflicted_files }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**2. Add upstream remote (if not already added):**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git remote add upstream https://github.com/langfuse/langfuse.git || echo \"Upstream already exists\"" >> $GITHUB_STEP_SUMMARY
+            echo "git fetch upstream --tags" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Resolution Steps" >> $GITHUB_STEP_SUMMARY
+            echo "**3. Merge the upstream tag:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git merge ${{ steps.set-tag.outputs.git_tag }} -m \"Merge tag '${{ steps.set-tag.outputs.git_tag }}' into ${{ steps.create-branch.outputs.branch_name }}\"" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ **Good news**: The branch has been pushed to remote for you!" >> $GITHUB_STEP_SUMMARY
+            echo "**4. If conflicts occur, resolve them:**" >> $GITHUB_STEP_SUMMARY
+            echo "   - Open each conflicted file" >> $GITHUB_STEP_SUMMARY
+            echo "   - Remove conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`)" >> $GITHUB_STEP_SUMMARY
+            echo "   - Keep the correct code for your fork" >> $GITHUB_STEP_SUMMARY
+            echo "   - Test locally if needed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "1. **Checkout the branch:**" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "   git fetch origin" >> $GITHUB_STEP_SUMMARY
-            echo "   git checkout ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "**5. Stage resolved files:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git add ." >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "2. **Review and resolve conflicts** in each file listed above" >> $GITHUB_STEP_SUMMARY
+            echo "**6. Complete the merge:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git commit -m \"Resolve conflicts for ${{ steps.set-tag.outputs.git_tag }} upgrade\"" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "Or if no conflicts:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "# Merge commit was already created in step 3" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "3. **Stage resolved files:**" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "   git add <resolved-files>" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "**7. Push your changes:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "git push origin ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "4. **Complete the merge:**" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "   git commit -m \"Resolve conflicts for ${{ steps.set-tag.outputs.git_tag }} upgrade\"" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "5. **Push your changes:**" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "   git push origin ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "6. **Create the PR:**" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "   gh pr create --title \"Upgrade Langfuse to ${{ steps.set-tag.outputs.git_tag }}\" --base main --head ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
-            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "**8. Create the PR:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "gh pr create --title \"Upgrade Langfuse to ${{ steps.set-tag.outputs.git_tag }}\" --base main --head ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "---" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "💡 **Pro Tip**: Add \`[auto-merge]\` to the PR body to enable automatic approval, merge, and build trigger!" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Pro Tip**: Add \`[auto-merge]\` to the PR body when creating it to enable automatic approval, merge, and build trigger!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🤖 **Automation Ready**: Once you create the PR, the PR Automation workflow will activate and can handle the rest automatically if you enable auto-merge." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.create-branch.outputs.branch_exists }}" = "true" ]; then
