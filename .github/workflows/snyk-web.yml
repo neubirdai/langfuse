@@ -1,6 +1,7 @@
 name: Snyk Container - Web
 on:
-  workflow_dispatch:
+  push:
+    branches: ["production", "main", "v3"]
 
 permissions:
   contents: read
