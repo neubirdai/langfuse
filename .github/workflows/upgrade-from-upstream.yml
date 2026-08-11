@@ -111,7 +111,12 @@ jobs:
         id: current-version
         run: |
           # Try to get current version from package.json or git tag
-          CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          PACKAGE_VERSION=$(jq -r '.version' package.json 2>/dev/null)
+          if [ -n "$PACKAGE_VERSION" ] && [ "$PACKAGE_VERSION" != "null" ]; then
+            CURRENT_TAG="v${PACKAGE_VERSION}"
+          else
+            CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+          fi
           echo "current_tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
           echo "::notice::Current version: $CURRENT_TAG"
 
