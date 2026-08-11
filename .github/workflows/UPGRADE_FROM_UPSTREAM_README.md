@@ -4,10 +4,11 @@ This document explains all scenarios handled by the automated upstream upgrade w
 
 ## 📚 Table of Contents
 
-1. [Overview](#overview)
-2. [Prerequisites & Setup](#prerequisites--setup)
-3. [Workflows](#workflows)
-4. [Scenarios](#scenarios)
+1. [Manual Upgrade Process](#manual-upgrade-process)
+2. [Automation Overview](#automation-overview)
+3. [Prerequisites & Setup](#prerequisites--setup)
+4. [Workflows](#workflows)
+5. [Scenarios](#scenarios)
    - [Scenario 1: Clean Merge + Auto-Merge Enabled](#scenario-1-clean-merge--auto-merge-enabled)
    - [Scenario 2: Clean Merge + Manual Review](#scenario-2-clean-merge--manual-review)
    - [Scenario 3: Merge Conflicts + Auto-Merge Intended](#scenario-3-merge-conflicts--auto-merge-intended)
@@ -16,12 +17,174 @@ This document explains all scenarios handled by the automated upstream upgrade w
    - [Scenario 6: Branch Already Exists](#scenario-6-branch-already-exists)
    - [Scenario 7: Invalid Branch Name Format](#scenario-7-invalid-branch-name-format)
    - [Scenario 8: Workflow Failures](#scenario-8-workflow-failures)
-5. [Configuration Reference](#configuration-reference)
-6. [Troubleshooting](#troubleshooting)
+6. [Configuration Reference](#configuration-reference)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Overview
+## 📋 Manual Upgrade Process
+
+For situations where conflicts occur or manual intervention is required, follow this complete manual process:
+
+### Step-by-Step Manual Upgrade
+
+**Prerequisites:**
+
+- Workflow has created a clean branch: `weekly-upgrade-langfuse-<TAG>-<DATE>-<TIMESTAMP>`
+- Branch follows naming convention for PR automation to work
+
+**Steps:**
+
+1. **Checkout the Clean Branch**
+
+   ```bash
+   git fetch origin
+   git checkout weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
+   ```
+
+2. **Set Up Upstream Remote** (one-time setup)
+
+   ```bash
+   git remote add upstream https://github.com/langfuse/langfuse.git || echo "Upstream already exists"
+   git fetch upstream --tags
+   ```
+
+3. **Merge Upstream Tag**
+
+   ```bash
+   git merge v2.75.2 -m "Merge tag 'v2.75.2' into weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890"
+   ```
+
+4. **Resolve Conflicts** (if any occur)
+   - Open each conflicted file
+   - Look for conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`
+   - Keep the correct code for your fork
+   - Remove all conflict markers
+   - Save the files
+   - Test locally if needed
+
+5. **Stage Changes**
+
+   ```bash
+   # Stage all resolved files
+   git add .
+
+   # Or stage specific files
+   git add path/to/resolved/file1.tsx path/to/resolved/file2.ts
+   ```
+
+6. **Complete the Merge**
+
+   ```bash
+   # If conflicts were resolved, commit them
+   git commit -m "Resolve conflicts for v2.75.2 upgrade"
+
+   # If no conflicts occurred, the merge commit was created automatically in step 3
+   ```
+
+7. **Push Changes**
+
+   ```bash
+   git push origin weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
+   ```
+
+8. **Create Pull Request**
+
+   **Option A: With Auto-Merge (Recommended)**
+
+   ```bash
+   gh pr create \
+     --title "Upgrade Langfuse to v2.75.2" \
+     --body "## Upgrade Langfuse to v2.75.2
+
+   Upstream changes merged from tag v2.75.2.
+
+   [auto-merge]
+   " \
+     --base main \
+     --head weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
+   ```
+
+   **Option B: Manual Review**
+
+   ```bash
+   gh pr create \
+     --title "Upgrade Langfuse to v2.75.2" \
+     --base main \
+     --head weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
+   ```
+
+9. **Automated Next Steps** (if auto-merge enabled)
+   - ✅ PR Automation workflow activates
+   - ✅ PR auto-approved
+   - ✅ PR auto-merged
+   - ✅ Build workflow triggered automatically
+
+10. **Manual Next Steps** (if auto-merge NOT enabled)
+
+    ```bash
+    # Review and approve
+    gh pr review <PR-NUMBER> --approve
+
+    # Merge
+    gh pr merge <PR-NUMBER> --squash --admin
+
+    # Trigger build
+    gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
+    ```
+
+### Quick Command Reference
+
+**Full manual upgrade in one script:**
+
+```bash
+#!/bin/bash
+TAG="v2.75.2"
+BRANCH="weekly-upgrade-langfuse-${TAG}-$(date +'%Y-%m-%d-%s')"
+
+# Checkout clean branch (created by workflow)
+git fetch origin
+git checkout $BRANCH
+
+# Setup upstream
+git remote add upstream https://github.com/langfuse/langfuse.git 2>/dev/null || true
+git fetch upstream --tags
+
+# Merge
+git merge $TAG -m "Merge tag '$TAG' into $BRANCH"
+
+# If conflicts, resolve them manually, then:
+# git add .
+# git commit -m "Resolve conflicts for $TAG upgrade"
+
+# Push
+git push origin $BRANCH
+
+# Create PR with auto-merge
+gh pr create \
+  --title "Upgrade Langfuse to $TAG" \
+  --body "## Upgrade Langfuse to $TAG
+
+Upstream changes merged from tag $TAG.
+
+[auto-merge]
+" \
+  --base main \
+  --head $BRANCH
+```
+
+### Important Notes
+
+- ✅ **Branch naming is critical** - Must follow `weekly-upgrade-langfuse-<TAG>-<DATE>-<TIMESTAMP>` for PR automation to work
+- ✅ **Clean branch first** - Workflow pushes clean branch before attempting merge
+- ✅ **Local merge** - All merge work happens on your local machine, not in CI
+- ✅ **Conflict visibility** - You see and resolve real conflicts locally
+- ✅ **Automation preserved** - PR Automation workflow triggers automatically when PR is created
+- ⚠️ **Test locally** - Consider running tests before pushing if conflicts were complex
+
+---
+
+## Automation Overview
 
 The upgrade system consists of two complementary workflows:
 
@@ -44,12 +207,12 @@ The upgrade system consists of two complementary workflows:
 
 ### Required Secrets
 
-| Secret | Purpose | Required When | Scopes Needed |
-|--------|---------|---------------|---------------|
-| `GITHUB_TOKEN` | Default token | Always (automatic) | Provided by GitHub Actions |
-| `LANGFUSE_PR_PAT` | Personal Access Token | Auto-merge enabled | `repo`, `workflow` |
-| `DOCKER_USERNAME` | Docker Hub username | Build workflow | - |
-| `DOCKER_PASSWORD` | Docker Hub token | Build workflow | - |
+| Secret            | Purpose               | Required When      | Scopes Needed              |
+| ----------------- | --------------------- | ------------------ | -------------------------- |
+| `GITHUB_TOKEN`    | Default token         | Always (automatic) | Provided by GitHub Actions |
+| `LANGFUSE_PR_PAT` | Personal Access Token | Auto-merge enabled | `repo`, `workflow`         |
+| `DOCKER_USERNAME` | Docker Hub username   | Build workflow     | -                          |
+| `DOCKER_PASSWORD` | Docker Hub token      | Build workflow     | -                          |
 
 ### Setting up LANGFUSE_PR_PAT
 
@@ -64,6 +227,7 @@ The upgrade system consists of two complementary workflows:
 ### Upstream Repository
 
 The workflows automatically sync from:
+
 ```
 https://github.com/langfuse/langfuse.git
 ```
@@ -77,10 +241,12 @@ https://github.com/langfuse/langfuse.git
 **File:** `.github/workflows/upgrade-from-upstream.yml`
 
 **Triggers:**
+
 - Manual: `workflow_dispatch` with inputs
 - Cross-repo: `repository_dispatch` event
 
 **Inputs:**
+
 - `git_tag` (required): Upstream git tag (e.g., `v2.75.2`)
 - `auto_merge` (optional): Enable auto-merge (default: `false`)
 
@@ -89,10 +255,12 @@ https://github.com/langfuse/langfuse.git
 **File:** `.github/workflows/upgrade-pr-automation.yml`
 
 **Triggers:**
+
 - Pull request opened/reopened/synchronized
 - Only for branches matching: `weekly-upgrade-langfuse-*`
 
 **Automatic Detection:**
+
 - Git tag from branch name
 - Auto-merge setting from PR body
 
@@ -141,6 +309,7 @@ PR Automation Workflow (auto-triggered)
 **User Actions Required:** ❌ **NONE**
 
 **Command to Trigger:**
+
 ```bash
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
@@ -148,6 +317,7 @@ gh workflow run upgrade-from-upstream.yml \
 ```
 
 **Expected Outcome:**
+
 - ✅ Branch created and pushed
 - ✅ PR created automatically
 - ✅ PR approved automatically
@@ -156,6 +326,7 @@ gh workflow run upgrade-from-upstream.yml \
 - ⏱️ Total time: ~2-3 minutes
 
 **Workflow Summary Shows:**
+
 ```
 Status: ✅ Success - PR Created
 PR: https://github.com/your-org/langfuse/pull/123
@@ -200,6 +371,7 @@ PR Automation Workflow (auto-triggered)
 **User Actions Required:** ✅ **MANUAL**
 
 **Command to Trigger:**
+
 ```bash
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
@@ -214,11 +386,13 @@ gh workflow run upgrade-from-upstream.yml \
    - Review test results (if any)
 
 2. **Approve the PR:**
+
    ```bash
    gh pr review <PR-NUMBER> --approve
    ```
 
 3. **Merge the PR:**
+
    ```bash
    gh pr merge <PR-NUMBER> --squash --admin
    ```
@@ -229,6 +403,7 @@ gh workflow run upgrade-from-upstream.yml \
    ```
 
 **Expected Outcome:**
+
 - ✅ Branch created and pushed
 - ✅ PR created automatically
 - 👤 Manual review and approval
@@ -236,6 +411,7 @@ gh workflow run upgrade-from-upstream.yml \
 - 👤 Manual build trigger
 
 **Workflow Summary Shows:**
+
 ```
 Status: ✅ Success - PR Created
 PR: https://github.com/your-org/langfuse/pull/123
@@ -259,17 +435,23 @@ Main Workflow
     ↓
 2. Create branch: weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
     ↓
-3. Merge upstream tag → ❌ CONFLICTS detected
+3. Push CLEAN branch to remote (before merge)
     ↓
-4. Push branch to remote (with conflicts!)
+4. Attempt merge locally to detect conflicts → ❌ CONFLICTS detected
     ↓
-5. Detect conflicts and log details
+5. Abort merge and show conflict details
     ↓
-⏸️ WAITING - Manual conflict resolution needed
+⏸️ WAITING - Manual upstream merge needed
     ↓
-👤 USER resolves conflicts locally
+👤 USER checks out clean branch
     ↓
-👤 USER pushes resolved changes
+👤 USER adds upstream remote
+    ↓
+👤 USER merges upstream tag locally
+    ↓
+👤 USER resolves conflicts
+    ↓
+👤 USER commits and pushes changes
     ↓
 👤 USER creates PR with [auto-merge] marker
     ↓
@@ -291,6 +473,7 @@ PR Automation Workflow (auto-triggered)
 **User Actions Required:** ✅ **PARTIAL MANUAL**
 
 **Command to Trigger:**
+
 ```bash
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
@@ -299,56 +482,82 @@ gh workflow run upgrade-from-upstream.yml \
 
 **User Must:**
 
-1. **Check workflow summary for conflict details:**
+1. **Check workflow summary for details:**
    - Go to Actions → Find the workflow run
    - Check "Workflow summary" section
-   - Note the branch name and conflicted files
+   - Note the branch name and potentially conflicted files
 
-2. **Checkout the branch:**
+2. **Checkout the clean branch:**
+
    ```bash
    git fetch origin
    git checkout weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
    ```
 
-3. **Resolve conflicts:**
+3. **Add upstream remote (if not already added):**
+
+   ```bash
+   git remote add upstream https://github.com/langfuse/langfuse.git || echo "Upstream already exists"
+   git fetch upstream --tags
+   ```
+
+4. **Merge the upstream tag:**
+
+   ```bash
+   git merge v2.75.2 -m "Merge tag 'v2.75.2' into weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890"
+   ```
+
+5. **If conflicts occur, resolve them:**
    - Open each conflicted file
    - Remove conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
-   - Keep the correct code
+   - Keep the correct code for your fork
    - Test locally if needed
 
-4. **Commit resolved changes:**
+6. **Stage resolved files:**
+
    ```bash
-   git add <resolved-files>
+   git add .
+   ```
+
+7. **Complete the merge (if conflicts were resolved):**
+
+   ```bash
    git commit -m "Resolve conflicts for v2.75.2 upgrade"
    ```
 
-5. **Push changes:**
+   > Note: If no conflicts occurred in step 4, the merge commit was already created automatically.
+
+8. **Push changes:**
+
    ```bash
    git push origin weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
    ```
 
-6. **Create PR with auto-merge marker:**
+9. **Create PR with auto-merge marker:**
    ```bash
    gh pr create \
      --title "Upgrade Langfuse to v2.75.2" \
      --body "## Upgrade Langfuse to v2.75.2
+   ```
 
-Conflicts resolved manually.
+Upstream changes merged from tag v2.75.2.
 
 [auto-merge]
 " \
-     --base main \
-     --head weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
-   ```
+ --base main \
+ --head weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
 
-7. **Wait for automation:**
-   - PR Automation workflow will activate
-   - PR will be auto-approved and merged
-   - Build workflow will be triggered automatically
+```
+
+10. **Wait for automation:**
+ - PR Automation workflow will activate
+ - PR will be auto-approved and merged
+ - Build workflow will be triggered automatically
 
 **Expected Outcome:**
-- ✅ Branch created and pushed (with conflicts)
-- 👤 Manual conflict resolution
+- ✅ Clean branch created and pushed
+- 👤 Manual upstream setup and merge
+- 👤 Manual conflict resolution (if any)
 - ✅ PR created manually with auto-merge marker
 - ✅ PR approved automatically
 - ✅ PR merged automatically
@@ -356,21 +565,38 @@ Conflicts resolved manually.
 
 **Workflow Summary Shows:**
 ```
-Status: ⚠️ Merge conflicts detected
-Branch: weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890 (pushed to remote)
-Conflicted Files: 3
 
-Conflicted Files:
+Status: ⚠️ Merge conflicts detected
+Branch: weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890 (clean branch pushed - merge locally)
+Upstream Tag: v2.75.2
+Estimated Conflicted Files: 3
+
+Potentially Conflicted Files:
 web/src/components/Header.tsx
 worker/src/queues/processor.ts
 packages/shared/src/config.ts
 
-✅ Good news: The branch has been pushed to remote for you!
+✅ Good news: A clean branch has been created and pushed!
 
-[Step-by-step resolution instructions...]
+1. Checkout the branch:
+   git checkout weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
 
-💡 Pro Tip: Add [auto-merge] to the PR body to enable automatic approval, merge, and build trigger!
-🤖 Automation Ready: Once you create the PR, the PR Automation workflow will activate and can handle the rest automatically if you enable auto-merge.
+2. Add upstream remote:
+   git remote add upstream https://github.com/langfuse/langfuse.git
+   git fetch upstream --tags
+
+3. Merge the upstream tag:
+   git merge v2.75.2 -m "Merge tag 'v2.75.2' into ..."
+
+4. Resolve conflicts if any...
+5. Stage: git add .
+6. Commit if needed: git commit -m "Resolve conflicts..."
+7. Push: git push origin <branch>
+8. Create PR with [auto-merge]
+
+💡 Pro Tip: Add [auto-merge] to enable automatic merge + build!
+🤖 Automation Ready: PR Automation will activate!
+
 ```
 
 ---
@@ -382,36 +608,45 @@ packages/shared/src/config.ts
 **Flow:**
 
 ```
+
 Main Workflow
-    ↓
+↓
+
 1. Fetch upstream tag
-    ↓
+   ↓
 2. Create branch: weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
-    ↓
-3. Merge upstream tag → ❌ CONFLICTS detected
-    ↓
-4. Push branch to remote (with conflicts!)
-    ↓
-5. Detect conflicts and log details
-    ↓
-⏸️ WAITING - Manual conflict resolution needed
-    ↓
-👤 USER resolves conflicts locally
-    ↓
-👤 USER pushes resolved changes
-    ↓
-👤 USER creates PR (without auto-merge marker)
-    ↓
-PR Automation Workflow (auto-triggered)
-    ↓
+   ↓
+3. Push CLEAN branch to remote (before merge)
+   ↓
+4. Attempt merge locally to detect conflicts → ❌ CONFLICTS detected
+   ↓
+5. Abort merge and show conflict details
+   ↓
+   ⏸️ WAITING - Manual upstream merge needed
+   ↓
+   👤 USER checks out clean branch
+   ↓
+   👤 USER adds upstream remote
+   ↓
+   👤 USER merges upstream tag locally
+   ↓
+   👤 USER resolves conflicts
+   ↓
+   👤 USER commits and pushes changes
+   ↓
+   👤 USER creates PR (without auto-merge marker)
+   ↓
+   PR Automation Workflow (auto-triggered)
+   ↓
 6. Extract tag from branch name → v2.75.2
-    ↓
+   ↓
 7. Check PR body → auto-merge: false
-    ↓
+   ↓
 8. Add comment explaining manual review required
-    ↓
-⏸️ WAITING - Manual review and merge needed
-```
+   ↓
+   ⏸️ WAITING - Manual review and merge needed
+
+````
 
 **User Actions Required:** ✅ **FULL MANUAL**
 
@@ -420,13 +655,14 @@ PR Automation Workflow (auto-triggered)
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
   -f auto_merge=false
-```
+````
 
 **User Must:**
 
-1. **Checkout and resolve conflicts** (same as Scenario 3, steps 1-5)
+1. **Complete steps 1-8 from Scenario 3** (checkout, upstream setup, merge, resolve conflicts, stage, commit, push)
 
 2. **Create PR without auto-merge marker:**
+
    ```bash
    gh pr create \
      --title "Upgrade Langfuse to v2.75.2" \
@@ -435,6 +671,7 @@ gh workflow run upgrade-from-upstream.yml \
    ```
 
 3. **Review, approve, and merge PR manually:**
+
    ```bash
    gh pr review <PR-NUMBER> --approve
    gh pr merge <PR-NUMBER> --squash --admin
@@ -446,7 +683,9 @@ gh workflow run upgrade-from-upstream.yml \
    ```
 
 **Expected Outcome:**
-- ✅ Branch created and pushed (with conflicts)
+
+- ✅ Clean branch created and pushed
+- 👤 Manual upstream setup and merge
 - 👤 Manual conflict resolution
 - 👤 PR created manually
 - 👤 Manual review and approval
@@ -482,11 +721,13 @@ Main Workflow
 **User Actions Required:** ❌ **NONE**
 
 **Command to Trigger:**
+
 ```bash
 gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 ```
 
 **Expected Outcome:**
+
 - ✅ Branch created
 - ✅ Merge completed
 - ✅ No changes detected
@@ -494,6 +735,7 @@ gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 - ℹ️ No PR created
 
 **Workflow Summary Shows:**
+
 ```
 Status: ℹ️ No Changes - Already Up-to-Date
 ✅ Repository is already up-to-date with tag v2.75.2.
@@ -523,6 +765,7 @@ Main Workflow
 **User Actions Required:** ✅ **CLEANUP**
 
 **Command to Trigger:**
+
 ```bash
 gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 ```
@@ -530,6 +773,7 @@ gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 **User Must:**
 
 **Option 1: Delete existing branch and retry**
+
 ```bash
 # Delete remote branch
 git push origin --delete weekly-upgrade-langfuse-v2.75.2-YYYY-MM-DD-NNNNNNNNNN
@@ -539,6 +783,7 @@ gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 ```
 
 **Option 2: Check for existing PR**
+
 ```bash
 # List open PRs
 gh pr list
@@ -547,10 +792,12 @@ gh pr list
 ```
 
 **Expected Outcome:**
+
 - ❌ Workflow stops early
 - ℹ️ Clear error message about branch existence
 
 **Workflow Summary Shows:**
+
 ```
 Status: ⚠️ Branch already exists
 
@@ -590,20 +837,24 @@ PR Automation Workflow (triggered)
 **User Actions Required:** ✅ **MANUAL HANDLING**
 
 **When This Happens:**
+
 - User manually creates branch with wrong name
 - User creates PR from branch not created by main workflow
 
 **Example of Invalid Branch Names:**
+
 - `upgrade-to-v2.75.2`
 - `langfuse-upgrade`
 - `my-custom-upgrade-branch`
 
 **Expected Branch Name Format:**
+
 ```
 weekly-upgrade-langfuse-<TAG>-YYYY-MM-DD-<timestamp>
 ```
 
 **What Happens:**
+
 - ⚠️ PR Automation detects the PR
 - ❌ Cannot extract git tag from branch name
 - 🤖 Posts error comment to PR
@@ -611,6 +862,7 @@ weekly-upgrade-langfuse-<TAG>-YYYY-MM-DD-<timestamp>
 - ❌ Build trigger skipped
 
 **PR Comment Shows:**
+
 ```
 ⚠️ Upgrade PR Automation - Configuration Error
 
@@ -632,6 +884,7 @@ Manual Steps:
 ```
 
 **User Must:**
+
 ```bash
 # Review and approve PR
 gh pr review <PR-NUMBER> --approve
@@ -644,6 +897,7 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 ```
 
 **Prevention:**
+
 - ✅ Always use the main upgrade workflow to create branches
 - ✅ If creating manually, follow the branch naming pattern exactly
 
@@ -656,11 +910,13 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 #### 8.1 Upstream Fetch Failure
 
 **Possible Causes:**
+
 - GitHub connectivity issues
 - Upstream repository unavailable
 - Rate limiting
 
 **User Actions:**
+
 ```bash
 # Wait a few minutes and retry
 gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
@@ -669,6 +925,7 @@ gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.2
 #### 8.2 Invalid Git Tag
 
 **Flow:**
+
 ```
 Main Workflow
     ↓
@@ -682,6 +939,7 @@ Main Workflow
 ```
 
 **User Actions:**
+
 ```bash
 # Check available upstream tags
 git ls-remote --tags https://github.com/langfuse/langfuse.git | grep -E 'v[0-9]+\.[0-9]+\.[0-9]+$' | tail -20
@@ -693,11 +951,13 @@ gh workflow run upgrade-from-upstream.yml -f git_tag=v2.75.3
 #### 8.3 PR Creation Failure
 
 **Possible Causes:**
+
 - Token permission issues
 - Network problems
 - GitHub API rate limiting
 
 **User Actions:**
+
 ```bash
 # Branch should exist even if PR creation failed
 # Create PR manually
@@ -710,11 +970,13 @@ gh pr create \
 #### 8.4 Auto-Merge Failure
 
 **Possible Causes:**
+
 - `LANGFUSE_PR_PAT` not configured
 - PAT lacks required permissions
 - Merge conflicts during auto-merge attempt
 
 **User Actions:**
+
 ```bash
 # Check if LANGFUSE_PR_PAT is configured
 # Settings → Secrets → Actions
@@ -729,11 +991,13 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 #### 8.5 Build Workflow Trigger Failure
 
 **Possible Causes:**
+
 - Token permission issues
 - Build workflow file missing/renamed
 - Workflow disabled
 
 **User Actions:**
+
 ```bash
 # Manually trigger build workflow
 gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
@@ -748,22 +1012,24 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 
 ### Main Workflow Inputs
 
-| Input | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `git_tag` | string | Yes | - | Upstream git tag (e.g., `v2.75.2`) |
-| `auto_merge` | boolean | No | `false` | Enable auto-merge after PR creation |
+| Input        | Type    | Required | Default | Description                         |
+| ------------ | ------- | -------- | ------- | ----------------------------------- |
+| `git_tag`    | string  | Yes      | -       | Upstream git tag (e.g., `v2.75.2`)  |
+| `auto_merge` | boolean | No       | `false` | Enable auto-merge after PR creation |
 
 ### PR Automation Detection
 
 The PR Automation workflow automatically detects configuration:
 
 **Git Tag:** Extracted from branch name
+
 ```
 weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890
                          ^^^^^^^ extracted tag
 ```
 
 **Auto-Merge:** Detected from PR body
+
 ```markdown
 <!-- Any of these patterns trigger auto-merge: -->
 
@@ -786,6 +1052,7 @@ weekly-upgrade-langfuse-<TAG>-<DATE>-<TIMESTAMP>
 ```
 
 **Examples:**
+
 - `weekly-upgrade-langfuse-v2.75.2-2026-08-11-1723401234`
 - `weekly-upgrade-langfuse-v3.0.0-2026-09-15-1726401234`
 
@@ -796,6 +1063,7 @@ weekly-upgrade-langfuse-<TAG>-<DATE>-<TIMESTAMP>
 ### Q: Workflow says "branch already exists" but I don't see it
 
 **Solution:**
+
 ```bash
 # List all remote branches with the pattern
 git ls-remote --heads origin | grep weekly-upgrade-langfuse
@@ -809,11 +1077,13 @@ git push origin --delete <branch-name>
 ### Q: PR Automation workflow didn't run
 
 **Check:**
+
 1. Branch name matches pattern: `weekly-upgrade-langfuse-*`
 2. PR targets `main` branch
 3. PR event is `opened`, `reopened`, or `synchronize`
 
 **View workflow runs:**
+
 ```bash
 gh run list --workflow=upgrade-pr-automation.yml
 ```
@@ -838,11 +1108,13 @@ gh run list --workflow=upgrade-pr-automation.yml
 ### Q: Build workflow wasn't triggered
 
 **Check:**
+
 1. Was PR actually merged?
 2. Check "Trigger build workflow" step in PR Automation logs
 3. Verify build workflow file exists: `.github/workflows/build-push-neubirdai.yml`
 
 **Manual trigger:**
+
 ```bash
 gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 ```
@@ -850,6 +1122,7 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 ### Q: How do I know which tag to use?
 
 **List recent upstream tags:**
+
 ```bash
 git ls-remote --tags https://github.com/langfuse/langfuse.git | \
   grep -E 'v[0-9]+\.[0-9]+\.[0-9]+$' | \
@@ -859,6 +1132,7 @@ git ls-remote --tags https://github.com/langfuse/langfuse.git | \
 ```
 
 **Check current fork version:**
+
 ```bash
 git describe --tags --abbrev=0
 ```
@@ -866,6 +1140,7 @@ git describe --tags --abbrev=0
 ### Q: Can I test without actually merging?
 
 **Yes, use a test branch:**
+
 1. Create test branch in your fork
 2. Modify workflow to target test branch instead of `main`
 3. Run workflow and verify behavior
@@ -875,11 +1150,13 @@ git describe --tags --abbrev=0
 ### Q: How do I roll back an upgrade?
 
 **If not deployed yet:**
+
 ```bash
 # Just don't deploy the new images
 ```
 
 **If already deployed:**
+
 ```bash
 # Revert the PR
 gh pr revert <PR-NUMBER>
@@ -894,31 +1171,41 @@ git push origin main
 ## Quick Reference
 
 ### Fully Automated Upgrade (No Conflicts)
+
 ```bash
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
   -f auto_merge=true
 ```
+
 **Result:** Everything happens automatically, ~2-3 minutes
 
 ### Manual Review Upgrade (No Conflicts)
+
 ```bash
 gh workflow run upgrade-from-upstream.yml \
   -f git_tag=v2.75.2 \
   -f auto_merge=false
 ```
+
 **Then:** Review, approve, merge PR, trigger build manually
 
 ### After Conflict Resolution
+
 ```bash
+# See Manual Upgrade Process section at the top for complete steps
 # 1. Resolve conflicts locally
 # 2. Push changes
 # 3. Create PR with auto-merge
 gh pr create --title "Upgrade Langfuse to v2.75.2" --body "[auto-merge]" --base main --head <branch-name>
 ```
+
 **Result:** Automation resumes, PR auto-merged, build triggered
 
+**📖 For detailed conflict resolution steps, see [Manual Upgrade Process](#manual-upgrade-process) at the top.**
+
 ### Emergency Manual Override
+
 ```bash
 # Skip all automation
 gh pr create --title "Upgrade Langfuse to v2.75.2" --base main --head <branch-name>
@@ -932,12 +1219,14 @@ gh workflow run build-push-neubirdai.yml -f git_tag=v2.75.2
 ## Support
 
 For issues or questions:
+
 1. Check workflow run logs in GitHub Actions
 2. Review workflow summary section for detailed steps
 3. Check this README for your specific scenario
 4. Review workflow files for implementation details
 
 **Key Files:**
+
 - `.github/workflows/upgrade-from-upstream.yml` - Main upgrade workflow
 - `.github/workflows/upgrade-pr-automation.yml` - PR automation workflow
 - `.github/workflows/build-push-neubirdai.yml` - Build and push workflow
