@@ -226,8 +226,8 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
           # Wait longer for required checks to complete
-          echo "Waiting 2 minutes for required checks to complete..."
-          sleep 120
+          echo "Waiting for 1 minute..."
+          sleep 60
 
           # Retry merge to handle race conditions and check delays
           RETRIES=5
