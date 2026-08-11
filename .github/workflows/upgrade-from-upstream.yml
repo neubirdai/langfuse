@@ -367,7 +367,7 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           pull-request-number: ${{ steps.create-pr.outputs.pr_number }}
-          github-token: ${{ secrets.RAVEN_API_CLONE_PAT }}
+          github-token: ${{ secrets.LANGFUSE_PR_PAT }}
 
       - name: Auto-merge Pull Request
         if: steps.create-pr.outputs.pr_number != '' && steps.set-tag.outputs.auto_merge == 'true'
@@ -398,7 +398,7 @@ jobs:
             fi
           done
         env:
-          GH_TOKEN: ${{ secrets.RAVEN_API_CLONE_PAT }}
+          GH_TOKEN: ${{ secrets.LANGFUSE_PR_PAT }}
 
       - name: Trigger build workflow after merge
         if: steps.auto-merge.outputs.merge_status == 'success'
