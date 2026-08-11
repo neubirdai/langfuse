@@ -182,8 +182,25 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Check PR merge status
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && steps.extract-tag.outputs.tag_valid != 'false'
+        id: check-pr-status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state --jq '.state')
+
+          if [ "$PR_STATE" = "MERGED" ]; then
+            echo "pr_merged=true" >> $GITHUB_OUTPUT
+            echo "::notice::PR already merged, skipping automation"
+          else
+            echo "pr_merged=false" >> $GITHUB_OUTPUT
+            echo "::notice::PR is open, automation will proceed"
+          fi
+
       - name: Wait for checks
-        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && steps.check-pr-status.outputs.pr_merged == 'false' && steps.extract-tag.outputs.tag_valid != 'false'
         run: |
           echo "::group::Waiting for PR checks"
           echo "Waiting 30 seconds for checks to start..."
@@ -191,7 +208,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Auto-approve Pull Request
-        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && steps.check-pr-status.outputs.pr_merged == 'false' && steps.extract-tag.outputs.tag_valid != 'false'
         continue-on-error: true
         uses: hmarr/auto-approve-action@v4
         with:
@@ -199,7 +216,7 @@ jobs:
           github-token: ${{ secrets.LANGFUSE_PR_PAT }}
 
       - name: Auto-merge Pull Request
-        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && steps.check-pr-status.outputs.pr_merged == 'false' && steps.extract-tag.outputs.tag_valid != 'false'
         id: auto-merge
         continue-on-error: true
         env:
