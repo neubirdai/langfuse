@@ -1,5 +1,7 @@
 name: Neubird - Build and Push neubirdai Images
 
+run-name: "Build Docker Images - ${{ inputs.git_tag || 'latest only' }}"
+
 on:
   # Manual trigger with optional git tag
   workflow_dispatch:

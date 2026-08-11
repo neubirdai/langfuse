@@ -1,5 +1,7 @@
 name: Neubird - Upgrade from Upstream Langfuse
 
+run-name: "Neubird - Upgrade to Upstream Langfuse ${{ inputs.git_tag || github.event.client_payload.git_tag || 'unknown tag' }} (auto-merge: ${{ inputs.auto_merge || github.event.client_payload.auto_merge || 'false' }})"
+
 on:
   # Manual trigger with git tag input
   workflow_dispatch:
@@ -364,13 +366,23 @@ jobs:
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**8. Create the PR:**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Option A: Manual review (no auto-merge):**" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
             echo "gh pr create --title \"Upgrade Langfuse to ${{ steps.set-tag.outputs.git_tag }}\" --base main --head ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Option B: With auto-merge enabled:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "gh pr create --title \"Upgrade Langfuse to ${{ steps.set-tag.outputs.git_tag }}\" --body \"[auto-merge]\" --base main --head ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             echo "---" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "💡 **Pro Tip**: Add \`[auto-merge]\` to the PR body when creating it to enable automatic approval, merge, and build trigger!" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Auto-merge Options**: Add any of these to PR body for automatic merge:" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`[auto-merge]\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`auto-merge: enabled\`" >> $GITHUB_STEP_SUMMARY
+            echo "   - \`auto-merge: true\`" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🤖 **Automation Ready**: Once you create the PR, the PR Automation workflow will activate and can handle the rest automatically if you enable auto-merge." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.create-branch.outputs.branch_exists }}" = "true" ]; then
@@ -390,7 +402,13 @@ jobs:
               echo "The PR Automation workflow will handle approval, merge, and build trigger automatically." >> $GITHUB_STEP_SUMMARY
             else
               echo "👀 **Manual Review Required**" >> $GITHUB_STEP_SUMMARY
-              echo "Review and merge the PR manually. After merge, the build workflow can be triggered:" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Want to enable auto-merge now?** Edit the PR body and add one of:" >> $GITHUB_STEP_SUMMARY
+              echo "   - \`[auto-merge]\`" >> $GITHUB_STEP_SUMMARY
+              echo "   - \`auto-merge: enabled\`" >> $GITHUB_STEP_SUMMARY
+              echo "   - \`auto-merge: true\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Or proceed with manual merge.** After merge, trigger the build workflow:" >> $GITHUB_STEP_SUMMARY
               echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
               echo "gh workflow run build-push-neubirdai.yml -f git_tag=\"${{ steps.set-tag.outputs.git_tag }}\"" >> $GITHUB_STEP_SUMMARY
               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

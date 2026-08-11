@@ -271,6 +271,24 @@ jobs:
           echo "::notice::Build workflow triggered successfully"
           echo "::endgroup::"
 
+      - name: Delete merged branch
+        if: steps.auto-merge.outputs.merge_status == 'success' && steps.extract-tag.outputs.tag_valid != 'false'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Deleting merged branch"
+          BRANCH="${{ github.head_ref }}"
+
+          echo "Deleting branch: $BRANCH"
+          if git push origin --delete "$BRANCH"; then
+            echo "::notice::Branch deleted successfully"
+          else
+            echo "::warning::Failed to delete branch (may already be deleted)"
+          fi
+
+          echo "::endgroup::"
+
       - name: Add success comment
         if: steps.auto-merge.outputs.merge_status == 'success' && steps.extract-tag.outputs.tag_valid != 'false'
         env:
@@ -283,7 +301,7 @@ jobs:
           COMMENT=$(cat <<EOF
           ## ✅ Auto-merge Completed Successfully
 
-          **PR Status:** Merged
+          **PR Status:** Merged and branch deleted
           **Build Workflow:** Triggered with tag \`$TAG\`
 
           ### Next Steps:
@@ -294,7 +312,7 @@ jobs:
              - \`neubirdai/langfuse-web:latest\`
              - \`neubirdai/langfuse-worker:$TAG\`
              - \`neubirdai/langfuse-worker:latest\`
-          4. 🚀 Deploy to dev → test → production
+          4. 🚀 Deploy to Langfuse dev → Verify → Langfuse production
 
           Check the [Build Workflow](https://github.com/${{ github.repository }}/actions/workflows/build-push-neubirdai.yml) for progress.
           EOF
