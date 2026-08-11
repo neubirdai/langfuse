@@ -1,0 +1,293 @@
+name: Neubird - Upstream upgrade PR Automation
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  handle-upgrade-pr:
+    # Only run for upgrade branches
+    if: startsWith(github.head_ref, 'weekly-upgrade-langfuse-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Log PR event
+        run: |
+          echo "::notice::Upgrade PR automation triggered"
+          echo "PR: #${{ github.event.pull_request.number }}"
+          echo "Branch: ${{ github.head_ref }}"
+          echo "Action: ${{ github.event.action }}"
+
+      - name: Extract git tag from branch name
+        id: extract-tag
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          echo "::notice::Branch name: $BRANCH"
+
+          # Extract tag from branch name: weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567
+          # Pattern: weekly-upgrade-langfuse-<TAG>-<DATE>-<TIMESTAMP>
+          TAG=$(echo "$BRANCH" | sed -E 's/weekly-upgrade-langfuse-([^-]+(-[^-]+)*)-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]+$/\1/')
+
+          # Validate tag was extracted successfully
+          if [ -z "$TAG" ] || [ "$TAG" = "$BRANCH" ]; then
+            echo "::error::Failed to extract git tag from branch name"
+            echo "::error::Branch name format should be: weekly-upgrade-langfuse-<TAG>-YYYY-MM-DD-<timestamp>"
+            echo "tag_valid=false" >> $GITHUB_OUTPUT
+            echo "git_tag=" >> $GITHUB_OUTPUT
+          else
+            # Basic validation: tag should start with 'v' and contain version numbers
+            if echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "git_tag=$TAG" >> $GITHUB_OUTPUT
+              echo "tag_valid=true" >> $GITHUB_OUTPUT
+              echo "::notice::Extracted valid git tag: $TAG"
+            else
+              echo "::warning::Extracted tag does not match expected format (vX.Y.Z): $TAG"
+              echo "::warning::Proceeding anyway, but build might fail if tag is invalid"
+              echo "git_tag=$TAG" >> $GITHUB_OUTPUT
+              echo "tag_valid=warning" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Check if auto-merge should be enabled
+        id: check-auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Checking auto-merge configuration"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Check PR body for auto-merge marker
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
+
+          # Look for auto-merge indicator in PR body or title
+          if echo "$PR_BODY" | grep -q "auto-merge: enabled" || \
+            echo "$PR_BODY" | grep -q "\[auto-merge\]"; then
+            echo "auto_merge=true" >> $GITHUB_OUTPUT
+            echo "::notice::Auto-merge enabled (found in PR body)"
+          else
+            echo "auto_merge=false" >> $GITHUB_OUTPUT
+            echo "::notice::Auto-merge disabled (not requested in PR)"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Handle invalid tag extraction
+        if: steps.extract-tag.outputs.tag_valid == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Adding error comment"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          BRANCH="${{ github.head_ref }}"
+
+          COMMENT=$(cat <<EOF
+          ## ⚠️ Upgrade PR Automation - Configuration Error
+
+          **Problem:** Could not extract git tag from branch name.
+
+          **Branch name:** \`$BRANCH\`
+
+          ### Expected Format:
+          Branch names for automated upgrades should follow this pattern:
+          \`\`\`
+          weekly-upgrade-langfuse-<TAG>-YYYY-MM-DD-<timestamp>
+          \`\`\`
+
+          **Example:** \`weekly-upgrade-langfuse-v2.75.2-2026-08-11-1234567890\`
+
+          ### What This Means:
+          - ❌ Auto-merge cannot proceed (missing version tag)
+          - ❌ Build workflow cannot be triggered automatically
+          - 👤 Manual intervention required
+
+          ### Manual Steps:
+          1. Review and approve this PR manually
+          2. Merge the PR
+          3. Manually trigger the build workflow with the correct tag:
+             \`\`\`bash
+             gh workflow run build-push-neubirdai.yml -f git_tag="<your-tag>"
+             \`\`\`
+
+          ### To Fix For Next Time:
+          Use the main upgrade workflow to create the branch, or ensure manual branch names follow the expected pattern.
+
+          ---
+          *Automated by upgrade-pr-automation workflow*
+          EOF
+          )
+
+          gh pr comment "$PR_NUMBER" --body "$COMMENT"
+          echo "::error::Tag extraction failed - automation cannot proceed"
+          echo "::notice::Manual review required for this PR"
+
+          echo "::endgroup::"
+
+      - name: Add automation comment
+        if: github.event.action == 'opened' && steps.extract-tag.outputs.tag_valid != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Adding automation comment"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          TAG="${{ steps.extract-tag.outputs.git_tag }}"
+
+          COMMENT=$(cat <<EOF
+          ## 🤖 Upgrade PR Automation Active
+
+          This PR is being monitored by the upgrade automation workflow.
+
+          **Detected Configuration:**
+          - Git Tag: \`$TAG\`$( if [ "${{ steps.extract-tag.outputs.tag_valid }}" = "warning" ]; then echo " ⚠️ (non-standard format)"; fi )
+          - Auto-merge: \`${{ steps.check-auto-merge.outputs.auto_merge }}\`
+
+          ### What happens next:
+
+          $( if [ "${{ steps.check-auto-merge.outputs.auto_merge }}" = "true" ]; then
+            echo "✅ **Auto-merge is enabled** - This PR will be automatically approved and merged when all checks pass."
+            echo ""
+            echo "🚀 **After merge**: Build workflow will be triggered automatically with tag \`$TAG\`"
+          else
+            echo "👤 **Manual review required** - This PR needs manual approval and merge."
+            echo ""
+            echo "### After you merge this PR:"
+            echo "Trigger the build workflow to create Docker images:"
+            echo "\`\`\`bash"
+            echo "gh workflow run build-push-neubirdai.yml -f git_tag=\"$TAG\""
+            echo "\`\`\`"
+            echo ""
+            echo "**Want auto-merge next time?** Add \`[auto-merge]\` to the PR body when creating it."
+          fi )
+
+          ---
+          *Automated by upgrade-pr-automation workflow*
+          EOF
+          )
+
+          gh pr comment "$PR_NUMBER" --body "$COMMENT"
+          echo "::notice::Automation comment added to PR"
+
+          echo "::endgroup::"
+
+      - name: Wait for checks
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        run: |
+          echo "::group::Waiting for PR checks"
+          echo "Waiting 30 seconds for checks to start..."
+          sleep 30
+          echo "::endgroup::"
+
+      - name: Auto-approve Pull Request
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        continue-on-error: true
+        uses: hmarr/auto-approve-action@v4
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          github-token: ${{ secrets.LANGFUSE_PR_PAT }}
+
+      - name: Auto-merge Pull Request
+        if: steps.check-auto-merge.outputs.auto_merge == 'true' && github.event.action != 'synchronize' && steps.extract-tag.outputs.tag_valid != 'false'
+        id: auto-merge
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.LANGFUSE_PR_PAT }}
+        run: |
+          echo "::group::Auto-merging Pull Request"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Retry merge to handle race conditions
+          RETRIES=3
+          for attempt in $(seq 1 $RETRIES); do
+            echo "Merge attempt $attempt of $RETRIES..."
+            if gh pr merge "$PR_NUMBER" --squash --admin; then
+              echo "merge_status=success" >> $GITHUB_OUTPUT
+              echo "::notice::PR merged successfully"
+              echo "::endgroup::"
+              exit 0
+            else
+              if [ $attempt -lt $RETRIES ]; then
+                echo "::warning::Merge failed, retrying in 5 seconds..."
+                sleep 5
+              else
+                echo "merge_status=failed" >> $GITHUB_OUTPUT
+                echo "::warning::Failed to merge after $RETRIES attempts"
+                echo "::endgroup::"
+                exit 0
+              fi
+            fi
+          done
+
+      - name: Trigger build workflow
+        if: steps.auto-merge.outputs.merge_status == 'success' && steps.extract-tag.outputs.tag_valid != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Triggering build workflow"
+          TAG="${{ steps.extract-tag.outputs.git_tag }}"
+
+          echo "PR was auto-merged. Triggering build workflow with tag: $TAG"
+
+          gh workflow run build-push-neubirdai.yml \
+            --ref main \
+            -f git_tag="$TAG"
+
+          echo "::notice::Build workflow triggered successfully"
+          echo "::endgroup::"
+
+      - name: Add success comment
+        if: steps.auto-merge.outputs.merge_status == 'success' && steps.extract-tag.outputs.tag_valid != 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::group::Adding success comment"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          TAG="${{ steps.extract-tag.outputs.git_tag }}"
+
+          COMMENT=$(cat <<EOF
+          ## ✅ Auto-merge Completed Successfully
+
+          **PR Status:** Merged
+          **Build Workflow:** Triggered with tag \`$TAG\`
+
+          ### Next Steps:
+          1. ✅ Docker images are being built
+          2. ⏳ Wait for build workflow to complete
+          3. 📦 Images will be tagged as:
+             - \`neubirdai/langfuse-web:$TAG\`
+             - \`neubirdai/langfuse-web:latest\`
+             - \`neubirdai/langfuse-worker:$TAG\`
+             - \`neubirdai/langfuse-worker:latest\`
+          4. 🚀 Deploy to dev → test → production
+
+          Check the [Build Workflow](https://github.com/${{ github.repository }}/actions/workflows/build-push-neubirdai.yml) for progress.
+          EOF
+          )
+
+          gh pr comment "$PR_NUMBER" --body "$COMMENT" || true
+          echo "::endgroup::"
+
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "### Upgrade PR Automation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR**: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: \`${{ github.head_ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Git Tag**: \`${{ steps.extract-tag.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Auto-merge**: ${{ steps.check-auto-merge.outputs.auto_merge }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.auto-merge.outputs.merge_status }}" = "success" ]; then
+            echo "**Status**: ✅ Auto-merged and build triggered" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.check-auto-merge.outputs.auto_merge }}" = "true" ]; then
+            echo "**Status**: ⏳ Auto-merge attempted (check logs)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Status**: 👤 Awaiting manual review" >> $GITHUB_STEP_SUMMARY
+          fi

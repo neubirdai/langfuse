@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       git_tag:
-        description: "Upstream git tag to merge (e.g., v2.75.2)"
+        description: "Upstream git tag to merge (e.g., v3.224.2)"
         required: true
         type: string
       auto_merge:
@@ -21,7 +21,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  issues: write
   actions: write
 
 jobs:
@@ -176,6 +175,19 @@ jobs:
 
           echo "::endgroup::"
 
+      - name: Push upgrade branch
+        if: steps.create-branch.outputs.branch_exists == 'false'
+        run: |
+          echo "::group::Pushing upgrade branch"
+          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
+
+          # Push branch even if there are conflicts
+          # This allows users to checkout the branch and resolve conflicts locally
+          git push origin "$BRANCH_NAME"
+          echo "::notice::Successfully pushed branch $BRANCH_NAME"
+
+          echo "::endgroup::"
+
       - name: Check for conflicts
         id: check-conflicts
         if: steps.create-branch.outputs.branch_exists == 'false'
@@ -184,7 +196,7 @@ jobs:
 
           # Check if there are any unmerged paths
           if git ls-files -u | grep -q .; then
-            echo "::error::Merge conflicts detected!"
+            echo "::warning::Merge conflicts detected!"
             echo "has_conflicts=true" >> $GITHUB_OUTPUT
             
             # List all conflicted files
@@ -199,85 +211,12 @@ jobs:
             CONFLICT_COUNT=$(git diff --name-only --diff-filter=U | wc -l)
             echo "conflict_count=$CONFLICT_COUNT" >> $GITHUB_OUTPUT
             
-            echo "::error::Found $CONFLICT_COUNT conflicted file(s)"
+            echo "::warning::Found $CONFLICT_COUNT conflicted file(s)"
+            echo "::notice::Branch has been pushed for manual conflict resolution"
           else
             echo "::notice::No merge conflicts detected"
             echo "has_conflicts=false" >> $GITHUB_OUTPUT
           fi
-
-          echo "::endgroup::"
-
-      - name: Create conflict issue
-        if: steps.check-conflicts.outputs.has_conflicts == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = '${{ steps.set-tag.outputs.git_tag }}';
-            const branch = '${{ steps.create-branch.outputs.branch_name }}';
-            const conflictCount = '${{ steps.check-conflicts.outputs.conflict_count }}';
-            const conflictedFiles = '${{ steps.check-conflicts.outputs.conflicted_files }}'.split(',');
-
-            const issueBody = `## 🚨 Merge Conflicts Detected During Upgrade
-
-            ### Details
-            - **Target Tag**: \`${tag}\`
-            - **Branch**: \`${branch}\`
-            - **Conflicted Files**: ${conflictCount}
-            - **Workflow Run**: [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            ### Conflicted Files
-            ${conflictedFiles.map(file => `- \`${file}\``).join('\n')}
-
-            ### Resolution Steps
-            1. Checkout the branch locally:
-               \`\`\`bash
-               git fetch origin
-               git checkout ${branch}
-               \`\`\`
-
-            2. Review and resolve conflicts in each file
-
-            3. Stage resolved files:
-               \`\`\`bash
-               git add <resolved-files>
-               \`\`\`
-
-            4. Complete the merge:
-               \`\`\`bash
-               git commit -m "Resolve conflicts for ${tag} upgrade"
-               \`\`\`
-
-            5. Push the changes:
-               \`\`\`bash
-               git push origin ${branch}
-               \`\`\`
-
-            6. Create a pull request manually or re-run this workflow
-
-            ### Next Steps
-            Once conflicts are resolved and pushed, the PR can be created manually using:
-            \`\`\`bash
-            gh pr create --title "Upgrade Langfuse to ${tag}" --base main --head ${branch}
-            \`\`\`
-            `;
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Merge conflicts in Langfuse upgrade to ${tag}`,
-              body: issueBody
-            });
-
-            core.setFailed(`Merge conflicts detected in ${conflictCount} file(s). Issue created for manual resolution.`);
-
-      - name: Push upgrade branch
-        if: steps.check-conflicts.outputs.has_conflicts == 'false' && steps.create-branch.outputs.branch_exists == 'false'
-        run: |
-          echo "::group::Pushing upgrade branch"
-          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
-
-          git push origin "$BRANCH_NAME"
-          echo "::notice::Successfully pushed branch $BRANCH_NAME"
 
           echo "::endgroup::"
 
@@ -329,19 +268,12 @@ jobs:
           ### Changes
           - Merge upstream tag $TAG from langfuse/langfuse
           - App version: $CURRENT_TAG → $TAG
-          - Helm chart compatibility: 1.5.41
-
-          ### Deployment Plan
-          After merge:
-          1. Manually trigger build workflow: \`gh workflow run build-push-neubirdai.yml -f git_tag="$TAG"\`
-          2. Build workflow will push new images with tags: \`$TAG\` and \`latest\`
-          3. Update raven-infra Helm chart to 1.5.41
-          4. Deploy to dev environment first
-          5. Validate with functional tests
-          6. Promote to production
 
           ---
           *Automated upgrade created by workflow on $(date -u '+%Y-%m-%d %H:%M:%S UTC')*
+
+          <!-- Automation Config -->
+          auto-merge: ${{ steps.set-tag.outputs.auto_merge }}
           EOF
           )
 
@@ -362,83 +294,6 @@ jobs:
 
           echo "::endgroup::"
 
-      - name: Auto-approve Pull Request
-        if: steps.create-pr.outputs.pr_number != '' && steps.set-tag.outputs.auto_merge == 'true'
-        uses: hmarr/auto-approve-action@v4
-        with:
-          pull-request-number: ${{ steps.create-pr.outputs.pr_number }}
-          github-token: ${{ secrets.LANGFUSE_PR_PAT }}
-
-      - name: Auto-merge Pull Request
-        if: steps.create-pr.outputs.pr_number != '' && steps.set-tag.outputs.auto_merge == 'true'
-        id: auto-merge
-        run: |
-          echo "::group::Auto-merging Pull Request"
-          PR_NUMBER="${{ steps.create-pr.outputs.pr_number }}"
-
-          # Retry merge to handle race conditions
-          RETRIES=3
-          for attempt in $(seq 1 $RETRIES); do
-            echo "Merge attempt $attempt of $RETRIES..."
-            if gh pr merge "$PR_NUMBER" --squash --admin; then
-              echo "merge_status=success" >> $GITHUB_OUTPUT
-              echo "::notice::PR merged successfully"
-              echo "::endgroup::"
-              exit 0
-            else
-              if [ $attempt -lt $RETRIES ]; then
-                echo "::warning::Merge failed, retrying in 2 seconds..."
-                sleep 2
-              else
-                echo "merge_status=failed" >> $GITHUB_OUTPUT
-                echo "::error::Failed to merge after $RETRIES attempts"
-                echo "::endgroup::"
-                exit 1
-              fi
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.LANGFUSE_PR_PAT }}
-
-      - name: Trigger build workflow after merge
-        if: steps.auto-merge.outputs.merge_status == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "::group::Triggering build workflow"
-          TAG="${{ steps.set-tag.outputs.git_tag }}"
-
-          echo "PR was auto-merged. Triggering build workflow with tag: $TAG"
-
-          gh workflow run build-push-neubirdai.yml \
-            --ref main \
-            -f git_tag="$TAG"
-
-          echo "::notice::Build workflow triggered successfully"
-          echo "::endgroup::"
-
-      - name: Add PR comment with build instructions
-        if: steps.create-pr.outputs.pr_url != '' && steps.set-tag.outputs.auto_merge == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "::group::Adding build instructions to PR"
-          BRANCH_NAME="${{ steps.create-branch.outputs.branch_name }}"
-          TAG="${{ steps.set-tag.outputs.git_tag }}"
-
-          gh pr comment "${{ steps.create-pr.outputs.pr_url }}" --body "## 🚀 Next Steps
-
-          ### After PR Review and Merge:
-          Trigger the build workflow to create Docker images:
-          \`\`\`bash
-          gh workflow run build-push-neubirdai.yml -f git_tag=\"$TAG\"
-          \`\`\`
-
-          Or set up automatic build on PR merge by adding this to your workflow triggers."
-
-          echo "::notice::Build instructions added to PR"
-          echo "::endgroup::"
-
       - name: Workflow summary
         if: always()
         run: |
@@ -451,10 +306,52 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" = "true" ]; then
-            echo "**Status**: ❌ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
+            echo "**Status**: ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
+            echo "**Branch**: \`${{ steps.create-branch.outputs.branch_name }}\` (pushed to remote)" >> $GITHUB_STEP_SUMMARY
             echo "**Conflicted Files**: ${{ steps.check-conflicts.outputs.conflict_count }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "A GitHub issue has been created for manual resolution." >> $GITHUB_STEP_SUMMARY
+            echo "### Conflicted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.check-conflicts.outputs.conflicted_files }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Resolution Steps" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Good news**: The branch has been pushed to remote for you!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. **Checkout the branch:**" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "   git fetch origin" >> $GITHUB_STEP_SUMMARY
+            echo "   git checkout ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "2. **Review and resolve conflicts** in each file listed above" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "3. **Stage resolved files:**" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "   git add <resolved-files>" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "4. **Complete the merge:**" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "   git commit -m \"Resolve conflicts for ${{ steps.set-tag.outputs.git_tag }} upgrade\"" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "5. **Push your changes:**" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "   git push origin ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "6. **Create the PR:**" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "   gh pr create --title \"Upgrade Langfuse to ${{ steps.set-tag.outputs.git_tag }}\" --base main --head ${{ steps.create-branch.outputs.branch_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "   \`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "💡 **Pro Tip**: Add \`[auto-merge]\` to the PR body to enable automatic approval, merge, and build trigger!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🤖 **Automation Ready**: Once you create the PR, the PR Automation workflow will activate and can handle the rest automatically if you enable auto-merge." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.create-branch.outputs.branch_exists }}" = "true" ]; then
             echo "**Status**: ⚠️ Branch already exists" >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.check-changes.outputs.has_changes }}" = "false" ]; then
@@ -463,59 +360,20 @@ jobs:
             echo "✅ Repository is already up-to-date with tag \`${{ steps.set-tag.outputs.git_tag }}\`." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "No pull request needed - no differences detected between main and the upstream tag." >> $GITHUB_STEP_SUMMARY
-          elif [ "${{ steps.auto-merge.outputs.merge_status }}" = "success" ]; then
-            echo "**Status**: ✅ Success - PR Auto-merged" >> $GITHUB_STEP_SUMMARY
-            echo "**PR**: ${{ steps.create-pr.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "✅ PR was automatically approved and merged." >> $GITHUB_STEP_SUMMARY
-            echo "🚀 Build workflow has been triggered automatically." >> $GITHUB_STEP_SUMMARY
           elif [ "${{ steps.create-pr.outputs.pr_url }}" != "" ]; then
-            echo "**Status**: ✅ Success - Manual Review Required" >> $GITHUB_STEP_SUMMARY
+            echo "**Status**: ✅ Success - PR Created" >> $GITHUB_STEP_SUMMARY
             echo "**PR**: ${{ steps.create-pr.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **Important**: After merging the PR, manually trigger the build workflow:" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "gh workflow run build-push-neubirdai.yml -f git_tag=\"${{ steps.set-tag.outputs.git_tag }}\"" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ steps.set-tag.outputs.auto_merge }}" = "true" ]; then
+              echo "🤖 **PR Automation**: Auto-merge is enabled" >> $GITHUB_STEP_SUMMARY
+              echo "The PR Automation workflow will handle approval, merge, and build trigger automatically." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "👀 **Manual Review Required**" >> $GITHUB_STEP_SUMMARY
+              echo "Review and merge the PR manually. After merge, the build workflow can be triggered:" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+              echo "gh workflow run build-push-neubirdai.yml -f git_tag=\"${{ steps.set-tag.outputs.git_tag }}\"" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "**Status**: ❌ Failed" >> $GITHUB_STEP_SUMMARY
           fi
-
-      - name: Create failure issue
-        if: failure() && steps.check-conflicts.outputs.has_conflicts != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = '${{ steps.set-tag.outputs.git_tag }}';
-            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
-
-            const issueBody = `## ⚠️ Upgrade Workflow Failed
-
-            ### Details
-            - **Target Tag**: \`${tag}\`
-            - **Workflow Run**: [View Run](${runUrl})
-            - **Failed Step**: Check the workflow logs for details
-
-            ### Investigation Required
-            The automated upgrade workflow failed for reasons other than merge conflicts.
-            Please review the workflow logs to identify the issue.
-
-            ### Common Issues
-            - Upstream repository fetch failure
-            - Invalid git tag provided
-            - Branch creation or push permission issues
-            - GitHub API rate limits
-
-            ### Next Steps
-            1. Review the [workflow logs](${runUrl})
-            2. Identify the root cause
-            3. Fix the issue or perform manual upgrade
-            4. Re-run the workflow if appropriate
-            `;
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Upgrade workflow failed for ${tag}`,
-              body: issueBody
-            });
