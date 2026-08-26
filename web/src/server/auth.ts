@@ -39,13 +39,17 @@ import { type Provider } from "next-auth/providers/index";
 import { getCookieName, getCookieOptions } from "./utils/cookies";
 import { nextAuthLogger } from "./utils/nextAuthLogger";
 import {
+  getRequestCookies,
+  isValidCallbackUrl,
+} from "./utils/nextAuthCallbackUrl";
+import {
   findMultiTenantSsoConfig,
   getSsoAuthProviderIdForDomain,
   loadSsoProviders,
 } from "@/src/ee/features/multi-tenant-sso/utils";
 import { ENTERPRISE_SSO_REQUIRED_MESSAGE } from "@/src/features/auth/constants";
 import { z } from "zod";
-import { CloudConfigSchema } from "@langfuse/shared";
+import { CloudConfigSchema, projectRoleAccessRights } from "@langfuse/shared";
 import {
   CustomSSOProvider,
   GitHubEnterpriseProvider,
@@ -60,7 +64,6 @@ import {
   getOrganizationPlanServerSide,
   getSelfHostedInstancePlanServerSide,
 } from "@/src/features/entitlements/server/getPlan";
-import { projectRoleAccessRights } from "@/src/features/rbac/constants/projectAccessRights";
 import { getSSOBlockedDomains } from "@/src/features/auth-credentials/server/signupApiHandler";
 import { createSupportEmailHash } from "@/src/features/support-chat/createSupportEmailHash";
 import { canToggleV4 } from "@/src/features/events/lib/v4Rollout";
@@ -591,7 +594,12 @@ if (env.AUTH_WORDPRESS_CLIENT_ID && env.AUTH_WORDPRESS_CLIENT_SECRET)
 // Extend Prisma Adapter
 const prismaAdapter = PrismaAdapter(prisma);
 const ignoredAccountFields = env.AUTH_IGNORE_ACCOUNT_FIELDS?.split(",") ?? [];
-const extendedPrismaAdapter: Adapter = {
+// Factory instead of a static adapter so that per-request signup attribution
+// (Google Ads click id from first-party cookies) can reach the signup event
+// captured for new SSO users.
+const createExtendedPrismaAdapter = (signupAttribution?: {
+  gclid?: string;
+}): Adapter => ({
   ...prismaAdapter,
   async createUser(profile: Omit<AdapterUser, "id">) {
     if (!prismaAdapter.createUser)
@@ -611,7 +619,10 @@ const extendedPrismaAdapter: Adapter = {
 
     const user = await prismaAdapter.createUser(profile);
 
-    await createProjectMembershipsOnSignup(user, { userWasJustCreated: true });
+    await createProjectMembershipsOnSignup(user, {
+      userWasJustCreated: true,
+      gclid: signupAttribution?.gclid,
+    });
 
     return user;
   },
@@ -653,7 +664,9 @@ const extendedPrismaAdapter: Adapter = {
       select: { id: true, email: true, name: true },
     });
     if (user) {
-      await createProjectMembershipsOnSignup(user);
+      await createProjectMembershipsOnSignup(user, {
+        gclid: signupAttribution?.gclid,
+      });
     }
   },
 
@@ -724,14 +737,20 @@ const extendedPrismaAdapter: Adapter = {
 
     return verificationToken;
   },
-};
+});
 
 /**
  * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
  *
+ * @param signupAttribution - per-request marketing attribution (e.g. Google
+ * Ads click id) attached to the signup analytics event if the request results
+ * in a new user. Only passed by the NextAuth API route.
+ *
  * @see https://next-auth.js.org/configuration/options
  */
-export async function getAuthOptions(): Promise<NextAuthOptions> {
+export async function getAuthOptions(signupAttribution?: {
+  gclid?: string;
+}): Promise<NextAuthOptions> {
   let dynamicSsoProviders: Provider[] = [];
   try {
     dynamicSsoProviders = await loadSsoProviders();
@@ -758,6 +777,8 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
       // keeps the default same-origin semantics while turning malformed input
       // into a safe redirect to baseUrl instead of a 500.
       redirect({ url, baseUrl }) {
+        if (!isValidCallbackUrl(url)) return baseUrl;
+
         try {
           // Relative callback URLs are always safe to resolve against baseUrl.
           if (url.startsWith("/")) return `${baseUrl}${url}`;
@@ -1071,7 +1092,7 @@ export async function getAuthOptions(): Promise<NextAuthOptions> {
         });
       },
     },
-    adapter: extendedPrismaAdapter,
+    adapter: createExtendedPrismaAdapter(signupAttribution),
     providers,
     pages: {
       signIn: `${env.NEXT_PUBLIC_BASE_PATH ?? ""}/auth/sign-in`,
@@ -1157,5 +1178,66 @@ export const getServerAuthSession = async (ctx: {
   ctx.res.setHeader("Pragma", "no-cache");
   ctx.res.setHeader("Expires", "0");
 
+  sanitizeServerSessionCallbackUrl(
+    ctx.req,
+    ctx.req.url?.split("?")[0]?.slice(0, 200),
+  );
+
   return getServerSession(ctx.req, ctx.res, authOptions);
+};
+
+/**
+ * App Router equivalent of getServerAuthSession. Passing the request and
+ * response explicitly lets us sanitize the parsed cookies before next-auth's
+ * config assertion runs.
+ */
+export const getServerAuthSessionForRequest = async (request: Request) => {
+  const authOptions = await getAuthOptions();
+  const cookies = getRequestCookies(request);
+  const req = {
+    headers: Object.fromEntries(request.headers.entries()),
+    cookies,
+  } as GetServerSidePropsContext["req"];
+
+  sanitizeServerSessionCallbackUrl(
+    req,
+    new URL(request.url).pathname.slice(0, 200),
+  );
+
+  const res = {
+    getHeader: () => undefined,
+    setCookie: () => undefined,
+    setHeader: () => undefined,
+  } as unknown as GetServerSidePropsContext["res"];
+
+  const session = await getServerSession(req, res, authOptions);
+
+  // Match getServerSession's App Router behavior. The explicit request/response
+  // form above selects its Pages Router branch, which otherwise keeps expires.
+  if (!session) return session;
+
+  const { expires: _expires, ...sessionWithoutExpires } = session;
+
+  return sessionWithoutExpires as Session;
+};
+
+const sanitizeServerSessionCallbackUrl = (
+  req: { cookies?: Partial<Record<string, string>> },
+  path: string | undefined,
+) => {
+  const callbackUrlCookieName = getCookieName("next-auth.callback-url");
+  const callbackUrlCookie = req.cookies?.[callbackUrlCookieName];
+
+  if (!callbackUrlCookie || isValidCallbackUrl(callbackUrlCookie)) return;
+
+  const { [callbackUrlCookieName]: _invalidCallbackUrl, ...sanitizedCookies } =
+    req.cookies ?? {};
+  req.cookies = sanitizedCookies;
+
+  logger.warn(
+    "[NEXT_AUTH] Ignored invalid callback URL for server-side session",
+    {
+      path,
+    },
+  );
 };
