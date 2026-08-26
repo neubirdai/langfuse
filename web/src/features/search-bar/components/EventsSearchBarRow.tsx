@@ -1,3 +1,4 @@
+/* eslint-disable @repo/no-style-props */
 // Search-bar row: the query composer at full width, with an AI sub-mode.
 // EventsTable owns the sticky stack around this row + the toolbar so the toolbar
 // cannot scroll under the composer. Time-range + refresh controls live in the
@@ -18,6 +19,7 @@ import * as React from "react";
 import { type FilterState } from "@langfuse/shared";
 import { useLangfuseCloudRegion } from "@/src/features/organizations/hooks";
 import { useQueryProject } from "@/src/features/projects/hooks";
+import { cn } from "@/src/utils/tailwind";
 import type {
   ObservedOptions,
   ObservedScoreNames,
@@ -42,6 +44,7 @@ export function EventsSearchBarRow({
   onRequestColumns,
   aiDataContext,
   aiScoreNames,
+  className,
 }: {
   projectId: string;
   /** Table this bar filters — threaded to AI-prompt analytics (LFE-10781). */
@@ -77,6 +80,10 @@ export function EventsSearchBarRow({
   /** Observed score names by column type, for the server's score-name
    *  validation of the generated filters (undefined sets are not enforced). */
   aiScoreNames?: ObservedScoreNames;
+  /** Overrides the wrapper spacing. The default (`px-2 pt-2 pb-1`) aligns the
+   *  bar with the desktop toolbar row; the mobile Filters sheet passes flush
+   *  padding so the bar lines up with the sheet's other sections. */
+  className?: string;
 }) {
   const [aiOpen, setAiOpen] = React.useState(false);
   const { isLangfuseCloud } = useLangfuseCloudRegion();
@@ -94,7 +101,7 @@ export function EventsSearchBarRow({
   }, [onRequestColumns]);
 
   return (
-    <div className="min-w-0 px-2 pt-2 pb-1">
+    <div className={cn("min-w-0 px-2 pt-2 pb-1", className)}>
       {aiOpen && aiAvailable ? (
         <SearchBarAiPrompt
           projectId={projectId}

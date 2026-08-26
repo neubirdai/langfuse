@@ -1,4 +1,6 @@
-import { EnvLabel } from "@/src/components/EnvLabel";
+/* eslint-disable @repo/no-style-props */
+import { EnvLabelBadge } from "@/src/components/EnvLabelBadge";
+import { useEnvLabel } from "@/src/hooks/useEnvLabel";
 import { ItemBadge, type LangfuseItemType } from "@/src/components/ItemBadge";
 import BreadcrumbComponent from "@/src/components/layouts/breadcrumb";
 import { PageHeaderControlsSlotTarget } from "@/src/components/layouts/page-header-controls-slot";
@@ -31,6 +33,14 @@ export type PageHeaderProps = {
   breadcrumb?: { name: string; href?: string }[];
   actionButtonsLeft?: React.ReactNode; // Right-side actions (buttons, etc.)
   actionButtonsRight?: React.ReactNode; // Right-side actions (buttons, etc.)
+  actionButtonsRightClassName?: string;
+  /** Mobile-only: the same actions rendered as full-width labeled menu rows
+   * (icon + label), for the compact header's `⋯` overflow. Pages pass a
+   * `layout="menu"` variant of their actions here (mirrors the table peek's
+   * `actionsMenu`). When omitted, the mobile header falls back to folding the
+   * inline `actionButtonsRight`/`actionButtonsLeft` nodes as-is. Desktop
+   * `PageHeader` ignores this. */
+  actionButtonsMenu?: React.ReactNode;
   help?: { description: React.ReactNode; href?: string; className?: string };
   titleTooltip?: string;
   itemType?: LangfuseItemType;
@@ -49,6 +59,7 @@ const PageHeader = ({
   itemType,
   actionButtonsLeft,
   actionButtonsRight,
+  actionButtonsRightClassName,
   breadcrumb,
   help,
   titleTooltip,
@@ -61,6 +72,7 @@ const PageHeader = ({
   breadcrumbBadges,
 }: PageHeaderProps) => {
   const hasAppSidebar = useHasAppSidebar();
+  const envLabel = useEnvLabel();
   // The sidebar trigger + brand mark only make sense where a real AppSidebar
   // exists to toggle/mirror. On the sidebar-less MinimalLayout (public/shared
   // trace and session views) show the page's own leadingControl instead — no
@@ -105,7 +117,12 @@ const PageHeader = ({
                 )
               )}
               <div>
-                <EnvLabel />
+                {envLabel.visible && (
+                  <EnvLabelBadge
+                    region={envLabel.region}
+                    onClick={envLabel.dismiss}
+                  />
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <BreadcrumbComponent items={breadcrumb} />
@@ -197,10 +214,14 @@ const PageHeader = ({
               )}
             </div>
 
-            {/* Right side content — right-aligned by the row's
-                justify-between while it shares the line with the title;
-                left-aligned once it wraps to its own line. */}
-            <div className="flex flex-wrap items-center gap-1">
+            {/* Right side content. Pages can override the default alignment
+                when wrapped actions should retain a shared right edge. */}
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-1",
+                actionButtonsRightClassName,
+              )}
+            >
               {actionButtonsRight}
             </div>
           </div>
