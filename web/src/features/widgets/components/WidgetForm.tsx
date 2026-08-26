@@ -715,7 +715,6 @@ export function WidgetForm({
     values.chart.rowLimit,
     dateRange,
     previewSortState,
-    selectedMetadataKey,
     viewVersion,
     normalizedUserFilters,
   ]);
