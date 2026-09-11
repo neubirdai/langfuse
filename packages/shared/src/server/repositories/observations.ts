@@ -523,6 +523,16 @@ export type ObservationTableQuery = {
   searchType?: TracingSearchType[];
   limit?: number;
   offset?: number;
+  /**
+   * Uses the stable observation tuple instead of OFFSET pagination. The flag
+   * is required because the first cursor page does not carry a cursor yet.
+   */
+  cursorPagination?: boolean;
+  cursor?: {
+    lastStartTimeTo: Date;
+    lastTraceId: string;
+    lastId: string;
+  };
   selectIOAndMetadata?: boolean;
   renderingProps?: RenderingProps;
   /**
@@ -597,7 +607,9 @@ export const getObservationsTableWithModelData = async (
             OR: [{ projectId: opts.projectId }, { projectId: null }],
           },
           include: {
-            Price: true,
+            Price: {
+              where: { pricingTier: { isDefault: true } },
+            },
           },
         })
       : [],
@@ -1608,9 +1620,11 @@ export const getObservationsGroupedByTraceId = async (
 export const getObservationCountsByProjectInCreationInterval = async ({
   start,
   end,
+  projectId,
 }: {
   start: Date;
   end: Date;
+  projectId?: string;
 }) => {
   const query = `
     SELECT
@@ -1619,6 +1633,7 @@ export const getObservationCountsByProjectInCreationInterval = async ({
     FROM observations
     WHERE created_at >= {start: DateTime64(3)}
     AND created_at < {end: DateTime64(3)}
+    ${projectId ? "AND project_id = {projectId: String}" : ""}
     GROUP BY project_id
   `;
 
@@ -1627,6 +1642,7 @@ export const getObservationCountsByProjectInCreationInterval = async ({
     params: {
       start: convertDateToClickhouseDateTime(start),
       end: convertDateToClickhouseDateTime(end),
+      ...(projectId ? { projectId } : {}),
     },
     clickhouseConfigs: {
       request_timeout: 300000, // 5 minutes timeout
@@ -1739,7 +1755,7 @@ const buildObservationsForBlobStorageExportQuery = (
     FROM observations
     WHERE project_id = {projectId: String}
     AND start_time >= {minTimestamp: DateTime64(3)}
-    AND start_time <= {maxTimestamp: DateTime64(3)}
+    AND start_time < {maxTimestamp: DateTime64(3)}
     ${
       skipDedup
         ? ""
@@ -2033,7 +2049,7 @@ const getEvaluatorCostMetricsByIds = async <
       WHERE project_id = {projectId: String}
         AND metadata['job_configuration_id'] IN ({evaluatorIds: Array(String)})
         AND type = 'GENERATION'
-        AND start_time > today() - 7
+        AND start_time > now() - INTERVAL 7 DAY
       GROUP BY metadata['job_configuration_id']
     `,
     params: {

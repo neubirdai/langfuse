@@ -10,7 +10,7 @@ import {
   type ExperimentItemsTableRow,
   getExperimentColorStyles,
 } from "./types";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { type RowHeight } from "@/src/components/table/data-table-row-height-switch";
 import {
   type OnChangeFn,
@@ -20,7 +20,6 @@ import {
 } from "@tanstack/react-table";
 import { useExperimentNames } from "@/src/features/experiments/hooks/useExperimentNames";
 import { cn } from "@/src/utils/tailwind";
-import { type ReactNode } from "react";
 import { type DataTablePeekViewProps } from "@/src/components/table/peek";
 
 // Grid view row heights (matching DatasetCompareRunsTable)
@@ -211,7 +210,6 @@ export const ExperimentGridView = ({
             isLoading={isLoading}
             data={row.original.input ?? null}
             singleLine={singleLine}
-            enableExpandOnHover
           />
         ),
       },
@@ -226,7 +224,6 @@ export const ExperimentGridView = ({
             data={row.original.expectedOutput ?? null}
             singleLine={singleLine}
             className="bg-accent-light-green"
-            enableExpandOnHover
           />
         ),
       },
