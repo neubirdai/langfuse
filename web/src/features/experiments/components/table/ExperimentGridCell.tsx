@@ -1,3 +1,4 @@
+/* eslint-disable @repo/no-style-props */
 import { MemoizedIOTableCell } from "@/src/components/ui/IOTableCell";
 import { Badge } from "@/src/components/ui/badge";
 import {
@@ -484,7 +485,6 @@ export const ExperimentGridCell = ({
             data={data.output ?? null}
             className="bg-accent-light-green min-h-8"
             singleLine={singleLine}
-            enableExpandOnHover
           />
         ),
       },
@@ -550,7 +550,7 @@ export const ExperimentGridCell = ({
           {
             accessorKey: "level",
             cell: ({ data }) => (
-              <MetadataItem label="Level">
+              <MetadataItem label="Status">
                 <span className="text-xs">{data.level}</span>
               </MetadataItem>
             ),
@@ -559,7 +559,9 @@ export const ExperimentGridCell = ({
             accessorKey: "startTime",
             cell: ({ data }) => (
               <MetadataItem label="Start Time">
-                <LocalIsoDate date={data.startTime} className="text-xs" />
+                <span className="text-xs">
+                  <LocalIsoDate date={data.startTime} />
+                </span>
               </MetadataItem>
             ),
           },

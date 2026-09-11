@@ -1,9 +1,9 @@
+/* eslint-disable @repo/no-style-props */
 import { cn } from "@/src/utils/tailwind";
 import { GroupedScoreBadges } from "@/src/components/grouped-score-badge";
 import { ErrorPage } from "@/src/components/error-page";
 import { PublishSessionSwitch } from "@/src/components/publish-object-switch";
-import { StarSessionToggle } from "@/src/components/star-toggle";
-import { IOPreview } from "@/src/components/trace/components/IOPreview/IOPreview";
+import { IOPreview } from "@/src/features/traces/components/IOPreview/IOPreview";
 import { JsonSkeleton } from "@/src/components/ui/CodeJsonViewer";
 import { Badge } from "@/src/components/ui/badge";
 import { DetailPageNav } from "@/src/features/navigate-detail-pages/DetailPageNav";
@@ -15,9 +15,10 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AnnotateDrawer } from "@/src/features/scores/components/AnnotateDrawer";
+import { AnnotateDrawerController } from "@/src/features/scores/components/AnnotateDrawerController";
+import { ActionButtonCountBadge } from "@/src/components/ui/action-button-count-badge";
 import { Button } from "@/src/components/ui/button";
-import { CommentDrawerButton } from "@/src/features/comments/CommentDrawerButton";
+import { CommentDrawerController } from "@/src/features/comments/CommentDrawerController";
 import { useSession } from "next-auth/react";
 import {
   CheckIcon,
@@ -26,6 +27,12 @@ import {
   CopyIcon,
   Download,
   ExternalLinkIcon,
+  LockIcon,
+  MessageSquare,
+  MessageSquareOff,
+  ListPlus,
+  MoreVertical,
+  SquarePen,
 } from "lucide-react";
 import { useCopyToClipboard } from "@/src/hooks/useCopyToClipboard";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
@@ -44,7 +51,8 @@ import {
   TableViewPresetTableName,
   normalizeLegacySessionPositionInTraceFilters,
 } from "@langfuse/shared";
-import { CreateNewAnnotationQueueItem } from "@/src/features/annotation-queues/components/CreateNewAnnotationQueueItem";
+import { AnnotationQueueItemDropdownMenuController } from "@/src/features/annotation-queues/components/AnnotationQueueItemDropdownMenuController";
+import { AnnotationQueueItemCountBadge } from "@/src/features/annotation-queues/components/AnnotationQueueItemCountBadge";
 import { WebCalloutButton } from "@/src/features/web-callouts/components/WebCalloutMenuItem";
 import { TablePeekViewTraceDetail } from "@/src/components/table/peek/peek-trace-detail";
 import { usePeekNavigation } from "@/src/components/table/peek/hooks/usePeekNavigation";
@@ -85,6 +93,10 @@ import { SessionDetailStoreProvider } from "@/src/components/session/SessionDeta
 import { SessionVirtualizedRow } from "@/src/components/session/SessionVirtualizedRow";
 import { createSessionDetailStore } from "@/src/components/session/sessionDetailStore";
 import { ModernSession } from "@/src/components/session/ModernSession";
+import { ModernSessionHeader } from "@/src/components/session/ModernSessionHeader";
+import { SessionMetadataJsonPathControl } from "@/src/components/session/SessionMetadataJsonPathControl";
+import { DropdownMenuTrigger } from "@/src/components/ui/dropdown-menu";
+import { ModernSessionHeaderActionsController } from "@/src/components/session/ModernSessionHeaderActionsController";
 import { ModernSessionFilterControls } from "@/src/components/session/ModernSessionFilterControls";
 import useIsFeatureEnabled from "@/src/features/feature-flags/hooks/useIsFeatureEnabled";
 import { useIsMobile } from "@/src/hooks/use-mobile";
@@ -101,14 +113,16 @@ import {
   type LegacySessionTrace,
 } from "@/src/components/session/sessionDetailPageTypes";
 import { getSessionFilterOptionsStartTimeFilters } from "@/src/components/session/sessionFilterOptions";
+import {
+  INITIAL_SESSION_USERS_DISPLAY_COUNT,
+  SESSION_USERS_PER_PAGE,
+} from "@/src/components/session/sessionUsers";
 
 // some projects have thousands of users in a session, paginate to avoid rendering all at once
-const INITIAL_USERS_DISPLAY_COUNT = 3;
-const USERS_PER_PAGE_IN_POPOVER = 50;
 // Keep this near TanStack's default to avoid waking too many lazy row loaders.
 const SESSION_VIRTUALIZER_OVERSCAN = 5;
 
-export function SessionUsers({
+function SessionUsers({
   projectId,
   users,
 }: {
@@ -119,8 +133,8 @@ export function SessionUsers({
 
   if (!users) return null;
 
-  const initialUsers = users?.slice(0, INITIAL_USERS_DISPLAY_COUNT);
-  const remainingUsers = users?.slice(INITIAL_USERS_DISPLAY_COUNT);
+  const initialUsers = users?.slice(0, INITIAL_SESSION_USERS_DISPLAY_COUNT);
+  const remainingUsers = users?.slice(INITIAL_SESSION_USERS_DISPLAY_COUNT);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -157,8 +171,8 @@ export function SessionUsers({
               <div className="flex flex-col gap-2 p-2">
                 {remainingUsers
                   .slice(
-                    page * USERS_PER_PAGE_IN_POPOVER,
-                    (page + 1) * USERS_PER_PAGE_IN_POPOVER,
+                    page * SESSION_USERS_PER_PAGE,
+                    (page + 1) * SESSION_USERS_PER_PAGE,
                   )
                   .map((userId: string) => {
                     const userBadgeText = `User ID: ${userId}`;
@@ -182,7 +196,7 @@ export function SessionUsers({
                   })}
               </div>
             </ScrollArea>
-            {remainingUsers.length > USERS_PER_PAGE_IN_POPOVER && (
+            {remainingUsers.length > SESSION_USERS_PER_PAGE && (
               <div className="flex items-center justify-between border-t p-2 pt-4">
                 <Button
                   variant="outline"
@@ -194,15 +208,14 @@ export function SessionUsers({
                 </Button>
                 <span className="text-muted-foreground text-sm">
                   Page {page + 1} of{" "}
-                  {Math.ceil(remainingUsers.length / USERS_PER_PAGE_IN_POPOVER)}
+                  {Math.ceil(remainingUsers.length / SESSION_USERS_PER_PAGE)}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setPage((p) => p + 1)}
                   disabled={
-                    (page + 1) * USERS_PER_PAGE_IN_POPOVER >=
-                    remainingUsers.length
+                    (page + 1) * SESSION_USERS_PER_PAGE >= remainingUsers.length
                   }
                 >
                   Next
@@ -290,6 +303,7 @@ const SessionScores = ({
     </div>
   );
 };
+
 const CopySessionIdButton: React.FC<{
   sessionId: string;
   /** "menu" renders a full-width labeled row for the mobile ⋯ overflow;
@@ -357,6 +371,7 @@ export const SessionPage: React.FC<{
       projectId: projectId,
     },
     {
+      enabled: Boolean(projectId) && Boolean(sessionId),
       retry(failureCount, error) {
         if (
           error.data?.code === "UNAUTHORIZED" ||
@@ -397,11 +412,14 @@ export const SessionPage: React.FC<{
     [sessionDetailStore, setShowCorrections],
   );
 
-  const sessionComments = api.comments.getByObjectId.useQuery({
-    projectId,
-    objectId: sessionId,
-    objectType: "SESSION",
-  });
+  const sessionComments = api.comments.getByObjectId.useQuery(
+    {
+      projectId,
+      objectId: sessionId,
+      objectType: "SESSION",
+    },
+    { enabled: Boolean(projectId) && Boolean(sessionId) },
+  );
 
   const onDownloadSessionAsJson = useCallback(async () => {
     await downloadSessionAsJson({
@@ -424,6 +442,8 @@ export const SessionPage: React.FC<{
       // traceId: not written here, but cleared so a v4-dialect shared URL
       // cannot pin the trace peek (LFE-11041).
       queryParams: ["observation", "display", "timestamp", "traceId"],
+      tableName: "sessions",
+      isV4: false,
       extractParamsValuesFromRow: (row: any) => ({
         timestamp: row.timestamp.toISOString(),
       }),
@@ -500,13 +520,6 @@ export const SessionPage: React.FC<{
           ],
           actionButtonsLeft: (
             <div className="flex items-center gap-0">
-              <StarSessionToggle
-                key="star"
-                projectId={projectId}
-                sessionId={sessionId}
-                value={session.data?.bookmarked ?? false}
-                size="icon-xs"
-              />
               <PublishSessionSwitch
                 projectId={projectId}
                 sessionId={sessionId}
@@ -543,16 +556,47 @@ export const SessionPage: React.FC<{
                   listKey="sessions"
                 />
               )}
-              <CommentDrawerButton
+              <CommentDrawerController
                 key="comment"
-                variant="outline"
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
                 count={getNumberFromMap(sessionCommentCounts.data, sessionId)}
-              />
+              >
+                {({ disabled, openDrawer }) => (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={openDrawer}
+                    className="gap-1"
+                  >
+                    {disabled ? (
+                      <MessageSquareOff className="text-muted-foreground h-4 w-4" />
+                    ) : (
+                      <>
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Add comment</span>
+                        {getNumberFromMap(
+                          sessionCommentCounts.data,
+                          sessionId,
+                        ) ? (
+                          <ActionButtonCountBadge
+                            count={
+                              getNumberFromMap(
+                                sessionCommentCounts.data,
+                                sessionId,
+                              ) ?? 0
+                            }
+                          />
+                        ) : null}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CommentDrawerController>
               <div className="flex items-start">
-                <AnnotateDrawer
+                <AnnotateDrawerController
                   projectId={projectId}
                   scoreTarget={{
                     type: "session",
@@ -563,14 +607,45 @@ export const SessionPage: React.FC<{
                     projectId: projectId,
                     environment: session.data?.environment,
                   }}
-                  buttonVariant="outline"
-                />
-                <CreateNewAnnotationQueueItem
+                >
+                  {({ disabled, openDrawer }) => (
+                    <Button
+                      variant="outline"
+                      size="default"
+                      disabled={disabled}
+                      className="rounded-r-none"
+                      onClick={openDrawer}
+                    >
+                      {disabled ? (
+                        <LockIcon className="mr-1.5 h-3 w-3" />
+                      ) : (
+                        <SquarePen className="mr-1.5 h-4 w-4" />
+                      )}
+                      <span>Annotate</span>
+                    </Button>
+                  )}
+                </AnnotateDrawerController>
+                <AnnotationQueueItemDropdownMenuController
                   projectId={projectId}
                   objectId={sessionId}
                   objectType="SESSION"
-                  variant="outline"
-                />
+                >
+                  {({ disabled, totalCount }) => (
+                    <Button
+                      variant="outline"
+                      disabled={disabled !== undefined}
+                      className="rounded-l-none rounded-r-md border-l-2"
+                    >
+                      <span className="relative mr-1 text-xs">
+                        <ChevronDown className="h-3 w-3" />
+                        <AnnotationQueueItemCountBadge
+                          totalCount={totalCount}
+                          layout="toolbar"
+                        />
+                      </span>
+                    </Button>
+                  )}
+                </AnnotationQueueItemDropdownMenuController>
               </div>
               <div className="flex items-center">
                 <div className="mx-1">
@@ -591,12 +666,6 @@ export const SessionPage: React.FC<{
           // inline icon toolbar. Session-to-session nav stays desktop-only.
           actionButtonsMenu: (
             <>
-              <StarSessionToggle
-                projectId={projectId}
-                sessionId={sessionId}
-                value={session.data?.bookmarked ?? false}
-                showLabel
-              />
               <PublishSessionSwitch
                 projectId={projectId}
                 sessionId={sessionId}
@@ -604,15 +673,42 @@ export const SessionPage: React.FC<{
                 label="Share"
               />
               <CopySessionIdButton sessionId={sessionId} layout="menu" />
-              <CommentDrawerButton
-                variant="outline"
+              <CommentDrawerController
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
                 count={getNumberFromMap(sessionCommentCounts.data, sessionId)}
-                layout="menu"
-              />
-              <AnnotateDrawer
+              >
+                {({ disabled, openDrawer }) => (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={openDrawer}
+                    className="w-full justify-start gap-2 font-normal"
+                  >
+                    {disabled ? (
+                      <MessageSquareOff className="text-muted-foreground h-4 w-4" />
+                    ) : (
+                      <MessageSquare className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">Add comment</span>
+                    {!disabled &&
+                    getNumberFromMap(sessionCommentCounts.data, sessionId) ? (
+                      <ActionButtonCountBadge
+                        count={
+                          getNumberFromMap(
+                            sessionCommentCounts.data,
+                            sessionId,
+                          ) ?? 0
+                        }
+                      />
+                    ) : null}
+                  </Button>
+                )}
+              </CommentDrawerController>
+              <AnnotateDrawerController
                 projectId={projectId}
                 scoreTarget={{
                   type: "session",
@@ -623,16 +719,45 @@ export const SessionPage: React.FC<{
                   projectId: projectId,
                   environment: session.data?.environment,
                 }}
-                buttonVariant="outline"
-                layout="menu"
-              />
-              <CreateNewAnnotationQueueItem
+              >
+                {({ disabled, openDrawer }) => (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    className="w-full justify-start gap-2 font-normal"
+                    onClick={openDrawer}
+                  >
+                    {disabled ? (
+                      <LockIcon className="h-3 w-3" />
+                    ) : (
+                      <SquarePen className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">Annotate</span>
+                  </Button>
+                )}
+              </AnnotateDrawerController>
+              <AnnotationQueueItemDropdownMenuController
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
-                variant="outline"
-                layout="menu"
-              />
+              >
+                {({ disabled, totalCount }) => (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled !== undefined}
+                    className="w-full justify-start gap-2 font-normal"
+                  >
+                    <ListPlus className="h-4 w-4" />
+                    <span className="text-sm">Add to queue</span>
+                    <AnnotationQueueItemCountBadge
+                      totalCount={totalCount}
+                      layout="menu"
+                    />
+                  </Button>
+                )}
+              </AnnotationQueueItemDropdownMenuController>
               <WebCalloutButton
                 projectId={projectId}
                 traceId={null}
@@ -736,6 +861,8 @@ export const SessionPage: React.FC<{
           closePeek={closePeek}
           expandPeek={expandPeek}
           resolveDetailNavigationPath={resolveDetailNavigationPath}
+          tableName="sessions"
+          isV4={false}
           projectId={projectId}
         />
       </Page>
@@ -840,6 +967,7 @@ const LoadedSessionEventsPage: React.FC<{
   const capture = usePostHogClientCapture();
   const isModernSessionEnabled = useIsFeatureEnabled("modernSession", {
     enableForAdmins: false,
+    projectId,
   });
   const isMobile = useIsMobile();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -895,31 +1023,13 @@ const LoadedSessionEventsPage: React.FC<{
     sessionDetailStore.getState().actions.setShowSystemPrompt(isEnabled);
   };
 
-  const displayOptions = [
-    {
-      label: "corrections",
-      checked: showCorrections,
-      onCheckedChange: setShowCorrectionsForSession,
-    },
-    {
-      label: "tool calls",
-      checked: showInlineToolCalls,
-      onCheckedChange: setInlineToolCallsForSession,
-    },
-    {
-      label: "system prompt",
-      checked: showSystemPrompt,
-      onCheckedChange: setShowSystemPromptForSession,
-    },
-  ];
-
   const sessionCommentCounts = api.comments.getCountByObjectId.useQuery(
     {
       projectId,
       objectId: sessionId,
       objectType: "SESSION",
     },
-    { enabled: userSession.status === "authenticated" },
+    { enabled: userSession.status === "authenticated" && Boolean(sessionId) },
   );
 
   const traceCommentCounts =
@@ -928,7 +1038,7 @@ const LoadedSessionEventsPage: React.FC<{
         projectId,
         sessionId,
       },
-      { enabled: userSession.status === "authenticated" },
+      { enabled: userSession.status === "authenticated" && Boolean(sessionId) },
     );
 
   const peekNavigationConfig = React.useMemo(
@@ -941,6 +1051,8 @@ const LoadedSessionEventsPage: React.FC<{
       // traceId: not written here, but cleared so a v4-dialect shared URL
       // cannot pin the trace peek (LFE-11041).
       queryParams: ["observation", "display", "timestamp", "traceId"],
+      tableName: "session-events",
+      isV4: true,
       // observationId: set by a card's "Open in trace view" on a truncated
       // observation so the peek opens AT that observation (LFE-10958).
       extractParamsValuesFromRow: (row: any) => ({
@@ -1264,8 +1376,33 @@ const LoadedSessionEventsPage: React.FC<{
   const hasSessionControls =
     !isModernSessionEnabled ||
     Boolean(session.users?.length || session.scores.length);
-  const excludeObservationsByName = useCallback(
-    (name: string) => {
+  const filterObservationsByName = useCallback(
+    (name: string, operator: "any of" | "none of") => {
+      if (operator === "any of") {
+        const nextFilters = queryFilter.filterState
+          .filter((filter) => filter.column !== "name")
+          .concat({
+            column: "name",
+            type: "stringOptions",
+            operator,
+            value: [name],
+          });
+
+        queryFilter.setFilterState(nextFilters);
+        capture("filters:applied", {
+          surface: "filter_builder",
+          tableName: "session-detail",
+          column: "name",
+          filterType: "stringOptions",
+          operator,
+          valueCount: 1,
+          conditionCount: nextFilters.length,
+          columnConditionCount: 1,
+          isV4: true,
+        });
+        return;
+      }
+
       const existingFilter = queryFilter.filterState.find(
         (
           filter,
@@ -1285,7 +1422,7 @@ const LoadedSessionEventsPage: React.FC<{
         : queryFilter.filterState.concat({
             column: "name",
             type: "stringOptions",
-            operator: "none of",
+            operator,
             value: [name],
           });
 
@@ -1295,7 +1432,7 @@ const LoadedSessionEventsPage: React.FC<{
         tableName: "session-detail",
         column: "name",
         filterType: "stringOptions",
-        operator: "none of",
+        operator,
         valueCount: 1,
         conditionCount: nextFilters.length,
         columnConditionCount: 1,
@@ -1378,6 +1515,9 @@ const LoadedSessionEventsPage: React.FC<{
     getItemKey: (index) => traces?.[index]?.id ?? index,
   });
   const virtualItems = virtualizer.getVirtualItems();
+  const modernSessionTraces = isTracesSuccess
+    ? ({ state: "loaded", data: traces ?? [] } as const)
+    : ({ state: "loading" } as const);
 
   return (
     <SessionDetailStoreProvider store={sessionDetailStore}>
@@ -1391,15 +1531,8 @@ const LoadedSessionEventsPage: React.FC<{
               href: `/project/${projectId}/sessions`,
             },
           ],
-          actionButtonsLeft: (
+          actionButtonsLeft: !isModernSessionEnabled ? (
             <div className="flex items-center gap-0">
-              <StarSessionToggle
-                key="star"
-                projectId={projectId}
-                sessionId={sessionId}
-                value={session.bookmarked}
-                size="icon-xs"
-              />
               <PublishSessionSwitch
                 projectId={projectId}
                 sessionId={sessionId}
@@ -1409,7 +1542,7 @@ const LoadedSessionEventsPage: React.FC<{
               />
               <CopySessionIdButton key="copy-id" sessionId={sessionId} />
             </div>
-          ),
+          ) : undefined,
           actionButtonsRight: (
             <>
               <WebCalloutButton
@@ -1418,66 +1551,6 @@ const LoadedSessionEventsPage: React.FC<{
                 observationId={null}
                 sessionId={sessionId}
               />
-              {isModernSessionEnabled ? (
-                <>
-                  <div className="hidden items-center gap-3 pr-2 min-[1900px]:flex">
-                    <span className="text-muted-foreground text-xs">Show:</span>
-                    {displayOptions.map(
-                      ({ label, checked, onCheckedChange }) => (
-                        <label
-                          key={label}
-                          className="flex items-center gap-1.5"
-                        >
-                          <Switch
-                            checked={checked}
-                            onCheckedChange={onCheckedChange}
-                            size="sm"
-                          />
-                          <span className="text-muted-foreground text-xs">
-                            {label}
-                          </span>
-                        </label>
-                      ),
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 pr-2 min-[1900px]:hidden">
-                    <span className="text-muted-foreground text-xs">Show:</span>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 gap-1 px-2"
-                        >
-                          Options
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent align="end" className="w-52 p-2">
-                        <div className="flex flex-col gap-1">
-                          {displayOptions.map(
-                            ({ label, checked, onCheckedChange }) => (
-                              <label
-                                key={label}
-                                className="hover:bg-muted flex items-center justify-between gap-4 rounded-md px-2 py-1.5"
-                              >
-                                <span className="text-sm capitalize">
-                                  {label}
-                                </span>
-                                <Switch
-                                  checked={checked}
-                                  onCheckedChange={onCheckedChange}
-                                  size="sm"
-                                />
-                              </label>
-                            ),
-                          )}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </>
-              ) : null}
               {!router.query.peek && (
                 <DetailPageNav
                   key="nav"
@@ -1488,16 +1561,47 @@ const LoadedSessionEventsPage: React.FC<{
                   listKey="sessions"
                 />
               )}
-              <CommentDrawerButton
+              <CommentDrawerController
                 key="comment"
-                variant="outline"
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
                 count={getNumberFromMap(sessionCommentCounts.data, sessionId)}
-              />
+              >
+                {({ disabled, openDrawer }) => (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={disabled}
+                    onClick={openDrawer}
+                    className="gap-1"
+                  >
+                    {disabled ? (
+                      <MessageSquareOff className="text-muted-foreground h-4 w-4" />
+                    ) : (
+                      <>
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Add comment</span>
+                        {getNumberFromMap(
+                          sessionCommentCounts.data,
+                          sessionId,
+                        ) ? (
+                          <ActionButtonCountBadge
+                            count={
+                              getNumberFromMap(
+                                sessionCommentCounts.data,
+                                sessionId,
+                              ) ?? 0
+                            }
+                          />
+                        ) : null}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CommentDrawerController>
               <div className="flex items-start">
-                <AnnotateDrawer
+                <AnnotateDrawerController
                   projectId={projectId}
                   scoreTarget={{
                     type: "session",
@@ -1508,14 +1612,50 @@ const LoadedSessionEventsPage: React.FC<{
                     projectId: projectId,
                     environment: session.environment,
                   }}
-                  buttonVariant="outline"
-                />
-                <CreateNewAnnotationQueueItem
+                >
+                  {({ annotationCount, disabled, openDrawer }) => (
+                    <Button
+                      variant="outline"
+                      size="default"
+                      disabled={disabled}
+                      className="rounded-r-none"
+                      onClick={openDrawer}
+                    >
+                      {disabled ? (
+                        <LockIcon className="mr-1.5 h-3 w-3" />
+                      ) : (
+                        <SquarePen className="mr-1.5 h-4 w-4" />
+                      )}
+                      <span>Annotate</span>
+                      {isModernSessionEnabled && annotationCount > 0 ? (
+                        <span className="ml-1">
+                          <ActionButtonCountBadge count={annotationCount} />
+                        </span>
+                      ) : null}
+                    </Button>
+                  )}
+                </AnnotateDrawerController>
+                <AnnotationQueueItemDropdownMenuController
                   projectId={projectId}
                   objectId={sessionId}
                   objectType="SESSION"
-                  variant="outline"
-                />
+                >
+                  {({ disabled, totalCount }) => (
+                    <Button
+                      variant="outline"
+                      disabled={disabled !== undefined}
+                      className="rounded-l-none rounded-r-md border-l-2"
+                    >
+                      <span className="relative mr-1 text-xs">
+                        <ChevronDown className="h-3 w-3" />
+                        <AnnotationQueueItemCountBadge
+                          totalCount={totalCount}
+                          layout="toolbar"
+                        />
+                      </span>
+                    </Button>
+                  )}
+                </AnnotationQueueItemDropdownMenuController>
               </div>
               {!isModernSessionEnabled ? (
                 <label className="flex items-center gap-1.5">
@@ -1528,7 +1668,29 @@ const LoadedSessionEventsPage: React.FC<{
                     Show corrections
                   </span>
                 </label>
-              ) : null}
+              ) : (
+                <ModernSessionHeaderActionsController
+                  projectId={projectId}
+                  sessionId={sessionId}
+                  isPublic={session.public}
+                  showCorrections={showCorrections}
+                  showInlineToolCalls={showInlineToolCalls}
+                  showSystemPrompt={showSystemPrompt}
+                  onShowCorrectionsChange={setShowCorrectionsForSession}
+                  onShowInlineToolCallsChange={setInlineToolCallsForSession}
+                  onShowSystemPromptChange={setShowSystemPromptForSession}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Session actions"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </ModernSessionHeaderActionsController>
+              )}
             </>
           ),
           // Mobile compact header: the same session actions as full-width
@@ -1536,12 +1698,6 @@ const LoadedSessionEventsPage: React.FC<{
           // inline icon toolbar. Session-to-session nav stays desktop-only.
           actionButtonsMenu: (
             <>
-              <StarSessionToggle
-                projectId={projectId}
-                sessionId={sessionId}
-                value={session.bookmarked}
-                showLabel
-              />
               <PublishSessionSwitch
                 projectId={projectId}
                 sessionId={sessionId}
@@ -1549,15 +1705,42 @@ const LoadedSessionEventsPage: React.FC<{
                 label="Share"
               />
               <CopySessionIdButton sessionId={sessionId} layout="menu" />
-              <CommentDrawerButton
-                variant="outline"
+              <CommentDrawerController
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
                 count={getNumberFromMap(sessionCommentCounts.data, sessionId)}
-                layout="menu"
-              />
-              <AnnotateDrawer
+              >
+                {({ disabled, openDrawer }) => (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    onClick={openDrawer}
+                    className="w-full justify-start gap-2 font-normal"
+                  >
+                    {disabled ? (
+                      <MessageSquareOff className="text-muted-foreground h-4 w-4" />
+                    ) : (
+                      <MessageSquare className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">Add comment</span>
+                    {!disabled &&
+                    getNumberFromMap(sessionCommentCounts.data, sessionId) ? (
+                      <ActionButtonCountBadge
+                        count={
+                          getNumberFromMap(
+                            sessionCommentCounts.data,
+                            sessionId,
+                          ) ?? 0
+                        }
+                      />
+                    ) : null}
+                  </Button>
+                )}
+              </CommentDrawerController>
+              <AnnotateDrawerController
                 projectId={projectId}
                 scoreTarget={{
                   type: "session",
@@ -1568,16 +1751,50 @@ const LoadedSessionEventsPage: React.FC<{
                   projectId: projectId,
                   environment: session.environment,
                 }}
-                buttonVariant="outline"
-                layout="menu"
-              />
-              <CreateNewAnnotationQueueItem
+              >
+                {({ annotationCount, disabled, openDrawer }) => (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled}
+                    className="w-full justify-start gap-2 font-normal"
+                    onClick={openDrawer}
+                  >
+                    {disabled ? (
+                      <LockIcon className="h-3 w-3" />
+                    ) : (
+                      <SquarePen className="h-4 w-4" />
+                    )}
+                    <span className="text-sm">Annotate</span>
+                    {isModernSessionEnabled && annotationCount > 0 ? (
+                      <span className="ml-1">
+                        <ActionButtonCountBadge count={annotationCount} />
+                      </span>
+                    ) : null}
+                  </Button>
+                )}
+              </AnnotateDrawerController>
+              <AnnotationQueueItemDropdownMenuController
                 projectId={projectId}
                 objectId={sessionId}
                 objectType="SESSION"
-                variant="outline"
-                layout="menu"
-              />
+              >
+                {({ disabled, totalCount }) => (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disabled !== undefined}
+                    className="w-full justify-start gap-2 font-normal"
+                  >
+                    <ListPlus className="h-4 w-4" />
+                    <span className="text-sm">Add to queue</span>
+                    <AnnotationQueueItemCountBadge
+                      totalCount={totalCount}
+                      layout="menu"
+                    />
+                  </Button>
+                )}
+              </AnnotationQueueItemDropdownMenuController>
               <WebCalloutButton
                 projectId={projectId}
                 traceId={null}
@@ -1585,21 +1802,7 @@ const LoadedSessionEventsPage: React.FC<{
                 sessionId={sessionId}
                 layout="menu"
               />
-              {isModernSessionEnabled ? (
-                displayOptions.map(({ label, checked, onCheckedChange }) => (
-                  <label
-                    key={label}
-                    className="hover:bg-accent flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5"
-                  >
-                    <span className="text-sm capitalize">{label}</span>
-                    <Switch
-                      checked={checked}
-                      onCheckedChange={onCheckedChange}
-                      size="sm"
-                    />
-                  </label>
-                ))
-              ) : (
+              {!isModernSessionEnabled ? (
                 <label className="hover:bg-accent flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5">
                   <span className="text-sm">Show corrections</span>
                   <Switch
@@ -1608,7 +1811,7 @@ const LoadedSessionEventsPage: React.FC<{
                     size="sm"
                   />
                 </label>
-              )}
+              ) : null}
             </>
           ),
         }}
@@ -1620,7 +1823,32 @@ const LoadedSessionEventsPage: React.FC<{
               : "flex h-full flex-col overflow-auto"
           }
         >
-          {hasSessionControls ? (
+          {isModernSessionEnabled ? (
+            <SessionMetadataJsonPathControl
+              key={`${projectId}:${sessionId}`}
+              projectId={projectId}
+              sessionId={sessionId}
+              traces={modernSessionTraces}
+              filterState={visibleFilterState}
+            >
+              {(metadataJsonPaths) => (
+                <ModernSessionHeader
+                  projectId={projectId}
+                  countTraces={session.countTraces}
+                  traces={modernSessionTraces}
+                  tokensIn={session.inputUsage}
+                  tokensOut={session.outputUsage}
+                  totalTokens={session.totalTokens}
+                  totalCost={session.totalCost ?? 0}
+                  environment={session.environment ?? null}
+                  users={session.users ?? []}
+                  metadataJsonPaths={metadataJsonPaths}
+                  scores={session.scores}
+                />
+              )}
+            </SessionMetadataJsonPathControl>
+          ) : null}
+          {!isModernSessionEnabled && hasSessionControls ? (
             <SessionControlsBar
               isMobile={isMobile && !isModernSessionEnabled}
               desktopClassName="bg-background sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b p-4"
@@ -1778,7 +2006,7 @@ const LoadedSessionEventsPage: React.FC<{
                   showInlineToolCalls={showInlineToolCalls}
                   showSystemPrompt={showSystemPrompt}
                   sidebarFilterControls={sidebarFilterControls}
-                  onExcludeObservation={excludeObservationsByName}
+                  onFilterObservationByName={filterObservationsByName}
                 />
               )}
             </ModernSessionFilterControls>
@@ -1790,6 +2018,8 @@ const LoadedSessionEventsPage: React.FC<{
           closePeek={closePeek}
           expandPeek={expandPeek}
           resolveDetailNavigationPath={resolveDetailNavigationPath}
+          tableName="session-events"
+          isV4={true}
           projectId={projectId}
         />
       </Page>

@@ -7,6 +7,9 @@ evaluating, and debugging AI applications.
 
 - Read the minimal local context required for the task.
 - Keep changes scoped and avoid unrelated refactors.
+- Delegate exploratory or noisy work — broad code search, multi-file
+  investigation, log or test-output trawls — to a subagent so the
+  intermediate tool output stays out of the main context.
 - For bug fixes, first write the smallest failing test that proves the reported
   behavior and confirm it fails against the buggy behavior before changing
   production code. Add another test only when it exercises a distinct adapter,
@@ -32,8 +35,34 @@ evaluating, and debugging AI applications.
 - Always quote file paths in shell commands, or use `noglob` for path-heavy
   commands, to avoid zsh glob expansion issues with dynamic Next.js routes.
 - Never invoke Node-installed binaries through `./node_modules/.bin/*`. Always run them through `pnpm`.
+- Never put internal ticket ids (`LFE-1234`, `LFINT-1234`, `CLI-Q226-12`) or
+  Linear URLs into anything this repo publishes: code comments, docs prose,
+  commit messages, PR titles and descriptions, or changelog entries. They mean
+  nothing to OSS readers. Describe the problem on its own terms; a
+  ticket-prefixed branch name is the one place the identifier belongs.
+- Code comments document behavior for future readers, not the reasoning
+  behind the current change. Do not reference PR/review history ("changed X
+  to Y", "now also handles", "per review", "was previously") or describe
+  code that no longer exists.
 - Never commit secrets or credentials. Keep `.env*.example` files in
   sync with required env vars.
+- Human handoff: assume the reader does not remember the ticket. Lead with
+  a one-sentence TL;DR. Prefer one or two human actions per message; if
+  you need more, keep every point simple and super readable. Do not dump
+  long agent-only reports by default.
+- For product or UI changes, give a preview URL
+  (`pr-<N>.preview.langfuse.com`) and exact click-path test steps, including
+  the seed command or sandbox URL (`http://localhost:3000`) to reproduce
+  the data. Post proof of the fix on the GitHub PR (screenshot, short
+  video, or before/after) — not only in chat. Humans can ask for more
+  detail.
+- Open PRs as reviewable, not as drafts, unless a human asks for a draft.
+- When Claude, Greptile, or Codex (`chatgpt-codex-connector[bot]`) review
+  comments appear on a PR you own: do not reply. Keep each thread open
+  until you either apply the fix and resolve it, or skip it because you
+  are sure, tell the human in plain language (and invite them to doubt
+  that skip), then resolve it. Do not post `@claude review` again unless
+  a human asks for another pass.
 
 ## Project Structure
 
@@ -77,9 +106,32 @@ langfuse/
   - shared: `pnpm --filter @langfuse/shared run test <file>`
 - Build check: `pnpm run build:check`
 - Full build: `pnpm run build`
-- Worktree bootstrap: `bash scripts/codex/setup.sh`
+- Shared agent/worktree bootstrap: `bash scripts/agents/setup.sh`
 - Worktree maintenance: `bash scripts/codex/maintenance.sh`
 - Install Playwright Chromium: `pnpm run playwright:install`
+
+### Cursor Cloud specific instructions
+
+- Cursor Cloud starts the complete source-built stack through
+  `scripts/agents/start-cursor-cloud.sh`; do not start a second web or worker
+  process on ports 3000 or 3030.
+- Use that script for the Cloud stack rather than invoking Compose directly:
+  the workspace `.env` contains host-facing `localhost` service URLs and must
+  not be used to interpolate container service configuration.
+- After changing web or worker production code, rerun
+  `bash scripts/agents/start-cursor-cloud.sh` before browser signoff.
+- Open a same-repo reviewable PR after local verification (not a draft) and
+  test the resulting `pr-<N>.preview.langfuse.com` deployment with synthetic
+  data. Previews normally run Mon-Fri 08:00-24:00 Europe/Berlin.
+- Use Linear's git branch name (`lfe-XXXX-short-title`). Never create a
+  `cursor/` branch, even if a Cursor Cloud prompt suggests that prefix.
+  Repo guidance wins.
+- After opening a PR, leave a short last comment on what a reviewer should
+  doubt — the curious, questionable parts — not a changelog. For user-visible
+  work, put proof of the fix in that comment and the PR body, not only in
+  chat. Post that comment only when GitHub will attribute it to Cursor, not
+  to a human author. Claude Code and other tools that comment as the user
+  must skip it; see `cursor-agents-workflow`.
 
 ## Local Data Inspection
 
