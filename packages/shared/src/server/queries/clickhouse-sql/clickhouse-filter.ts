@@ -468,11 +468,6 @@ export class StringObjectFilter implements Filter {
         default:
           throw new Error(`Unsupported operator: ${this.operator}`);
       }
-
-      return {
-        query,
-        params: { ...extraParams, [varValueName]: this.value },
-      };
     }
 
     return {
