@@ -1,6 +1,7 @@
 import {
   EvalTemplateType,
   extractVariables,
+  getEvaluatorPromptMessages,
   LangfuseConflictError,
 } from "@langfuse/shared";
 import { prisma } from "@langfuse/shared/src/db";
@@ -108,7 +109,7 @@ function toDefinition(
 
   return {
     type: EvalTemplateType.LLM_AS_JUDGE,
-    prompt: input.prompt,
+    promptMessages: getEvaluatorPromptMessages({ prompt: input.prompt }),
     provider: input.modelConfig?.provider ?? null,
     model: input.modelConfig?.model ?? null,
     modelParams: null,
