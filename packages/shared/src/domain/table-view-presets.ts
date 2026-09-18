@@ -14,9 +14,6 @@ export enum TableViewPresetTableName {
   ExperimentItems = "experiment-items",
   Evaluators = "evaluators-v2",
   EvaluationRules = "evaluation-rules-v2",
-  Users = "users",
-  Prompts = "prompts",
-  Monitors = "monitors",
 }
 
 /**

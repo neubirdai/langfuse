@@ -6,7 +6,6 @@ import {
 } from "@langfuse/shared";
 import {
   ChatMessage,
-  compileLangfuseMediaMessages,
   convertDateToClickhouseDateTime,
   createLLMOutput,
   createLLMToolSet,
@@ -220,17 +219,9 @@ async function processLLMCall(
       ...config.model_params,
     },
   });
-  const { providerMessages, traceMessages } =
-    await compileLangfuseMediaMessages({
-      projectId: config.projectId,
-      messages,
-      adapter: config.validatedApiKey.adapter,
-    });
 
   await generateLLMText({
     ...llmParams,
-    messages: providerMessages,
-    traceInput: traceMessages,
     maxRetries: 1,
     // Setup rejects the unsupported tools + structured-output combination.
     ...(config.structuredOutputSchema

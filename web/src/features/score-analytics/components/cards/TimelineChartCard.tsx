@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/src/components/ui/card";
-import { Tabs } from "@/src/components/design-system/Tabs/Tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/src/components/ui/tabs";
 import { useScoreAnalytics } from "../ScoreAnalyticsProvider";
 import { ScoreTimeSeriesChart } from "../charts/ScoreTimeSeriesChart";
 import { SamplingDetailsHoverCard } from "../SamplingDetailsHoverCard";
@@ -246,6 +246,12 @@ export function TimelineChartCard() {
   const hasData = chartData.length > 0;
   const showTabs = mode === "two";
 
+  // Helper function to truncate tab labels with max character limit
+  const truncateLabel = (label: string): string => {
+    if (label.length <= 20) return label;
+    return label.substring(0, 17) + "...";
+  };
+
   // Build full tab labels for title attribute (hover tooltip)
   const score1FullLabel =
     score1.name === score2?.name
@@ -281,20 +287,28 @@ export function TimelineChartCard() {
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as TimelineTab)}
             >
-              <Tabs.List size="md">
-                <Tabs.Trigger
+              <TabsList className="h-7">
+                <TabsTrigger
                   value="score1"
-                  size="sm"
-                  label={score1FullLabel}
-                />
-                <Tabs.Trigger
+                  title={score1FullLabel}
+                  className="h-5 px-2 text-xs"
+                >
+                  {truncateLabel(score1FullLabel)}
+                </TabsTrigger>
+                <TabsTrigger
                   value="score2"
-                  size="sm"
-                  label={score2FullLabel}
-                />
-                <Tabs.Trigger value="all" size="sm" label="all" />
-                <Tabs.Trigger value="matched" size="sm" label="matched" />
-              </Tabs.List>
+                  title={score2FullLabel}
+                  className="h-5 px-2 text-xs"
+                >
+                  {truncateLabel(score2FullLabel)}
+                </TabsTrigger>
+                <TabsTrigger value="all" className="h-5 px-2 text-xs">
+                  all
+                </TabsTrigger>
+                <TabsTrigger value="matched" className="h-5 px-2 text-xs">
+                  matched
+                </TabsTrigger>
+              </TabsList>
             </Tabs>
           )}
         </div>

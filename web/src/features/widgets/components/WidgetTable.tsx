@@ -1,4 +1,3 @@
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
 import { useEffect, useState } from "react";
 import useProjectIdFromURL from "@/src/hooks/useProjectIdFromURL";
 import { useOrderByState } from "@/src/features/orderBy/hooks/useOrderByState";
@@ -13,7 +12,7 @@ import { createTextTableColumn } from "@/src/components/design-system/table/colu
 import { useDetailPageLists } from "@/src/features/navigate-detail-pages/context";
 import startCase from "lodash/startCase";
 import { Button } from "@/src/components/ui/button";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { Copy, CopyPlus, FileJson, MoreVertical, Trash } from "lucide-react";
 import {
   buildWidgetExport,
@@ -30,7 +29,9 @@ import {
 } from "@/src/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/src/components/ui/confirm-dialog";
 import { copyTextToClipboard } from "@/src/utils/clipboard";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import { useRouter } from "next/router";
 import { getChartTypeDisplayName } from "@/src/features/widgets/chart-library/utils";
 import { type DashboardWidgetChartType } from "@langfuse/shared/src/db";
@@ -301,22 +302,22 @@ export function DashboardWidgetTable() {
       header: "Description",
       size: 300,
     }),
-    createTextTableColumn<WidgetTableRow>({
-      accessorKey: "view",
+    columnHelper.accessor("view", {
       header: "View Type",
+      id: "view",
       enableSorting: true,
       size: 100,
-      mapValue: (value) => startCase(value?.toLowerCase()),
+      cell: (row) => {
+        return startCase(row.getValue().toLowerCase());
+      },
     }),
-    createTextTableColumn<WidgetTableRow>({
-      accessorKey: "chartType",
+    columnHelper.accessor("chartType", {
       header: "Chart Type",
+      id: "chartType",
       enableSorting: true,
       size: 100,
-      mapValue: (value) =>
-        value
-          ? getChartTypeDisplayName(value as DashboardWidgetChartType)
-          : undefined,
+      cell: (row) =>
+        getChartTypeDisplayName(row.getValue() as DashboardWidgetChartType),
     }),
     createDateTableColumn<WidgetTableRow>({
       accessorKey: "createdAt",

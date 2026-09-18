@@ -32,7 +32,7 @@ import { type OrgAuthedContext } from "@/src/server/api/trpc";
 
 const ORG_ID = "org-1";
 const CH_ORG_ID = "6dd6ab1d-9e8d-4c1a-8b4f-9a3d1e2c4b5a";
-const ATTACHED_PLAN_ID = "plan_1";
+const BUNDLE_ID = "bundle_1";
 
 // Resolved through the bridge rather than hardcoded: the catalogue swaps in
 // test-mode product ids, and this suite is about the mapping, not the literals.
@@ -51,7 +51,7 @@ const executeRaw = vi.fn();
 
 const clientMock = {
   createCheckoutSession: vi.fn(),
-  getAttachedPlan: vi.fn(),
+  getBundle: vi.fn(),
   setScheduledChange: vi.fn(),
   clearScheduledChange: vi.fn(),
   listInvoices: vi.fn(),
@@ -90,7 +90,7 @@ const chbConfig = (
 ): CloudConfigSchema => ({
   clickhouse: {
     organizationId: CH_ORG_ID,
-    attachedPlanId: ATTACHED_PLAN_ID,
+    bundleId: BUNDLE_ID,
     planCode: "LANGFUSE_PRO",
     ...overrides,
   },
@@ -113,12 +113,12 @@ describe("chbBillingService", () => {
   });
 
   describe("getSubscriptionInfo", () => {
-    it("falls back to the cached billing cycle when the org has no attached plan", async () => {
+    it("falls back to the cached billing cycle when the org has no bundle", async () => {
       withOrg({ clickhouse: { organizationId: CH_ORG_ID } });
 
       const info = await service().getSubscriptionInfo(ORG_ID);
 
-      expect(clientMock.getAttachedPlan).not.toHaveBeenCalled();
+      expect(clientMock.getBundle).not.toHaveBeenCalled();
       expect(info.cancellation).toBeNull();
       expect(info.scheduledChange).toBeNull();
       expect(info.hasValidPaymentMethod).toBe(false);
@@ -130,10 +130,10 @@ describe("chbBillingService", () => {
       );
     });
 
-    it("reports a healthy attached plan's period and payment status", async () => {
+    it("reports a healthy bundle's period and payment status", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
         period: {
           startDate: "2026-08-01T00:00:00Z",
           endDate: "2026-09-01T00:00:00Z",
@@ -143,8 +143,9 @@ describe("chbBillingService", () => {
 
       const info = await service().getSubscriptionInfo(ORG_ID);
 
-      expect(clientMock.getAttachedPlan).toHaveBeenCalledWith({
+      expect(clientMock.getBundle).toHaveBeenCalledWith({
         chOrganizationId: CH_ORG_ID,
+        bundleId: BUNDLE_ID,
       });
       expect(info.billingPeriod).toEqual({
         start: new Date("2026-08-01T00:00:00Z"),
@@ -157,8 +158,8 @@ describe("chbBillingService", () => {
 
     it("treats any non-active payment status as no valid payment method", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
         payment: { status: "failed" },
       });
 
@@ -170,29 +171,29 @@ describe("chbBillingService", () => {
 
     it("maps a pending cancellation onto the cancellation field", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
         period: { endDate: "2026-09-01T00:00:00Z" },
-        scheduled: { type: "cancel", endDate: "2026-09-03T00:00:00Z" },
+        scheduled: { type: "cancel", when: "billing_cycle_end" },
       });
 
       const info = await service().getSubscriptionInfo(ORG_ID);
 
-      // Unix seconds, like the Stripe path the UI already renders. The plan's
-      // own end date wins over the period end.
+      // Unix seconds, like the Stripe path the UI already renders.
       expect(info.cancellation).toEqual({
-        cancelAt: Date.parse("2026-09-03T00:00:00Z") / 1000,
+        cancelAt: Date.parse("2026-09-01T00:00:00Z") / 1000,
       });
       expect(info.scheduledChange).toBeNull();
     });
 
     it("maps a pending plan switch onto scheduledChange with a bridged product id", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
         period: { endDate: "2026-09-01T00:00:00Z" },
         scheduled: {
           type: "downgrade",
+          when: "billing_cycle_end",
           planCode: "LANGFUSE_CORE",
           startDate: "2026-09-05T00:00:00Z",
         },
@@ -202,7 +203,7 @@ describe("chbBillingService", () => {
 
       expect(info.cancellation).toBeNull();
       expect(info.scheduledChange).toEqual({
-        scheduleId: `chb:${ATTACHED_PLAN_ID}`,
+        scheduleId: `chb:${BUNDLE_ID}`,
         // An explicit startDate wins over the period end.
         switchAt: Date.parse("2026-09-05T00:00:00Z") / 1000,
         newProductId: productIdFor("LANGFUSE_CORE"),
@@ -212,9 +213,9 @@ describe("chbBillingService", () => {
 
     it("renders no pending state when the change has no resolvable date", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
-        scheduled: { type: "cancel" },
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
+        scheduled: { type: "cancel", when: "immediate" },
       });
 
       const info = await service().getSubscriptionInfo(ORG_ID);
@@ -222,28 +223,29 @@ describe("chbBillingService", () => {
       expect(info.scheduledChange).toBeNull();
     });
 
-    it("falls back to the period end for a cancellation without an end date", async () => {
+    it("renders no pending state for an immediate change on an active period", async () => {
       withOrg(chbConfig());
-      clientMock.getAttachedPlan.mockResolvedValue({
-        id: ATTACHED_PLAN_ID,
+      clientMock.getBundle.mockResolvedValue({
+        id: BUNDLE_ID,
+        // An immediate cancellation echoed back while the period is still
+        // populated: the date fallback would date it at the cycle end and
+        // render a change that has already applied as pending.
         period: {
           startDate: "2026-08-01T00:00:00Z",
           endDate: "2026-09-01T00:00:00Z",
         },
-        scheduled: { type: "cancel" },
+        scheduled: { type: "cancel", when: "immediate" },
       });
 
       const info = await service().getSubscriptionInfo(ORG_ID);
-      expect(info.cancellation).toEqual({
-        cancelAt: Date.parse("2026-09-01T00:00:00Z") / 1000,
-      });
+      expect(info.cancellation).toBeNull();
       expect(info.scheduledChange).toBeNull();
     });
   });
 
   describe("createCheckoutSession", () => {
     const session = {
-      checkoutUrl: "https://pay.example.com/c/1",
+      url: "https://pay.example.com/c/1",
       organizationId: CH_ORG_ID,
     };
 
@@ -257,7 +259,7 @@ describe("chbBillingService", () => {
         "op-checkout",
       );
 
-      expect(url).toBe(session.checkoutUrl);
+      expect(url).toBe(session.url);
       expect(clientMock.createCheckoutSession).toHaveBeenCalledWith({
         organizationId: undefined,
         email: "user@example.com",
@@ -334,12 +336,12 @@ describe("chbBillingService", () => {
     it("refuses when a retry comes back with a different CH organization", async () => {
       withOrg({ clickhouse: { organizationId: CH_ORG_ID } });
       clientMock.createCheckoutSession.mockResolvedValue({
-        checkoutUrl: session.checkoutUrl,
+        url: session.url,
         organizationId: "11111111-2222-4333-8444-555555555555",
       });
 
       // Sticky provider routing is broken; clobbering the stored id would point
-      // the org at a plan it never bought.
+      // the org at a bundle it never bought.
       expect(
         await trpcCode(
           service().createCheckoutSession(
@@ -354,7 +356,7 @@ describe("chbBillingService", () => {
     it("refuses to persist an id the stored schema rejects", async () => {
       withOrg(null);
       clientMock.createCheckoutSession.mockResolvedValue({
-        checkoutUrl: session.checkoutUrl,
+        url: session.url,
         organizationId: "not-a-uuid",
       });
 
@@ -461,13 +463,14 @@ describe("chbBillingService", () => {
 
       expect(clientMock.setScheduledChange).toHaveBeenCalledWith({
         chOrganizationId: CH_ORG_ID,
+        bundleId: BUNDLE_ID,
         change: {
           type: "upgrade",
           when: "immediate",
           planCode: "LANGFUSE_PRO_TEAMS",
         },
         idempotencyKey:
-          "chb.attachedplan.scheduled.set:attachedPlanId=plan_1:to=LANGFUSE_PRO_TEAMS:op=op-1",
+          "chb.bundle.scheduled.set:bundleId=bundle_1:to=LANGFUSE_PRO_TEAMS:op=op-1",
       });
     });
 
@@ -534,7 +537,7 @@ describe("chbBillingService", () => {
     it.each([
       ["a manual plan override", { plan: "Team" } as CloudConfigSchema],
       ["no CHB state at all", {} as CloudConfigSchema],
-      ["no attached plan", { clickhouse: { organizationId: CH_ORG_ID } }],
+      ["no bundle", { clickhouse: { organizationId: CH_ORG_ID } }],
     ])("refuses an org with %s", async (_label, cloudConfig) => {
       withOrg(cloudConfig);
 
@@ -558,7 +561,7 @@ describe("chbBillingService", () => {
         expect.objectContaining({
           change: { type: "cancel", when: "billing_cycle_end" },
           idempotencyKey:
-            "chb.attachedplan.scheduled.set:attachedPlanId=plan_1:to=cancel-billing_cycle_end:op=op-3",
+            "chb.bundle.scheduled.set:bundleId=bundle_1:to=cancel-billing_cycle_end:op=op-3",
         }),
       );
     });
@@ -575,8 +578,8 @@ describe("chbBillingService", () => {
       await expect(call(service())).resolves.toEqual({ status: "success" });
       expect(clientMock.clearScheduledChange).toHaveBeenCalledWith({
         chOrganizationId: CH_ORG_ID,
-        idempotencyKey:
-          "chb.attachedplan.scheduled.clear:attachedPlanId=plan_1:op=op-4",
+        bundleId: BUNDLE_ID,
+        idempotencyKey: "chb.bundle.scheduled.clear:bundleId=bundle_1:op=op-4",
       });
     });
 
@@ -593,7 +596,7 @@ describe("chbBillingService", () => {
       );
     });
 
-    it("no-ops the immediate cancellation for an org without an attached plan", async () => {
+    it("no-ops the immediate cancellation for an org without a bundle", async () => {
       withOrg(null);
 
       // Org deletion must keep working for hobby orgs.
@@ -607,7 +610,7 @@ describe("chbBillingService", () => {
   describe("getInvoices", () => {
     const pagination = { limit: 10 };
 
-    it("returns nothing for an org without an attached plan", async () => {
+    it("returns nothing for an org without a bundle", async () => {
       withOrg(null);
 
       await expect(service().getInvoices(ORG_ID, pagination)).resolves.toEqual({
@@ -627,9 +630,8 @@ describe("chbBillingService", () => {
           status: "paid",
           currency: "usd",
           createdAt: "2026-08-01T00:00:00Z",
-          amount: 19_900,
-          hostedUrl: "https://chb.example.com/inv_1",
-          pdfUrl: "https://chb.example.com/inv_1.pdf",
+          totalCents: 19_900,
+          downloadUrl: "https://chb.example.com/inv_1.pdf",
         },
       ]);
 
@@ -643,7 +645,7 @@ describe("chbBillingService", () => {
           status: "paid",
           currency: "USD",
           created: Date.parse("2026-08-01T00:00:00Z"),
-          hostedInvoiceUrl: "https://chb.example.com/inv_1",
+          hostedInvoiceUrl: "https://chb.example.com/inv_1.pdf",
           invoicePdfUrl: "https://chb.example.com/inv_1.pdf",
           breakdown: {
             subscriptionCents: 0,

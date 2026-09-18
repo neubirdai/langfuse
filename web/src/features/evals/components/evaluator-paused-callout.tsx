@@ -1,5 +1,6 @@
 import { Button } from "@/src/components/ui/button";
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import { api } from "@/src/utils/api";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -17,8 +18,10 @@ import { Fragment } from "react";
 type EvaluatorPausedCalloutProps = {
   projectId: string;
   allowReactivation: boolean;
-  blockedAt: NonNullable<JobConfiguration["blockedAt"]>;
-  evalConfig: Pick<JobConfiguration, "id" | "blockReason" | "blockMessage"> & {
+  evalConfig: Pick<
+    JobConfiguration,
+    "id" | "blockedAt" | "blockReason" | "blockMessage"
+  > & {
     evalTemplate?: Pick<EvalTemplate, "id"> | null;
   };
 };
@@ -49,7 +52,6 @@ function getResolutionActionLabel(params: {
 export function EvaluatorPausedCallout({
   projectId,
   allowReactivation,
-  blockedAt,
   evalConfig,
 }: EvaluatorPausedCalloutProps) {
   const utils = api.useUtils();
@@ -68,6 +70,10 @@ export function EvaluatorPausedCallout({
     },
   });
 
+  if (!evalConfig.blockedAt) {
+    return null;
+  }
+
   const blockReason =
     evalConfig.blockReason ?? EvaluatorBlockReason.EVAL_MODEL_CONFIG_INVALID;
   const blockMetadata = getEvaluatorBlockMetadata(blockReason);
@@ -81,10 +87,10 @@ export function EvaluatorPausedCallout({
     templateId: evalConfig.evalTemplate?.id,
   });
   const blockMessage = evalConfig.blockMessage ?? DEFAULT_BLOCK_MESSAGE;
-  const blockedAtDate = new Date(blockedAt);
-  const blockedAtLabel = Number.isNaN(blockedAtDate.getTime())
+  const blockedAt = new Date(evalConfig.blockedAt);
+  const blockedAtLabel = Number.isNaN(blockedAt.getTime())
     ? null
-    : formatDistanceToNow(blockedAtDate, { addSuffix: true });
+    : formatDistanceToNow(blockedAt, { addSuffix: true });
 
   return (
     <section
@@ -108,7 +114,7 @@ export function EvaluatorPausedCallout({
             {blockedAtLabel ? (
               <Fragment>
                 <span className="bg-border h-1 w-1 rounded-full" />
-                <span title={blockedAtDate.toLocaleString()}>
+                <span title={blockedAt.toLocaleString()}>
                   Paused {blockedAtLabel}
                 </span>
               </Fragment>

@@ -13,12 +13,7 @@ const version = {
   type: EvalTemplateTypeEnum.LLM_AS_JUDGE,
   sourceCode: null,
   sourceCodeLanguage: null,
-  promptMessages: [
-    {
-      role: "user" as const,
-      content: "Judge whether the response answers {{query}}.",
-    },
-  ],
+  prompt: "Judge whether the response answers {{query}}.",
   provider: "openai",
   model: "gpt-4.1-mini",
   modelParams: null,
@@ -83,7 +78,7 @@ export const CodeVersion = meta.story({
       {
         ...version,
         type: EvalTemplateTypeEnum.CODE,
-        promptMessages: null,
+        prompt: null,
         sourceCode: "function evaluate(ctx) {\n  return { scores: [] };\n}",
         sourceCodeLanguage: "TYPESCRIPT" as const,
       },

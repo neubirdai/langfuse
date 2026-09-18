@@ -14,7 +14,6 @@ type RuleDraftAssignment = {
   evaluatorType: EvalTemplateType;
   defaultVariableMapping: ObservationVariableMapping[];
   variableMapping: ObservationVariableMapping[] | null;
-  requiredVariables?: string[];
 };
 
 export type RuleDraft = {
@@ -32,7 +31,6 @@ export type RuleEvaluatorOption = {
   createdByUser?: { name: string | null; email: string | null } | null;
   defaultVariableMapping: ObservationVariableMapping[];
   initialVariableMapping: ObservationVariableMapping[] | null;
-  requiredVariables?: string[];
 };
 
 export type ActivationConfirmationRequest = {

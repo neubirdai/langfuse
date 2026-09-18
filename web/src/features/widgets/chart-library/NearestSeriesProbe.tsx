@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import { useEffect, useMemo, useRef } from "react";
 import {
   useActiveTooltipCoordinate,

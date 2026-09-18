@@ -1,10 +1,10 @@
-import { useHasProjectAccess } from "@/src/features/rbac";
 import { Button } from "@/src/components/ui/button";
 import { PopoverController } from "@/src/components/ui/popover";
 import type * as React from "react";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { api } from "@/src/utils/api";
-import { useEmptyScoreConfigs } from "@/src/features/scores";
+import { useEmptyScoreConfigs } from "@/src/features/scores/hooks/useEmptyConfigs";
 
 type ArchiveScoreConfigPopoverControllerProps = {
   children: (

@@ -103,8 +103,6 @@ const readAgentInstructions = (agentConfig: MockedAgentConfig | undefined) => {
 
 const adapterEvents = vi.hoisted(() => ({
   items: [] as AgUiEvent[],
-  /** Runs after the mocked adapter emits `items`, before it completes. */
-  beforeComplete: undefined as (() => void) | undefined,
   cleanup: vi.fn().mockResolvedValue(undefined),
   inputs: [] as unknown[],
   createScoreConfigExecute: vi.fn().mockResolvedValue({
@@ -265,7 +263,6 @@ vi.mock("@ag-ui/mastra", () => ({
           for (const event of adapterEvents.items) {
             subscriber.next(event);
           }
-          adapterEvents.beforeComplete?.();
           subscriber.complete();
           return { unsubscribe: vi.fn() };
         },
@@ -560,7 +557,6 @@ describe("createAgUiStream", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     bedrockMocks.streamParts = [];
-    adapterEvents.beforeComplete = undefined;
     promptMocks.getPrompt.mockResolvedValue({
       name: "in-app-agent-system-prompt",
       version: 2,
@@ -571,7 +567,6 @@ describe("createAgUiStream", () => {
   const initializeBasicTracedAgent = async (
     runId: string,
     model = testBedrockModel("test-model"),
-    onComplete?: (outcome?: unknown) => void,
   ) => {
     const { createAgUiStream } = await import("./agent");
     const input = {
@@ -607,7 +602,6 @@ describe("createAgUiStream", () => {
       signal: new AbortController().signal,
       options: {
         model,
-        onComplete,
         langfuseMcp: {
           url: "https://example.com/api/public/mcp",
           publicKey: "pk",
@@ -623,17 +617,6 @@ describe("createAgUiStream", () => {
       },
     });
     await readStream(stream);
-  };
-
-  const completeIterationWith = (finishReason: string, iteration = 1) => {
-    adapterEvents.beforeComplete = () => {
-      getLastAgentConfig()?.defaultOptions?.onIterationComplete?.({
-        iteration,
-        maxIterations: IN_APP_AGENT_MAX_STEPS,
-        isFinal: true,
-        finishReason,
-      });
-    };
   };
 
   it("uses the shared Bedrock default-credential auth", async () => {
@@ -944,62 +927,6 @@ describe("createAgUiStream", () => {
     );
   });
 
-  it.each([
-    {
-      iteration: 1,
-      finishReason: "stop",
-      byStepLimit: false,
-      byOutputLimit: false,
-    },
-    {
-      iteration: 1,
-      finishReason: "length",
-      byStepLimit: false,
-      byOutputLimit: true,
-    },
-    {
-      iteration: IN_APP_AGENT_MAX_STEPS,
-      finishReason: "tool-calls",
-      byStepLimit: true,
-      byOutputLimit: false,
-    },
-    {
-      iteration: IN_APP_AGENT_MAX_STEPS,
-      finishReason: "length",
-      byStepLimit: false,
-      byOutputLimit: true,
-    },
-  ])(
-    "reports truncation for a $finishReason finish on step $iteration",
-    async ({ iteration, finishReason, byStepLimit, byOutputLimit }) => {
-      const onComplete = vi.fn();
-      completeIterationWith(finishReason, iteration);
-
-      await initializeBasicTracedAgent(
-        `run-finish-${finishReason}-${iteration}`,
-        undefined,
-        onComplete,
-      );
-
-      expect(onComplete).toHaveBeenCalledWith({
-        reachedStepLimit: false,
-        truncatedByStepLimit: byStepLimit,
-        truncatedByOutputLimit: byOutputLimit,
-      });
-      expect(instrumentationMocks.instrumentation.end).toHaveBeenCalledWith(
-        byStepLimit || byOutputLimit
-          ? {
-              result: {
-                truncatedByStepLimit: byStepLimit,
-                truncatedByOutputLimit: byOutputLimit,
-                finishReason,
-              },
-            }
-          : {},
-      );
-    },
-  );
-
   it("serializes valid events including adapter snapshots and reasoning messages", async () => {
     const { createAgUiStream } = await import("./agent");
     const input = {
@@ -1258,27 +1185,6 @@ describe("createAgUiStream", () => {
       href: "/project/project-1/widgets/widget-1",
     });
 
-    // Destinations without params receive {}; required params still reject it.
-    await expect(
-      redirectTool?.execute?.({
-        label: "Open alerts",
-        destination: "alerts",
-        params: {},
-      }),
-    ).resolves.toEqual({
-      type: "redirectAction",
-      label: "Open alerts",
-      href: "/project/project-1/alerts",
-    });
-
-    await expect(
-      redirectTool?.execute?.({
-        label: "Open session",
-        destination: "session",
-        params: {},
-      }),
-    ).resolves.toMatchObject({ error: true });
-
     expect(promptMocks.getPrompt).toHaveBeenCalledWith(
       "in-app-agent-system-prompt",
       undefined,
@@ -1290,7 +1196,7 @@ describe("createAgUiStream", () => {
         redirectToolName: IN_APP_AGENT_REDIRECT_TOOL_NAME,
         sandboxFilesystem: expect.stringContaining("<sandbox_filesystem>"),
         screenContext: "",
-        userContext: "",
+        userContext: expect.stringContaining("<user_context>"),
         sidebarHiddenEnvironments: DEFAULT_SIDEBAR_HIDDEN_ENVIRONMENTS.map(
           (environment) => `"${environment}"`,
         ).join(", "),
@@ -1299,6 +1205,14 @@ describe("createAgUiStream", () => {
     expect(
       promptMocks.compile.mock.calls[0]?.[0].sandboxFilesystem,
     ).not.toContain("tool_calls");
+    expect(promptMocks.compile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userContext: expect.stringContaining('"user_name": "Ada Lovelace"'),
+      }),
+    );
+    expect(promptMocks.compile.mock.calls[0]?.[0].userContext).not.toContain(
+      '"current_url"',
+    );
 
     const processor = getLastAgentConfig()?.inputProcessors?.find(
       (item) => item.id === "current-time",
@@ -1313,13 +1227,11 @@ describe("createAgUiStream", () => {
       .at(-1)
       ?.content.find((part) => part.text)?.text;
 
-    expect(laterStepText).toContain("<current_time");
-    expect(laterStepText).toContain("<user_context>");
-    expect(laterStepText).toContain('"user_name": "Ada Lovelace"');
     expect(laterStepText).toContain("<screen_context>");
     expect(laterStepText).toContain(
       '"current_url": "https://cloud.langfuse.com/project/project-1/traces"',
     );
+    expect(laterStepText).not.toContain('"user_name"');
     const baseInstructions = vi.mocked(Agent).mock.calls[0]?.[0].instructions;
     expect(baseInstructions).toEqual(expect.any(Function));
     expect((baseInstructions as () => string)()).toBe(

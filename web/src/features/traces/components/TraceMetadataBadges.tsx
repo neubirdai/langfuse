@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 /**
  * TraceMetadataBadges - Extracted badge components for trace metadata
  *

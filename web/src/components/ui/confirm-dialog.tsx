@@ -56,7 +56,7 @@ export function ConfirmDialog({
   title: React.ReactNode;
   description?: React.ReactNode;
   trigger?: React.ReactNode;
-  confirmLabel?: React.ReactNode;
+  confirmLabel?: string;
   confirmVariant?: ButtonProps["variant"];
   cancelLabel?: string;
   onCancel?: () => void | Promise<void>;

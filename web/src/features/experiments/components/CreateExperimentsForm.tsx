@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import React, { useState } from "react";
 import { Button } from "@/src/components/ui/button";
 import { CheckIcon, ChevronDown, Code2, Cog, Wand2 } from "lucide-react";
@@ -11,7 +10,7 @@ import {
   CardContent,
   CardFooter,
 } from "@/src/components/ui/card";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   DialogHeader,
   DialogTitle,
@@ -32,7 +31,7 @@ import {
   PopoverTrigger,
 } from "@/src/components/ui/popover";
 import Link from "next/link";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { type CreateExperiment } from "@/src/features/experiments/types";
 import { MultiStepExperimentForm } from "@/src/features/experiments/components/MultiStepExperimentForm";
 import { RemoteExperimentUpsertForm } from "@/src/features/experiments/components/RemoteExperimentUpsertForm";
@@ -85,10 +84,6 @@ export const CreateExperimentsForm = ({
   const hasExperimentWriteAccess = useHasProjectAccess({
     projectId,
     scope: "promptExperiments:CUD",
-  });
-  const hasDatasetAccess = useHasProjectAccess({
-    projectId,
-    scope: "datasets:CUD",
   });
   const fixedDatasetId = defaultValues.datasetId;
   const [remoteExperimentDataset, setRemoteExperimentDataset] = useState<
@@ -310,25 +305,14 @@ export const CreateExperimentsForm = ({
                   <div className="flex w-full items-start">
                     <Button
                       className="w-full rounded-r-none"
-                      disabled={
-                        !datasetId ||
-                        !isRemoteExperimentEnabled ||
-                        !hasDatasetAccess
-                      }
+                      disabled={!datasetId || !isRemoteExperimentEnabled}
                       title={
-                        !hasDatasetAccess
-                          ? "You do not have permission to run remote experiments"
-                          : isRemoteExperimentEnabled
-                            ? undefined
-                            : "please edit and enable webhook"
+                        isRemoteExperimentEnabled
+                          ? undefined
+                          : "please edit and enable webhook"
                       }
                       onClick={() => {
-                        if (
-                          !datasetId ||
-                          !isRemoteExperimentEnabled ||
-                          !hasDatasetAccess
-                        )
-                          return;
+                        if (!datasetId || !isRemoteExperimentEnabled) return;
                         setShowRemoteExperimentTriggerModal(true);
                       }}
                     >
@@ -381,8 +365,7 @@ export const CreateExperimentsForm = ({
   if (
     showRemoteExperimentTriggerModal &&
     datasetId &&
-    existingRemoteExperiment.data &&
-    hasDatasetAccess
+    existingRemoteExperiment.data
   ) {
     return (
       <RemoteExperimentTriggerModal

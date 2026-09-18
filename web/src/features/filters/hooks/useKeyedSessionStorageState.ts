@@ -62,13 +62,6 @@ export function useKeyedSessionStorageState<T>(
             ? (next as (value: T) => T)(baseValue)
             : next;
 
-        if (
-          previous.key === storageKey &&
-          Object.is(previous.value, resolved)
-        ) {
-          return previous;
-        }
-
         return {
           key: storageKey,
           value: resolved,

@@ -121,6 +121,7 @@ class MediaTagWidget extends WidgetType {
 
   toDOM() {
     const dom = document.createElement("span");
+    dom.style.verticalAlign = "middle";
     this.id = this.store.register(dom, this.descriptor);
     return dom;
   }

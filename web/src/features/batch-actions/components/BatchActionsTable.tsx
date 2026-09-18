@@ -11,9 +11,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
+import { LocalIsoDate } from "@/src/components/LocalIsoDate";
 import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
 import { createUserTableColumn } from "@/src/components/design-system/table/columns/createUserTableColumn";
-import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
 import { BatchActionStatus } from "@langfuse/shared";
 
 type BatchActionRow = {
@@ -46,16 +46,20 @@ export function BatchActionsTable(props: { projectId: string }) {
   });
 
   const columns: LangfuseColumnDef<BatchActionRow>[] = [
-    createTextTableColumn<BatchActionRow>({
+    {
       accessorKey: "actionType",
+      id: "actionType",
       header: "Action Type",
       size: 200,
-      mapValue: (value) =>
-        value
-          ?.split("-")
+      cell: ({ row }) => {
+        const actionType = row.getValue("actionType") as string;
+        const formattedType = actionType
+          .split("-")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(" "),
-    }),
+          .join(" ");
+        return <span>{formattedType}</span>;
+      },
+    },
     {
       accessorKey: "tableName",
       id: "tableName",
@@ -113,11 +117,20 @@ export function BatchActionsTable(props: { projectId: string }) {
       header: "Created",
       size: 150,
     }),
-    createDateTableColumn<BatchActionRow>({
+    {
       accessorKey: "finishedAt",
+      id: "finishedAt",
       header: "Finished",
       size: 150,
-    }),
+      cell: ({ row }) => {
+        const finishedAt = row.getValue("finishedAt") as Date | null;
+        return finishedAt ? (
+          <LocalIsoDate date={finishedAt} />
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        );
+      },
+    },
     createUserTableColumn<BatchActionRow>({
       accessorKey: "user",
       header: "Created By",

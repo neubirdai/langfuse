@@ -123,7 +123,6 @@ export const SECTION_MATCHING_FILTERS = "Matching filters";
 export const SECTION_VALUES = "Observed values";
 const SECTION_OPERATORS = "Operators";
 const SECTION_PATTERNS = "Patterns";
-const SECTION_PRESENCE = "Presence";
 export const SECTION_RECENT = "Recent searches";
 export const SECTION_MATCH_OPS = "Match operators";
 export const SECTION_COMPARE_OPS = "Comparisons";
@@ -230,10 +229,9 @@ function fieldOptions(
     );
   }
   if (includeVirtual) {
-    // Written per view where it matters (see FieldRegistry.hasExample); the
-    // first nullable field is only the fallback. `has:endTime` on a view
-    // without endTime advertises a filter that cannot resolve.
-    const example = registry.hasExample ?? registry.nullableFields()[0]?.id;
+    // The example names one of THIS view's nullable fields; `has:endTime` on a
+    // view without endTime advertises a filter that cannot resolve.
+    const example = registry.nullableFields()[0]?.id;
     opts.push({
       id: "field:has",
       kind: "field",
@@ -417,64 +415,6 @@ function recentOptions(
   );
 }
 
-/**
- * `has:<field>` / `-has:<field>` for the nullable field the user is typing.
- * Presence filters are otherwise only reachable by knowing the `has:`
- * pseudo-field exists — typing the column name never revealed them.
- */
-function presenceOptions(
-  keyPart: string,
-  registry: FieldRegistry,
-  negated: boolean,
-  rankedFields: CompletionOption[],
-): CompletionOption[] {
-  if (keyPart.length < 2) return [];
-  const exact = registry.resolveField(keyPart);
-  const candidate =
-    exact?.type === "field"
-      ? exact.field
-      : // Not an exact match yet: offer it for the field the list is already
-        // leading with, so the options appear WHILE typing the column name.
-        (() => {
-          const top = rankedFields[0];
-          const id = top?.kind === "field" ? top.fieldId : null;
-          const ref = id === null ? null : registry.resolveField(id);
-          return ref?.type === "field" ? ref.field : null;
-        })();
-  if (candidate === null || candidate === undefined) return [];
-  if (candidate.nullable !== true) return [];
-  // The typed term already carries a `-`; insert only `has:` so the surviving
-  // dash yields `-has:` (a second dash would splice `--has:`). Label/detail
-  // must match that outcome — not the positive copy.
-  if (negated) {
-    return [
-      {
-        id: `presence:-has:${candidate.id}`,
-        kind: "pattern",
-        label: `-has:${candidate.id}`,
-        detail: `${candidate.label} is missing`,
-        insert: `has:${candidate.id} `,
-      },
-    ];
-  }
-  return [
-    {
-      id: `presence:has:${candidate.id}`,
-      kind: "pattern",
-      label: `has:${candidate.id}`,
-      detail: `${candidate.label} has a value`,
-      insert: `has:${candidate.id} `,
-    },
-    {
-      id: `presence:-has:${candidate.id}`,
-      kind: "pattern",
-      label: `-has:${candidate.id}`,
-      detail: `${candidate.label} is missing`,
-      insert: `-has:${candidate.id} `,
-    },
-  ];
-}
-
 function queryPresetSections(
   presetSections: QueryPresetSection[],
   currentQueryText: string,
@@ -511,11 +451,9 @@ const NUMERIC_EXAMPLE: Record<string, string> = {
   timeToFirstToken: "0.5",
   tokensPerSecond: "50",
   inputTokens: "1000",
-  cachedInputTokens: "500",
   outputTokens: "500",
   totalTokens: "1500",
   inputCost: "0.001",
-  cachedInputCost: "0.0005",
   outputCost: "0.001",
   totalCost: "0.01",
   promptVersion: "3",
@@ -983,7 +921,7 @@ function valueStageSections(input: ValueStageInput): {
         // complement (mirrors the free-text → scope path, gated on !negated).
         const scopeSwitches =
           !negated && (f.id === "input" || f.id === "output")
-            ? scopeSwitchOptions(f.id, typed, tokenSpan, registry)
+            ? scopeSwitchOptions(f.id, typed, tokenSpan)
             : [];
         return {
           sections: [
@@ -1188,21 +1126,14 @@ type FullTextScope = "default" | "input" | "output";
 // explicit "this is the default-scope search" option (the anchor) ahead of the
 // input:/output: rewrites. Value-stage switches leave it off, so an `input:`
 // value never offers a no-op switch back to `input:`.
-//
-// The scoped forms are offered only where the registry actually resolves them.
-// Users narrows the events catalog to what its grouped query can answer, and
-// `input:` is not in it — offering the rewrite there would hand the user a
-// token the parser rejects. With nothing left to switch to, the anchor alone is
-// noise, so the section drops out entirely.
 function scopeSwitchOptions(
   current: FullTextScope,
   value: string,
   span: { from: number; to: number },
-  registry: FieldRegistry,
   opts?: { keepCurrentFirst?: boolean },
 ): CompletionOption[] {
   const v = serializeValue(value);
-  const allDefs: { scope: FullTextScope; insert: string; detail: string }[] = [
+  const defs: { scope: FullTextScope; insert: string; detail: string }[] = [
     {
       scope: "input",
       insert: `input:${v}`,
@@ -1216,20 +1147,15 @@ function scopeSwitchOptions(
     {
       scope: "default",
       insert: v,
-      detail: registry.freeTextScopeLabel
-        ? `default: ${registry.freeTextScopeLabel}`
-        : "default full-text search",
+      detail: "default: ids, names, input & output",
     },
   ];
-  const defs = allDefs.filter(
-    (d) =>
-      d.scope === "default" || registry.resolveField(d.scope)?.type === "field",
-  );
-  const alternatives = defs.filter((d) => d.scope !== current);
-  if (alternatives.length === 0) return [];
   const ordered = opts?.keepCurrentFirst
-    ? [...defs.filter((d) => d.scope === current), ...alternatives]
-    : alternatives;
+    ? [
+        ...defs.filter((d) => d.scope === current),
+        ...defs.filter((d) => d.scope !== current),
+      ]
+    : defs.filter((d) => d.scope !== current);
   return ordered.map((d) => ({
     id: `scope:${d.scope}`,
     kind: "pattern" as const,
@@ -1384,8 +1310,6 @@ export function planInputCompletions(
               ? ranked
               : hoistFieldOption(ranked, exactId, allFields);
           })();
-    const presence =
-      colon === -1 ? presenceOptions(keyPart, registry, negated, fields) : [];
     const operators =
       colon === -1 ? rankFilter(OPERATOR_OPTIONS, tokenBody) : [];
     const patterns =
@@ -1434,7 +1358,6 @@ export function planInputCompletions(
             // re-quotes it once.
             run.text,
             { from: run.from, to: run.to },
-            registry,
             // Surface the typed text itself (default scope) as the first option,
             // ahead of the input:/output: rewrites.
             { keepCurrentFirst: true },
@@ -1462,8 +1385,7 @@ export function planInputCompletions(
         operators.length +
         patterns.length +
         matchingFilters.length +
-        searchScopes.length +
-        presence.length ===
+        searchScopes.length ===
       0
     )
       return null;
@@ -1490,7 +1412,6 @@ export function planInputCompletions(
         // and the full-text fallback.
         ...section(SECTION_FIELDS, fields),
         ...section(SECTION_MATCHING_FILTERS, matchingFilters),
-        ...section(SECTION_PRESENCE, presence),
         ...section(SECTION_OPERATORS, operators),
         ...section(SECTION_PATTERNS, patterns),
         ...section(SECTION_SEARCH_IN, searchScopes),

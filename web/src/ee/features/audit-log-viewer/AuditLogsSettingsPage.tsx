@@ -1,13 +1,13 @@
 import Header from "@/src/components/layouts/header";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { AuditLogsTable } from "@/src/ee/features/audit-log-viewer/AuditLogsTable";
-import { useHasEntitlement } from "@/src/features/entitlements";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasEntitlement } from "@/src/features/entitlements/hooks";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 
 export function AuditLogsSettingsPage(props: { projectId: string }) {
   const hasAccess = useHasProjectAccess({
     projectId: props.projectId,
-    scope: "projectAuditLogs:read",
+    scope: "auditLogs:read",
   });
   const hasEntitlement = useHasEntitlement("audit-logs");
 
@@ -18,10 +18,10 @@ export function AuditLogsSettingsPage(props: { projectId: string }) {
     </p>
   ) : !hasAccess ? (
     <Alert>
-      <Alert.Title>Access Denied</Alert.Title>
-      <Alert.Description>
+      <AlertTitle>Access Denied</AlertTitle>
+      <AlertDescription>
         Contact your project administrator to request access.
-      </Alert.Description>
+      </AlertDescription>
     </Alert>
   ) : (
     <AuditLogsTable scope="project" projectId={props.projectId} />

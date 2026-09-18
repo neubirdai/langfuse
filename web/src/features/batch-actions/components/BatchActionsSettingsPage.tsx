@@ -1,7 +1,7 @@
 import Header from "@/src/components/layouts/header";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { SettingsTableCard } from "@/src/components/layouts/settings-table-card";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { BatchActionsTable } from "./BatchActionsTable";
 
 export function BatchActionsSettingsPage(props: { projectId: string }) {
@@ -25,10 +25,10 @@ export function BatchActionsSettingsPage(props: { projectId: string }) {
         </SettingsTableCard>
       ) : (
         <Alert>
-          <Alert.Title>Access Denied</Alert.Title>
-          <Alert.Description>
+          <AlertTitle>Access Denied</AlertTitle>
+          <AlertDescription>
             You do not have permission to view batch actions.
-          </Alert.Description>
+          </AlertDescription>
         </Alert>
       )}
     </>

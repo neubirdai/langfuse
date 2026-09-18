@@ -68,7 +68,7 @@ function asEventInsert(
  *
  * One root event per trace (parent_span_id = ''), plus one event per
  * observation with trace-level fields denormalized.
- * DateTime64 fields are already ClickHouse datetime strings on insert types.
+ * Timestamps are converted from ms to µs (* 1000).
  */
 function buildMatchingEvents(
   traces: TraceRecordInsertType[],
@@ -101,15 +101,15 @@ function buildMatchingEvents(
           input: t.input ?? null,
           output: t.output ?? null,
           metadata: t.metadata ?? {},
-          start_time: t.timestamp,
+          start_time: t.timestamp * 1000,
           end_time: null,
           cost_details: {},
           provided_cost_details: {},
           usage_details: {},
           provided_usage_details: {},
-          created_at: t.created_at,
-          updated_at: t.updated_at,
-          event_ts: t.event_ts,
+          created_at: t.created_at * 1000,
+          updated_at: t.updated_at * 1000,
+          event_ts: t.event_ts * 1000,
         }),
       ),
     );
@@ -153,12 +153,14 @@ function buildMatchingEvents(
           tool_definitions: o.tool_definitions ?? {},
           tool_calls: o.tool_calls ?? [],
           tool_call_names: o.tool_call_names ?? [],
-          start_time: o.start_time,
-          end_time: o.end_time ?? null,
-          completion_start_time: o.completion_start_time ?? null,
-          created_at: o.created_at,
-          updated_at: o.updated_at,
-          event_ts: o.event_ts,
+          start_time: o.start_time * 1000,
+          end_time: o.end_time ? o.end_time * 1000 : null,
+          completion_start_time: o.completion_start_time
+            ? o.completion_start_time * 1000
+            : null,
+          created_at: o.created_at * 1000,
+          updated_at: o.updated_at * 1000,
+          event_ts: o.event_ts * 1000,
         }),
       ),
     );

@@ -1,3 +1,4 @@
+import { StatusBadge } from "@/src/components/ui/StatusBadge/StatusBadge";
 import { encodeFiltersGeneric } from "@langfuse/shared";
 import { LevelCountsDisplay } from "@/src/components/level-counts-display";
 import { DataTable } from "@/src/components/table/data-table";
@@ -8,14 +9,11 @@ import {
 } from "@/src/components/table/data-table-controls";
 import { ResizableFilterLayout } from "@/src/components/table/resizable-filter-layout";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
-import { useColumnVisibility } from "@/src/features/column-visibility";
+import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
 import { EvaluatorFilterCell } from "@/src/features/evals/components/EvaluatorFilterCell";
 import { useDetailPageLists } from "@/src/features/navigate-detail-pages/context";
-import { TableSearchBar } from "@/src/features/search-bar/components/TableSearchBar";
-import { toObservedOptions } from "@/src/features/search-bar/lib/observed-options";
-import { LEGACY_EVALUATORS_FIELD_REGISTRY } from "@/src/features/evals/constants/tableSearchRegistry";
+import { useSidebarFilterState } from "@/src/features/filters/hooks/useSidebarFilterState";
 import { evaluatorFilterConfig } from "@/src/features/filters/config/evaluators-config";
-import { useSidebarFilterState } from "@/src/features/filters";
 import { api } from "@/src/utils/api";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useCallback, useEffect, useState, useMemo } from "react";
@@ -24,7 +22,7 @@ import { usePaginationState } from "@/src/hooks/usePaginationState";
 import { isEventTarget } from "@/src/features/evals/utils/typeHelpers";
 import { useEvalCapabilities } from "@/src/features/evals/hooks/useEvalCapabilities";
 import { useOrderByState } from "@/src/features/orderBy/hooks/useOrderByState";
-import { IdTableCell } from "@/src/components/design-system/table/components/IdTableCell/IdTableCell";
+import TableIdOrName from "@/src/components/table/table-id";
 import { ExternalLinkIcon, Pen } from "lucide-react";
 import { usePeekNavigation } from "@/src/components/table/peek/hooks/usePeekNavigation";
 import { TablePeekViewEvaluatorConfigDetail } from "@/src/components/table/peek/peek-evaluator-config-detail";
@@ -34,7 +32,7 @@ import {
 } from "@/src/server/api/definitions/evalConfigsTable";
 import { Button } from "@/src/components/ui/button";
 import { IconOnlyButton } from "@/src/components/IconOnlyButton";
-import { showSuccessToast } from "@/src/features/notifications";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import {
   Dialog,
   DialogContent,
@@ -45,19 +43,21 @@ import { EvaluatorForm } from "@/src/features/evals/components/evaluator-form";
 import { useRouter } from "next/router";
 import { DeleteEvalConfigButton } from "@/src/components/deleteButton";
 import { MaintainerTooltip } from "@/src/features/evals/components/maintainer-tooltip";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { Skeleton } from "@/src/components/ui/skeleton";
 import { usdFormatter } from "@/src/utils/numbers";
-import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
 import { createNumberTableColumn } from "@/src/components/design-system/table/columns/createNumberTableColumn";
-import { createIdTableColumn } from "@/src/components/design-system/table/columns/createIdTableColumn";
-import { createStatusTableColumn } from "@/src/components/design-system/table/columns/createStatusTableColumn";
 import {
   type EvaluatorDataRow,
   useEvaluatorTableData,
 } from "@/src/features/evals/hooks/useEvaluatorTableData";
 import Spinner from "@/src/components/design-system/Spinner/Spinner";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import {
+  TableBadgeLoadingCell,
+  TableIconButtonLoadingCell,
+  TableTextLoadingCell,
+} from "@/src/components/table/loading-cells";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { useV4UpgradeUiEnabled } from "@/src/features/v4-migration/useV4UpgradeUiEnabled";
 import { V4MigrationBadgeContent } from "@/src/features/v4-migration/V4MigrationBadgeContent";
 import { buildEvaluatorUpgradeUrl } from "@/src/features/v4-migration/evaluatorMigrationUrls";
@@ -126,10 +126,7 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
     },
   );
 
-  const hasAccess = useHasProjectAccess({
-    projectId,
-    scope: "evaluationRule:CUD",
-  });
+  const hasAccess = useHasProjectAccess({ projectId, scope: "evalJob:CUD" });
   // Deprecated evaluators are read-only where new legacy setups are not
   // allowed (cloud); self-hosted deployments keep editing them.
   const { allowLegacy } = useEvalCapabilities(projectId);
@@ -191,9 +188,7 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
 
         return (
           <div className="flex w-[calc(var(--col-scoreName-size)*1px-0.75rem)] items-center gap-2">
-            <div className="min-w-[4px] flex-1">
-              <IdTableCell value={scoreName} />
-            </div>
+            <TableIdOrName value={scoreName} className="min-w-[4px] flex-1" />
             {row.row.original.isLegacy ? (
               <span className="ml-auto justify-self-end">
                 {v4UpgradeUiEnabled ? (
@@ -212,12 +207,20 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
         );
       },
     }),
-    createStatusTableColumn<EvaluatorDataRow, string>({
-      accessorKey: "status",
+    columnHelper.accessor("status", {
       header: "Status",
+      id: "status",
       enableSorting: true,
       size: 80,
-      getStatus: (status) => status?.toLowerCase(),
+      loadingCell: <TableBadgeLoadingCell />,
+      cell: (row) => {
+        const status = row.getValue();
+        return (
+          <div className={status === "FINISHED" ? "pl-3" : undefined}>
+            <StatusBadge type={status.toLowerCase()} />
+          </div>
+        );
+      },
     }),
     createNumberTableColumn<EvaluatorDataRow>({
       accessorKey: "totalCost",
@@ -281,8 +284,8 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
       size: 200,
       loadingCell: (
         <div className="flex items-center gap-2">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-5 w-6 shrink-0 rounded-sm" />
+          <TableTextLoadingCell className="w-32" />
+          <TableBadgeLoadingCell className="w-6" />
         </div>
       ),
       cell: ({ row }) => {
@@ -290,7 +293,7 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
         if (!template) return "template not found";
         return (
           <div className="flex items-center gap-2">
-            <IdTableCell value={template.name} />
+            <TableIdOrName value={template.name} />
             <div className="flex justify-center">
               <MaintainerTooltip maintainer={row.original.maintainer} />
             </div>
@@ -298,14 +301,14 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
         );
       },
     }),
-    createDateTableColumn<EvaluatorDataRow>({
-      accessorKey: "createdAt",
+    columnHelper.accessor("createdAt", {
+      id: "createdAt",
       header: "Created At",
       enableSorting: true,
       size: 150,
     }),
-    createDateTableColumn<EvaluatorDataRow>({
-      accessorKey: "updatedAt",
+    columnHelper.accessor("updatedAt", {
+      id: "updatedAt",
       header: "Updated At",
       enableSorting: true,
       size: 150,
@@ -351,19 +354,23 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
         return <EvaluatorFilterCell filterState={newFilterState} />;
       },
     }),
-    createIdTableColumn<EvaluatorDataRow>({
-      accessorKey: "id",
+    columnHelper.accessor("id", {
       header: "Id",
+      id: "id",
       size: 100,
       enableSorting: false,
       enableHiding: true,
+      cell: (row) => {
+        const id = row.getValue();
+        return id ? <TableIdOrName value={id} /> : undefined;
+      },
     }),
     columnHelper.accessor("actions", {
       header: "Actions",
       id: "actions",
       enableSorting: false,
       size: 100,
-      loadingCell: <Skeleton className="h-5 w-5 shrink-0 rounded-full" />,
+      loadingCell: <TableIconButtonLoadingCell />,
       cell: ({ row }) => {
         const id = row.original.id;
         return (
@@ -433,32 +440,25 @@ export default function EvaluatorTable({ projectId }: { projectId: string }) {
       defaultSidebarCollapsed={evaluatorFilterConfig.defaultSidebarCollapsed}
     >
       <div className="flex h-full w-full flex-col">
-        <TableSearchBar
-          key={queryFilter.draftResetKey}
-          projectId={projectId}
-          tableName={evaluatorFilterConfig.tableName}
-          registry={LEGACY_EVALUATORS_FIELD_REGISTRY}
-          filterState={queryFilter.searchBarFilterState}
-          setFilterState={queryFilter.setFilterState}
-          observed={toObservedOptions(newFilterOptions, false)}
-          search={{ query: searchQuery, setQuery: setSearchQuery }}
-          isV4={false}
-        />
         {/* Toolbar spanning full width */}
         <DataTableToolbar
-          tableName="evaluators"
           columns={columns}
           filterState={queryFilter.filterState}
           columnVisibility={columnVisibility}
           setColumnVisibility={setColumnVisibility}
+          searchConfig={{
+            metadataSearchFields: ["Name"],
+            updateQuery: setSearchQuery,
+            currentQuery: searchQuery ?? undefined,
+            tableAllowsFullTextSearch: false,
+            setSearchType: undefined,
+            searchType: undefined,
+          }}
         />
 
         {/* Content area with sidebar and table */}
         <ResizableFilterLayout>
-          <DataTableControls
-            key={queryFilter.draftResetKey}
-            queryFilter={queryFilter}
-          />
+          <DataTableControls queryFilter={queryFilter} />
 
           <div className="flex flex-1 flex-col overflow-hidden">
             <DataTable

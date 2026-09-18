@@ -258,21 +258,21 @@ Repository files cannot publish or authenticate Cursor Team Marketplace MCPs.
 A team admin must configure these under **Dashboard > Integrations & MCP**.
 Use HTTP/OAuth where available so credentials remain outside the agent VM.
 
-| Tool group         | Cursor distribution                                  | Default policy                                                                                                                                                                                               |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| GitHub             | Cursor GitHub App                                    | Enabled for same-repo branches, draft PRs, CI, and preview status                                                                                                                                            |
-| Langfuse Docs      | Shared HTTP MCP                                      | Enabled, read-only                                                                                                                                                                                           |
-| Linear             | Shared OAuth MCP                                     | Enabled; allow read/search tools only. Cursor Cloud cannot complete that OAuth prompt — maintainers add a personal `LINEAR_API_KEY` secret at https://cursor.com/dashboard/cloud-agents and start a new run. |
-| Datadog EU and US  | Team Marketplace MCPs                                | Enabled; allow logs, metrics, traces, dashboards, and monitor reads only                                                                                                                                     |
-| Metabase           | Team Marketplace MCP                                 | Enabled; allow metadata and query reads only                                                                                                                                                                 |
-| Pylon              | Team Marketplace MCP                                 | Enabled; allow issue/thread/customer reads only                                                                                                                                                              |
-| incident.io        | Team Marketplace MCP                                 | Enabled; allow incident, alert, and follow-up reads only                                                                                                                                                     |
-| ClickHouse Cloud   | Team Marketplace MCP                                 | Enabled; allow organization, service, query, and status reads only                                                                                                                                           |
-| Circleback         | Team Marketplace MCP                                 | Enabled; allow meeting, transcript, calendar, email, and action-item reads only                                                                                                                              |
-| Slack              | Cursor Marketplace integration                       | Enabled; allow search/history/channel reads only                                                                                                                                                             |
-| Google Drive       | Cursor Marketplace integration                       | Enabled; allow file search, metadata, export, and content reads only                                                                                                                                         |
-| PostHog            | Cursor Marketplace integration                       | Enabled; allow analytics, schema, query, and insight reads only                                                                                                                                              |
-| Browser automation | Cursor computer use in Cloud; Playwright MCP locally | Enabled; never reuse a developer's local authenticated browser session                                                                                                                                       |
+| Tool group | Cursor distribution | Default policy |
+| --- | --- | --- |
+| GitHub | Cursor GitHub App | Enabled for same-repo branches, draft PRs, CI, and preview status |
+| Langfuse Docs | Shared HTTP MCP | Enabled, read-only |
+| Linear | Shared OAuth MCP | Enabled; allow read/search tools only |
+| Datadog EU and US | Team Marketplace MCPs | Enabled; allow logs, metrics, traces, dashboards, and monitor reads only |
+| Metabase | Team Marketplace MCP | Enabled; allow metadata and query reads only |
+| Pylon | Team Marketplace MCP | Enabled; allow issue/thread/customer reads only |
+| incident.io | Team Marketplace MCP | Enabled; allow incident, alert, and follow-up reads only |
+| ClickHouse Cloud | Team Marketplace MCP | Enabled; allow organization, service, query, and status reads only |
+| Circleback | Team Marketplace MCP | Enabled; allow meeting, transcript, calendar, email, and action-item reads only |
+| Slack | Cursor Marketplace integration | Enabled; allow search/history/channel reads only |
+| Google Drive | Cursor Marketplace integration | Enabled; allow file search, metadata, export, and content reads only |
+| PostHog | Cursor Marketplace integration | Enabled; allow analytics, schema, query, and insight reads only |
+| Browser automation | Cursor computer use in Cloud; Playwright MCP locally | Enabled; never reuse a developer's local authenticated browser session |
 
 Do not approve create, save, update, delete, comment, reply, send, resolve,
 archive, acknowledge, execute-DDL, or settings-management tools. Review the

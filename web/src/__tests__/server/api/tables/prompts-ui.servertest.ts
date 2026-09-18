@@ -11,7 +11,6 @@ import {
   getObservationMetricsForPromptsFromEvents,
   getObservationsWithPromptName,
   getObservationsWithPromptNameFromEvents,
-  toClickhouseDateTime,
 } from "@langfuse/shared/src/server";
 import { env } from "@/src/env.mjs";
 import { v4 } from "uuid";
@@ -473,7 +472,7 @@ describe("UI Prompts Table", () => {
       const promptId = v4();
       const traceId = v4();
       const spanId = v4();
-      const startTime = Date.parse("2026-07-16T13:42:33.028Z");
+      const startTime = Date.parse("2026-07-16T13:42:33.028Z") * 1000;
       const event = createEvent({
         project_id: projectId,
         trace_id: traceId,
@@ -483,7 +482,7 @@ describe("UI Prompts Table", () => {
         prompt_name: "folder/test-prompt",
         prompt_version: 7,
         start_time: startTime,
-        end_time: startTime + 1_000,
+        end_time: startTime + 1_000_000,
         event_ts: startTime,
         usage_details: { input: 100, output: 200, total: 300 },
         cost_details: { input: 1, output: 2, total: 3 },
@@ -493,8 +492,8 @@ describe("UI Prompts Table", () => {
       await createEventsCh([
         {
           ...event,
-          end_time: toClickhouseDateTime(startTime + 4_000),
-          event_ts: toClickhouseDateTime(startTime + 1_000),
+          end_time: startTime + 4_000_000,
+          event_ts: startTime + 1_000_000,
           usage_details: { input: 400, output: 500, total: 900 },
           cost_details: { input: 4, output: 5, total: 9 },
         },

@@ -15,17 +15,19 @@ import {
   GetUnstableDashboardWidgetsQuery,
   DashboardWidgetIdQuery,
   PatchUnstableDashboardWidgetBody,
-  DashboardIdQuery,
-  GetUnstableDashboardsQuery,
-  PatchUnstableDashboardBody,
-  PostUnstableDashboardBody,
-} from "@/src/features/public-api/server";
+} from "@/src/features/public-api/types/unstable-dashboard-widgets";
 import {
   deletePublicDashboardWidget,
   getPublicDashboardWidget,
   listPublicDashboardWidgets,
   updatePublicDashboardWidget,
-} from "@/src/features/widgets/server";
+} from "@/src/features/widgets/server/public-dashboard-widget-service";
+import {
+  DashboardIdQuery,
+  GetUnstableDashboardsQuery,
+  PatchUnstableDashboardBody,
+  PostUnstableDashboardBody,
+} from "@/src/features/public-api/types/unstable-dashboards";
 import {
   addPublicDashboardPlacement,
   createPublicDashboard,

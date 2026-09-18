@@ -19,7 +19,6 @@ import {
   removeIngestionEventsFromS3AndDeleteClickhouseRefsForTraces,
   StorageService,
   StorageServiceFactory,
-  toClickhouseDateTime,
 } from "@langfuse/shared/src/server";
 import { randomUUID } from "crypto";
 import { processClickhouseTraceDelete } from "../features/traces/processClickhouseTraceDelete";
@@ -440,8 +439,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/traces/${traceId}-trace.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
         {
           id: randomUUID(),
@@ -451,8 +450,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/observation/${traceId}-observation.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
         {
           id: randomUUID(),
@@ -462,8 +461,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/score/${traceId}-score.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
       ],
     });
@@ -510,8 +509,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: bucketPath,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
       ],
     });
@@ -595,8 +594,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: bucketPath,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
       ],
     });
@@ -676,8 +675,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/traces/${traceId}-trace.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
         {
           id: randomUUID(),
@@ -687,8 +686,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/observation/${observationId}-observation.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
         {
           id: randomUUID(),
@@ -698,8 +697,8 @@ describe("trace deletion", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: `${projectId}/score/${scoreId}-score.json`,
-          created_at: toClickhouseDateTime(),
-          updated_at: toClickhouseDateTime(),
+          created_at: new Date().getTime(),
+          updated_at: new Date().getTime(),
         },
       ],
     });

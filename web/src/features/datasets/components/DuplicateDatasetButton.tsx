@@ -2,7 +2,7 @@ import { useRouter } from "next/router";
 import { Button } from "@/src/components/ui/button";
 import { api } from "@/src/utils/api";
 import { Copy } from "lucide-react";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 
 export const DuplicateDatasetButton: React.FC<{
   projectId: string;

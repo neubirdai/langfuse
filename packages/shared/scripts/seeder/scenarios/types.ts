@@ -18,7 +18,7 @@ export type ScenarioFlag = {
 
 export type SeedSummary = {
   scenario: string;
-  target: "clickhouse" | "api";
+  target: "clickhouse";
   params: Record<string, string | number | boolean>;
   projectId: string;
   environment: string;
@@ -50,8 +50,6 @@ export type ScenarioDefinition = {
   flags: ScenarioFlag[];
   /** true if the scenario supports mirroring rows into v4 events tables */
   supportsV4: boolean;
-  /** API scenarios authenticate against ctx.baseUrl and do not need local datastore preflight. */
-  target?: "local" | "api";
   run: (
     ctx: ScenarioContext,
     params: Record<string, string | number | boolean>,

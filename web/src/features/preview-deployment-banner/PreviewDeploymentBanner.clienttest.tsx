@@ -20,6 +20,11 @@ describe("PreviewDeploymentBanner", () => {
     for (const key of Object.keys(h.env)) delete h.env[key];
   });
 
+  it("renders nothing when the preview env vars are unset", () => {
+    const { container } = render(<PreviewDeploymentBanner />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("links the PR and the author and shows the update time", () => {
     h.env.NEXT_PUBLIC_PREVIEW_PR_URL =
       "https://github.com/langfuse/langfuse/pull/15580";
@@ -28,11 +33,7 @@ describe("PreviewDeploymentBanner", () => {
       Date.now() - 2 * 60 * 60 * 1000,
     ).toISOString();
 
-    render(
-      <PreviewDeploymentBanner
-        prUrl={h.env.NEXT_PUBLIC_PREVIEW_PR_URL as string}
-      />,
-    );
+    render(<PreviewDeploymentBanner />);
 
     expect(screen.getByRole("link", { name: "PR #15580" })).toHaveAttribute(
       "href",
@@ -50,11 +51,7 @@ describe("PreviewDeploymentBanner", () => {
       "https://github.com/langfuse/langfuse/pull/1";
     h.env.NEXT_PUBLIC_PREVIEW_LAST_UPDATED = "not-a-date";
 
-    render(
-      <PreviewDeploymentBanner
-        prUrl={h.env.NEXT_PUBLIC_PREVIEW_PR_URL as string}
-      />,
-    );
+    render(<PreviewDeploymentBanner />);
 
     expect(screen.getByRole("link", { name: "PR #1" })).toBeInTheDocument();
     expect(screen.queryByText(/updated/)).not.toBeInTheDocument();
@@ -63,11 +60,7 @@ describe("PreviewDeploymentBanner", () => {
   it("falls back to a generic link label when the URL has no PR number", () => {
     h.env.NEXT_PUBLIC_PREVIEW_PR_URL = "https://github.com/langfuse/langfuse";
 
-    render(
-      <PreviewDeploymentBanner
-        prUrl={h.env.NEXT_PUBLIC_PREVIEW_PR_URL as string}
-      />,
-    );
+    render(<PreviewDeploymentBanner />);
 
     expect(
       screen.getByRole("link", { name: "a pull request" }),

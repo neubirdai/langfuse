@@ -5,7 +5,6 @@ import {
   type ModelConfig,
   type EvalTemplateSourceCodeLanguage,
   type EvalTemplateType,
-  type EvaluatorPromptMessage,
 } from "@langfuse/shared";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
@@ -19,9 +18,9 @@ import type {
 } from "@/src/features/evals/v2/types/variableMapping";
 import type { JudgeModel } from "@/src/features/evals/v2/judgeModel";
 import type { ScoreOutputFormState } from "@/src/features/evals/v2/scoreOutputTypes";
-import type { NormalizedEvaluatorDefinition } from "@/src/features/evals/v2/server/evaluators/evaluatorTypes";
+import type { EvaluatorDefinition } from "@/src/features/evals/v2/server/evaluators/evaluatorTypes";
 import { toScoreOutputFormState } from "@/src/features/evals/v2/fns/scoreOutput/toScoreOutputFormState";
-import { safeRandomUUID } from "@/src/utils/safe-random-uuid";
+import { EXPERIMENTS_AND_EVALS_EXCLUSION_FILTERS } from "@/src/features/evals/v2/constants/experimentAndEvalFilters";
 
 const DEFAULT_PROMPT = `Evaluate the quality of the response.
 
@@ -29,7 +28,7 @@ Input: {{input}}
 Response: {{output}}`;
 
 function buildInitialVariableFields(
-  definition: NormalizedEvaluatorDefinition | null | undefined,
+  definition: EvaluatorDefinition | null | undefined,
 ): Record<string, VariableFieldState> {
   if (definition?.type !== "LLM_AS_JUDGE") return {};
 
@@ -57,10 +56,7 @@ function buildInitialVariableFields(
 
 type EvaluatorSetupStoreActions = {
   setType: (type: EvalTemplateType) => void;
-  setPromptMessage: (index: number, message: EvaluatorPromptMessage) => void;
-  addPromptMessage: () => void;
-  removePromptMessage: (index: number) => void;
-  reorderPromptMessage: (fromIndex: number, toIndex: number) => void;
+  setPrompt: (prompt: string) => void;
   setSourceCode: (sourceCode: string) => void;
   setSourceCodeLanguage: (
     sourceCodeLanguage: EvalTemplateSourceCodeLanguage,
@@ -82,15 +78,13 @@ type EvaluatorSetupStoreActions = {
   setSampleFilter: (sampleFilter: FilterState) => void;
   setPromptPreviewEnabled: (promptPreviewEnabled: boolean) => void;
   setTestPanelOpen: (testPanelOpen: boolean) => void;
-  applyDefinition: (definition: NormalizedEvaluatorDefinition) => void;
+  applyDefinition: (definition: EvaluatorDefinition) => void;
 };
 
 export type EvaluatorSetupStoreState = {
-  initialDefinition: NormalizedEvaluatorDefinition | undefined;
+  initialDefinition: EvaluatorDefinition | undefined;
   type: EvalTemplateType;
-  promptMessages: EvaluatorPromptMessage[];
-  /** Stable client-only ids used by drag-and-drop; never persisted. */
-  promptMessageIds: string[];
+  prompt: string;
   sourceCode: string;
   sourceCodeLanguage: EvalTemplateSourceCodeLanguage;
   sourceCodeDrafts: Partial<Record<EvalTemplateSourceCodeLanguage, string>>;
@@ -129,7 +123,7 @@ export function createEvaluatorSetupStore({
   initialEvaluator: {
     name: string;
     description: string | null;
-    definition: NormalizedEvaluatorDefinition;
+    definition: EvaluatorDefinition;
   } | null;
   initialSampleFilter?: FilterState;
   initialType?: EvalTemplateType;
@@ -146,19 +140,16 @@ export function createEvaluatorSetupStore({
       ? initialDefinition.sourceCode
       : getDefaultCodeEvalSource(initialSourceCodeLanguage);
 
-  const initialPromptMessages =
-    initialDefinition?.type === "LLM_AS_JUDGE"
-      ? initialDefinition.promptMessages
-      : [{ role: "user" as const, content: DEFAULT_PROMPT }];
-
   return createStore<EvaluatorSetupStoreState>((set) => ({
     initialDefinition,
     type:
       initialDefinition?.type ??
       initialType ??
       EvalTemplateTypeEnum.LLM_AS_JUDGE,
-    promptMessages: initialPromptMessages,
-    promptMessageIds: initialPromptMessages.map(() => safeRandomUUID()),
+    prompt:
+      initialDefinition?.type === "LLM_AS_JUDGE"
+        ? initialDefinition.prompt
+        : DEFAULT_PROMPT,
     sourceCode: initialSourceCode,
     sourceCodeLanguage: initialSourceCodeLanguage,
     sourceCodeDrafts: {
@@ -196,62 +187,13 @@ export function createEvaluatorSetupStore({
     selectedObservation: null,
     sampleFilter: initialSampleFilter ?? [
       ...DEFAULT_OBSERVATION_FILTER_WHEN_REMAPPING,
+      ...EXPERIMENTS_AND_EVALS_EXCLUSION_FILTERS,
     ],
     promptPreviewEnabled: false,
     testPanelOpen: true,
     actions: {
       setType: (type) => set({ type }),
-      setPromptMessage: (index, message) =>
-        set((state) => {
-          const promptMessages = state.promptMessages.map((current, i) =>
-            i === index ? message : current,
-          );
-          return { promptMessages };
-        }),
-      addPromptMessage: () =>
-        set((state) => ({
-          promptMessages: [
-            ...state.promptMessages,
-            { role: "user", content: "" },
-          ],
-          promptMessageIds: [...state.promptMessageIds, safeRandomUUID()],
-        })),
-      removePromptMessage: (index) =>
-        set((state) => {
-          if (state.promptMessages.length === 1) return state;
-          const promptMessages = state.promptMessages.filter(
-            (_, i) => i !== index,
-          );
-          return {
-            promptMessages,
-            promptMessageIds: state.promptMessageIds.filter(
-              (_, i) => i !== index,
-            ),
-          };
-        }),
-      reorderPromptMessage: (fromIndex, toIndex) =>
-        set((state) => {
-          if (
-            fromIndex === toIndex ||
-            fromIndex < 0 ||
-            toIndex < 0 ||
-            fromIndex >= state.promptMessages.length ||
-            toIndex >= state.promptMessages.length
-          )
-            return state;
-
-          const reorder = <T>(items: T[]) => {
-            const result = [...items];
-            const [item] = result.splice(fromIndex, 1);
-            result.splice(toIndex, 0, item);
-            return result;
-          };
-          const promptMessages = reorder(state.promptMessages);
-          return {
-            promptMessages,
-            promptMessageIds: reorder(state.promptMessageIds),
-          };
-        }),
+      setPrompt: (prompt) => set({ prompt }),
       setSourceCode: (sourceCode) =>
         set((state) => ({
           sourceCode,
@@ -331,10 +273,7 @@ export function createEvaluatorSetupStore({
 
           return {
             type: definition.type,
-            promptMessages: definition.promptMessages,
-            promptMessageIds: definition.promptMessages.map(() =>
-              safeRandomUUID(),
-            ),
+            prompt: definition.prompt,
             scoreOutput: toScoreOutputFormState(definition.outputDefinition),
             variableFields: buildInitialVariableFields(definition),
             activeMapping: null,

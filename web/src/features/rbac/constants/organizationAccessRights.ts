@@ -1,17 +1,16 @@
 import { type Role } from "@langfuse/shared/src/db";
 
-export const organizationScopes = [
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used via typeof
+const organizationScopes = [
   "projects:create",
   "projects:transfer_org",
   "organization:CRUD_apiKeys",
   "organization:update",
   "organization:delete",
-  "gateway:manage",
-  "gateway:invoke",
   "organizationMembers:read",
   "organizationMembers:CUD",
   "langfuseCloudBilling:CRUD",
-  "orgAuditLogs:read",
+  "auditLogs:read",
 ] as const;
 
 // type string of all Resource:Action, e.g. "organizationMembers:read"
@@ -24,24 +23,20 @@ export const organizationRoleAccessRights: Record<Role, OrganizationScope[]> = {
     "organization:CRUD_apiKeys",
     "organization:update",
     "organization:delete",
-    "gateway:manage",
-    "gateway:invoke",
     "organizationMembers:CUD",
     "organizationMembers:read",
     "langfuseCloudBilling:CRUD",
-    "orgAuditLogs:read",
+    "auditLogs:read",
   ],
   ADMIN: [
     "projects:create",
     "projects:transfer_org",
     "organization:update",
-    "gateway:manage",
-    "gateway:invoke",
     "organizationMembers:CUD",
     "organizationMembers:read",
-    "orgAuditLogs:read",
+    "auditLogs:read",
   ],
-  MEMBER: ["gateway:invoke", "organizationMembers:read"],
+  MEMBER: ["organizationMembers:read"],
   VIEWER: [],
   NONE: [],
 };

@@ -17,7 +17,6 @@ import { env } from "@/src/env.mjs";
 export default withMiddlewares({
   POST: createAuthedProjectAPIRoute({
     name: "Create Dataset Run Item",
-    action: "datasets:CUD",
     bodySchema: PostDatasetRunItemsV1Body,
     responseSchema: PostDatasetRunItemsV1Response,
     rateLimitResource: "datasets",
@@ -39,7 +38,6 @@ export default withMiddlewares({
   }),
   GET: createAuthedProjectAPIRoute({
     name: "Get Dataset Run Items",
-    action: "datasets:read",
     querySchema: GetDatasetRunItemsV1Query,
     responseSchema: GetDatasetRunItemsV1Response,
     deprecation: DATASET_RUN_ITEMS_DEPRECATION,

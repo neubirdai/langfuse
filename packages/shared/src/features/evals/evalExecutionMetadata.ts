@@ -13,9 +13,3 @@ export const EvalExecutionMetadataKey = {
 
 export type EvalExecutionMetadataKey =
   (typeof EvalExecutionMetadataKey)[keyof typeof EvalExecutionMetadataKey];
-
-export type EvalExecutionContext = {
-  evaluatorId?: string;
-  evaluationRuleId?: string;
-  evaluatorExecutionIsTest: boolean;
-};

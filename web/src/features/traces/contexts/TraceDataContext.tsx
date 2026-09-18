@@ -32,7 +32,7 @@ import {
   findEarliestStartTime,
 } from "@/src/features/traces/fns/timelineCalculations";
 import { useViewPreferences } from "./ViewPreferencesContext";
-import { useMergedScores } from "@/src/features/scores";
+import { useMergedScores } from "@/src/features/scores/lib/useMergedScores";
 import { traceLevelScoreOwnerIds } from "@/src/features/traces/fns/nodeScores";
 
 type TraceType = Omit<

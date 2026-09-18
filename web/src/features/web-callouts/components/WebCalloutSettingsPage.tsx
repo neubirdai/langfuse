@@ -1,5 +1,4 @@
 /* eslint-disable @repo/no-abstracted-overlay-trigger */
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Pencil, Plus, Trash2, Webhook, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -8,7 +7,7 @@ import { z } from "zod";
 
 import { ActionButton } from "@/src/components/ActionButton";
 import { StatusBadge } from "@/src/components/ui/StatusBadge/StatusBadge";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import {
@@ -45,7 +44,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   WEB_CALLOUT_BLOCKED_HEADER_NAMES,
   WEB_CALLOUT_HEADER_NAME_PATTERN,
@@ -143,10 +144,10 @@ export function WebCalloutSettingsPage(props: { projectId: string }) {
     return (
       <div>
         <Alert>
-          <Alert.Title>Access Denied</Alert.Title>
-          <Alert.Description>
+          <AlertTitle>Access Denied</AlertTitle>
+          <AlertDescription>
             You do not have permission to manage integrations for this project.
-          </Alert.Description>
+          </AlertDescription>
         </Alert>
       </div>
     );

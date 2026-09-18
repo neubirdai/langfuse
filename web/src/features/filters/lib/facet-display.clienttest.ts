@@ -218,11 +218,6 @@ describe("getFacetSummary", () => {
       type: "numeric",
       isActive: true,
       value: [0.5, 30],
-      conditions: [
-        { column: "col", type: "number", operator: ">=", value: 0.5 },
-        { column: "col", type: "number", operator: "<=", value: 30 },
-      ],
-      onRemoveCondition: () => {},
       min: 0,
       max: 60,
       unit: "s",

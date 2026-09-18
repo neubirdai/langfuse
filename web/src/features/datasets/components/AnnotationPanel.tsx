@@ -8,13 +8,11 @@ import { Skeleton } from "@/src/components/ui/skeleton";
 import useSessionStorage from "@/src/components/useSessionStorage";
 import { CommentsSection } from "@/src/features/annotation-queues/components/shared/CommentsSection";
 import { useActiveCell } from "@/src/features/datasets/contexts/ActiveCellContext";
-import {
-  AnnotationForm,
-  decomposeAggregateScoreKey,
-} from "@/src/features/scores";
+import { AnnotationForm } from "@/src/features/scores/components/AnnotationForm";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { decomposeAggregateScoreKey } from "@/src/features/scores/lib/aggregateScores";
 
 export const AnnotationPanel = ({ projectId }: { projectId: string }) => {
   const [hasCommentDraft, setHasCommentDraft] = useState(false);

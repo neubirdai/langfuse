@@ -7,8 +7,8 @@ import { format as formatWithPrettier } from "prettier";
 
 const packageRoot = resolve(new URL("..", import.meta.url).pathname);
 const generatedPath = resolve(packageRoot, "src/generated/skills.js");
-const sourceRef = process.env.LANGFUSE_SKILLS_REF ?? "main";
-const sourceApiUrl = `https://api.github.com/repos/langfuse/skills/contents/skills/langfuse/references?ref=${encodeURIComponent(sourceRef)}`;
+const sourceApiUrl =
+  "https://api.github.com/repos/langfuse/skills/contents/skills/langfuse/references?ref=main";
 const isCheckMode = process.argv.includes("--check");
 
 const getGitHubHeaders = () => ({
@@ -23,9 +23,7 @@ const fetchResponse = async (url) => {
   const response = await fetch(url, { headers: getGitHubHeaders() });
 
   if (!response.ok) {
-    throw new Error(
-      `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
   }
 
   return response;
@@ -36,9 +34,7 @@ const listRemoteMarkdownFiles = async () => {
   const entries = await response.json();
 
   if (!Array.isArray(entries)) {
-    throw new Error(
-      "Unexpected GitHub API response while listing remote skills",
-    );
+    throw new Error("Unexpected GitHub API response while listing remote skills");
   }
 
   return entries
@@ -71,7 +67,10 @@ const parseSkill = (fileName, markdown) => {
   }
 
   for (const key of ["name", "description"]) {
-    if (metadata[key]?.startsWith("'") && metadata[key]?.endsWith("'")) {
+    if (
+      metadata[key]?.startsWith("'") &&
+      metadata[key]?.endsWith("'")
+    ) {
       metadata[key] = metadata[key].slice(1, -1).replaceAll("''", "'");
     }
   }
@@ -113,7 +112,12 @@ const renderGeneratedModule = async (skills) =>
 // Do not edit it manually.
 
 exports.LANGFUSE_SKILLS = [
-${skills.map((skill) => `  ${JSON.stringify(skill)},`).join("\n")}
+${skills
+  .map(
+    (skill) =>
+      `  ${JSON.stringify(skill)},`,
+  )
+  .join("\n")}
 ];
 `,
     { parser: "babel" },

@@ -19,7 +19,7 @@ import {
   PostDashboardPlacementResponse,
   PostUnstableDashboardResponse,
 } from "@/src/features/public-api/types/unstable-dashboards";
-import { StructuredPublicApiErrorResponse } from "@/src/features/public-api/types/structuredPublicApiErrorSchema";
+import { StructuredPublicApiErrorResponse } from "@/src/features/public-api/types/unstable-public-evals-contract";
 import { createOrgProjectAndApiKey } from "@langfuse/shared/src/server";
 import { prisma } from "@langfuse/shared/src/db";
 import { nanoid } from "nanoid";

@@ -4,11 +4,9 @@ import {
   createPromptForApi,
   listPromptsForApi,
 } from "@/src/features/prompts/server/prompt-api-service";
-import {
-  withMiddlewares,
-  RateLimitService,
-} from "@/src/features/public-api/server";
+import { withMiddlewares } from "@/src/features/public-api/server/withMiddlewares";
 import { authorizePromptRequestOrThrow } from "../utils/authorizePromptRequest";
+import { RateLimitService } from "@/src/features/public-api/server/RateLimitService";
 import { CreatePromptSchema, GetPromptsMetaSchema } from "@langfuse/shared";
 
 const getPromptsHandler = async (req: NextApiRequest, res: NextApiResponse) => {

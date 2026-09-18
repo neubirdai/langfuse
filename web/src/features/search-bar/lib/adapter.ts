@@ -161,7 +161,6 @@ export function astToFilterState(
   }
 
   const defaultTextFilter = lowerDefaultTextField(ctx);
-  ctx.errors.push(...(registry.filterStateErrors?.(ctx.filters) ?? []));
 
   return {
     filters: ctx.filters,
@@ -420,9 +419,8 @@ function lowerText(
     // none-of (negated) via stringOptions (string columns accept it). A single
     // NEGATED exact (`-name:=abc`) is exact-inequality: its only faithful flat
     // form is stringOptions none-of, since there is no `string !=`. A single
-    // POSITIVE exact uses the owning column's shape: categorical facets need
-    // stringOptions even for one value so the selected checkbox stays visible.
-    if (node.values.length > 1 || field.exactMatchUsesOptions) {
+    // POSITIVE exact stays the plain `string =`.
+    if (node.values.length > 1) {
       out.push({
         type: "stringOptions",
         column: field.id,
@@ -470,18 +468,11 @@ function lowerText(
     return;
   }
   if (field.syncMode === "exactOption") {
-    const values = field.filterValueByDisplayValue
-      ? node.values.map((value) => field.filterValueByDisplayValue!.get(value))
-      : node.values;
-    if (values.some((value) => value === undefined)) {
-      errors.push(`"${field.id}" contains an unknown option`);
-      return;
-    }
     out.push({
       type: "stringOptions",
-      column: field.filterColumn ?? field.id,
+      column: field.id,
       operator: negated ? "none of" : "any of",
-      value: values as string[],
+      value: node.values,
     });
     return;
   }
@@ -875,7 +866,7 @@ function lowerHas(
     }
     out.push({
       type: "null",
-      column: target.field.filterColumn ?? target.field.id,
+      column: target.field.id,
       operator: negated ? "is null" : "is not null",
       value: "",
     });

@@ -15,16 +15,17 @@ import {
 import startCase from "lodash/startCase";
 import {
   ChartConfigSchema,
+  DashboardWidgetChartType,
   DimensionSchema,
   MetricSchema,
   singleFilter,
   type FilterState,
 } from "@langfuse/shared";
-import { dashboardWidgetChartTypeSchema } from "@/src/features/widgets/lib/dashboardWidgetChartTypes";
 import {
   MAX_PIVOT_TABLE_DIMENSIONS,
   MAX_PIVOT_TABLE_METRICS,
 } from "@/src/features/widgets/utils/pivot-table-utils";
+const dashboardWidgetChartTypeSchema = z.enum(DashboardWidgetChartType);
 const widgetMetricSchema = MetricSchema.extend({
   agg: metricAggregations,
 });
@@ -466,7 +467,7 @@ function normalizeImportedWidgetVersion(widget: WidgetImport): WidgetImport {
 export function parseImportedWidgetJson(params: {
   parsedJson: unknown;
   optionSets?: WidgetImportOptionSets;
-  isV4: boolean;
+  isBetaEnabled: boolean;
 }): { widget: WidgetImport; removedValues: boolean; removedFilters: boolean } {
   const allowedValuesByColumn = params.optionSets
     ? buildWidgetImportAllowedValues(params.optionSets, params.parsedJson)
@@ -492,7 +493,7 @@ export function parseImportedWidgetJson(params: {
       filters: normalizedWidget.filters,
     },
     baseMinVersion: normalizedWidget.minVersion ?? 1,
-    activeVersion: params.isV4 ? "v2" : "v1",
+    activeVersion: params.isBetaEnabled ? "v2" : "v1",
   });
 
   validateImportedWidget({
@@ -506,7 +507,7 @@ export function parseImportedWidgetJson(params: {
 export async function importWidgetFile(params: {
   file: File;
   optionSets: WidgetImportOptionSets;
-  isV4: boolean;
+  isBetaEnabled: boolean;
 }): Promise<ImportedWidgetResult> {
   const rawContent = await params.file.text();
   const parsedJson: unknown = JSON.parse(rawContent);
@@ -514,7 +515,7 @@ export async function importWidgetFile(params: {
   const { widget, removedValues, removedFilters } = parseImportedWidgetJson({
     parsedJson,
     optionSets: params.optionSets,
-    isV4: params.isV4,
+    isBetaEnabled: params.isBetaEnabled,
   });
 
   return {
@@ -537,7 +538,7 @@ export type PastedWidgetParseResult =
  */
 export function parsePastedWidget(
   text: string,
-  params: { isV4: boolean },
+  params: { isBetaEnabled: boolean },
 ): PastedWidgetParseResult {
   let parsedJson: unknown;
   try {
@@ -564,7 +565,7 @@ export function parsePastedWidget(
   try {
     const { widget, removedFilters } = parseImportedWidgetJson({
       parsedJson,
-      isV4: params.isV4,
+      isBetaEnabled: params.isBetaEnabled,
     });
     return { status: "widget", widget, removedFilters };
   } catch {

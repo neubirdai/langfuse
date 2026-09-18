@@ -23,11 +23,9 @@ import {
   CollapsibleTrigger,
 } from "@/src/components/ui/collapsible";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import {
-  getScoreDataTypeIcon,
-  MultiSelectKeyValues,
-} from "@/src/features/scores";
+import { MultiSelectKeyValues } from "@/src/features/scores/components/multi-select-key-values";
 import { DropdownMenuItemWithSecondaryAction } from "@/src/components/ui/dropdown-menu";
+import { getScoreDataTypeIcon } from "@/src/features/scores/lib/scoreColumns";
 import {
   CreateQueueWithAssignmentsData,
   type CreateQueueWithAssignments,
@@ -86,7 +84,6 @@ export function AnnotationQueueFormDialogContent({
     allNames: queueNameOptions,
     form,
     errorMessage: "Queue name already exists.",
-    whitelistedName: mode === "edit" ? initialValues.name : undefined,
   });
 
   const handleScoreConfigValueChange = (values: Record<string, string>[]) => {

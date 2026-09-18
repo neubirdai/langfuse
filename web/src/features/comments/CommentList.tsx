@@ -1,5 +1,9 @@
-/* eslint-disable @repo/no-style-props, @repo/no-null-render */
-import { Avatar } from "@/src/components/design-system/Avatar/Avatar";
+/* eslint-disable @repo/no-style-props */
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/src/components/ui/avatar";
 import { Button } from "@/src/components/ui/button";
 import { KeyboardShortcut } from "@/src/components/design-system/KeyboardShortcut/KeyboardShortcut";
 import {
@@ -22,7 +26,7 @@ import {
 import { MarkdownView } from "@/src/components/ui/MarkdownViewer";
 import { Textarea } from "@/src/components/ui/textarea";
 import { Input } from "@/src/components/ui/input";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { api } from "@/src/utils/api";
 import { getRelativeTimestampFromNow } from "@/src/utils/dates";
 import { cn } from "@/src/utils/tailwind";
@@ -80,7 +84,6 @@ export function CommentList({
   projectId,
   objectId,
   objectType,
-  objectStartTime,
   cardView = false,
   className,
   onDraftChange,
@@ -93,7 +96,6 @@ export function CommentList({
   projectId: string;
   objectId: string;
   objectType: CommentObjectType;
-  objectStartTime?: Date | null;
   cardView?: boolean;
   className?: string;
   onDraftChange?: (hasDraft: boolean) => void;
@@ -424,7 +426,6 @@ export function CommentList({
   function onSubmit(values: z.infer<typeof CreateCommentData>) {
     createCommentMutation.mutateAsync({
       ...values,
-      objectStartTime: objectStartTime ?? undefined,
       dataField: pendingSelection?.dataField,
       path: pendingSelection?.path,
       rangeStart: pendingSelection?.rangeStart,
@@ -568,13 +569,18 @@ export function CommentList({
                     : "border-border/40 hover:bg-muted/20",
                 )}
               >
-                <Avatar
-                  size="sm"
-                  src={comment.authorUserImage ?? undefined}
-                  displayName={
-                    comment.authorUserName ?? comment.authorUserId ?? "User"
-                  }
-                />
+                <Avatar className="h-6 w-6">
+                  <AvatarImage src={comment.authorUserImage ?? undefined} />
+                  <AvatarFallback className="text-xs">
+                    {comment.authorUserName
+                      ? comment.authorUserName
+                          .split(" ")
+                          .map((word) => word[0])
+                          .slice(0, 2)
+                          .concat("")
+                      : (comment.authorUserId ?? "U")}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="min-w-0">
                   {/* Name + timestamp inline */}
                   <div className="mb-1.5 flex items-center gap-2 pt-1.5 text-xs leading-none">

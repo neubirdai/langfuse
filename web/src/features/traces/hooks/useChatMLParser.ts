@@ -18,7 +18,6 @@ interface ToolDefinition {
   name: string;
   description?: string;
   parameters?: Record<string, unknown>;
-  type?: string;
 }
 
 export interface ToolCallInvocation {
@@ -26,14 +25,6 @@ export interface ToolCallInvocation {
   name: string;
   arguments?: unknown;
   invocationNumber: number;
-}
-
-export interface ToolCallBookkeeping {
-  allTools: ToolDefinition[];
-  toolCallCounts: Map<string, number>;
-  toolCallsByName: Map<string, ToolCallInvocation[]>;
-  messageToToolCallNumbers: Map<number, number[]>;
-  toolNameToDefinitionNumber: Map<string, number>;
 }
 
 // Result from ChatML parsing hook
@@ -97,11 +88,18 @@ function getToolCallArguments(toolCall: unknown): unknown {
  * result has any conversation representation without relying on observation
  * types.
  */
-export function computeToolCallBookkeeping(
-  messages: ChatMlMessage[],
-  inputMessageCount: number,
-  additionalTools: ToolDefinition[] = [],
-): ToolCallBookkeeping {
+function parseChatML(
+  parsedInput: unknown,
+  parsedOutput: unknown,
+  parsedMetadata: unknown,
+  observationName: string | undefined,
+): ChatMLParserResult {
+  const ctx = { metadata: parsedMetadata, observationName };
+  const inResult = normalizeInput(parsedInput, ctx);
+  const outResult = normalizeOutput(parsedOutput, ctx);
+  const outputClean = cleanLegacyOutput(parsedOutput, parsedOutput);
+  const messages = combineInputOutputMessages(inResult, outResult, outputClean);
+
   const toolsMap = new Map<string, ToolDefinition>();
   for (const message of messages) {
     if (message.tools && Array.isArray(message.tools)) {
@@ -112,12 +110,8 @@ export function computeToolCallBookkeeping(
       }
     }
   }
-  for (const tool of additionalTools) {
-    if (!toolsMap.has(tool.name)) {
-      toolsMap.set(tool.name, tool);
-    }
-  }
 
+  const inputMessageCount = inResult.success ? inResult.data.length : 0;
   let toolCallCounter = 0;
   const messageToToolCallNumbers = new Map<number, number[]>();
   const toolCallCounts = new Map<string, number>();
@@ -173,68 +167,17 @@ export function computeToolCallBookkeeping(
   });
 
   return {
+    canDisplayAsChat:
+      (inResult.success || outResult.success) && messages.length > 0,
+    allMessages: messages as ChatMlMessage[],
+    additionalInput: extractAdditionalInput(parsedInput),
     allTools: sortedTools,
     toolCallCounts,
     toolCallsByName,
     messageToToolCallNumbers,
     toolNameToDefinitionNumber,
+    inputMessageCount,
   };
-}
-
-/**
- * Parse already-decoded I/O into the same ChatML representation used by the
- * pretty preview. Kept pure so parent surfaces can decide whether a filtered
- * result has any conversation representation without relying on observation
- * types.
- */
-function emptyChatMLParserResult(): ChatMLParserResult {
-  return {
-    canDisplayAsChat: false,
-    allMessages: [],
-    additionalInput: undefined,
-    allTools: [],
-    toolCallCounts: new Map(),
-    toolCallsByName: new Map(),
-    messageToToolCallNumbers: new Map(),
-    toolNameToDefinitionNumber: new Map(),
-    inputMessageCount: 0,
-  };
-}
-
-export function parseChatML(
-  parsedInput: unknown,
-  parsedOutput: unknown,
-  parsedMetadata: unknown,
-  observationName: string | undefined,
-): ChatMLParserResult {
-  try {
-    const ctx = { metadata: parsedMetadata, observationName };
-    const inResult = normalizeInput(parsedInput, ctx);
-    const outResult = normalizeOutput(parsedOutput, ctx);
-    const outputClean = cleanLegacyOutput(parsedOutput, parsedOutput);
-    const messages = combineInputOutputMessages(
-      inResult,
-      outResult,
-      outputClean,
-    );
-
-    const inputMessageCount = inResult.success ? inResult.data.length : 0;
-    const toolBookkeeping = computeToolCallBookkeeping(
-      messages,
-      inputMessageCount,
-    );
-
-    return {
-      canDisplayAsChat:
-        (inResult.success || outResult.success) && messages.length > 0,
-      allMessages: messages as ChatMlMessage[],
-      additionalInput: extractAdditionalInput(parsedInput),
-      ...toolBookkeeping,
-      inputMessageCount,
-    };
-  } catch {
-    return emptyChatMLParserResult();
-  }
 }
 
 /**

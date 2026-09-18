@@ -4,7 +4,6 @@ import {
   clickhouseClient,
   createOrgProjectAndApiKey,
   getDeletedProjects,
-  toClickhouseDateTime,
 } from "@langfuse/shared/src/server";
 import { prisma } from "@langfuse/shared/src/db";
 import { BatchProjectBlobCleaner } from "../features/batch-project-blob-cleaner";
@@ -35,9 +34,9 @@ async function insertBlobRefs(projectId: string, count: number): Promise<void> {
     event_id: randomUUID(),
     bucket_name: "test-bucket",
     bucket_path: `${projectId}/traces/${randomUUID()}.json`,
-    created_at: toClickhouseDateTime(),
-    updated_at: toClickhouseDateTime(),
-    event_ts: toClickhouseDateTime(),
+    created_at: new Date().getTime(),
+    updated_at: new Date().getTime(),
+    event_ts: new Date().getTime(),
     is_deleted: 0,
   }));
 
@@ -60,9 +59,9 @@ async function softDeleteBlobRefs(
     event_id: randomUUID(),
     bucket_name: "test-bucket",
     bucket_path: `${projectId}/traces/${randomUUID()}.json`,
-    created_at: toClickhouseDateTime(),
-    updated_at: toClickhouseDateTime(),
-    event_ts: toClickhouseDateTime(),
+    created_at: new Date().getTime(),
+    updated_at: new Date().getTime(),
+    event_ts: new Date().getTime(),
     is_deleted: 1,
   }));
 

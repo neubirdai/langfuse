@@ -1,5 +1,5 @@
-import { auditLog } from "@/src/features/audit-logs/server";
-import { throwIfNoProjectAccess } from "@/src/features/rbac";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
+import { throwIfNoProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   createTRPCRouter,
   protectedProjectProcedure,
@@ -15,7 +15,6 @@ import {
   EvaluatorIdsSchema,
   EvaluatorOptionsSchema,
   EvaluatorVersionsSchema,
-  ListEvaluatorGallerySchema,
   ListEvaluatorsSchema,
   SuggestEvaluatorTextSchema,
   UpdateEvaluatorSchema,
@@ -60,36 +59,12 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:read",
+        scope: "evalTemplate:read",
       });
       return serviceForContext(ctx).list({
         ...input,
         projectId: ctx.session.projectId,
       });
-    }),
-
-  listGallery: protectedProjectProcedure
-    .input(ListEvaluatorGallerySchema)
-    .query(async ({ input, ctx }) => {
-      throwIfNoProjectAccess({
-        session: ctx.session,
-        projectId: ctx.session.projectId,
-        scope: "evaluator:read",
-      });
-      const service = serviceForContext(ctx);
-      const params = {
-        ...input,
-        projectId: ctx.session.projectId,
-      };
-      const [result, totalItems] = await Promise.all([
-        service.listCursor(params),
-        input.cursor ? undefined : service.count(params),
-      ]);
-
-      return {
-        ...result,
-        totalItems,
-      };
     }),
 
   filterOptions: protectedProjectProcedure
@@ -98,7 +73,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:read",
+        scope: "evalTemplate:read",
       });
       return serviceForContext(ctx).listFilterOptions(ctx.session.projectId);
     }),
@@ -109,7 +84,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:read",
+        scope: "evalTemplate:read",
       });
       return serviceForContext(ctx).listOptions({
         ...input,
@@ -123,7 +98,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:read",
+        scope: "evalTemplate:read",
       });
       return serviceForContext(ctx).getWithSampleFilter(
         ctx.session.projectId,
@@ -137,7 +112,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:read",
+        scope: "evalTemplate:read",
       });
       return serviceForContext(ctx).listVersions({
         ...input,
@@ -151,7 +126,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evalJobExecution:read",
+        scope: "evalJob:read",
       });
       return serviceForContext(ctx).listRecent({
         ...input,
@@ -165,7 +140,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evalJobExecution:read",
+        scope: "evalJob:read",
       });
       return serviceForContext(ctx).getTotalCosts({
         ...input,
@@ -179,7 +154,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluationRule:CUD",
+        scope: "evalJob:CUD",
       });
       return getActivationCostEstimates({
         ...input,
@@ -196,7 +171,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       const service = serviceForContext(ctx);
       return service.create(
@@ -211,7 +186,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       const service = serviceForContext(ctx);
       return service.update(
@@ -226,7 +201,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       return serviceForContext(ctx).reactivate({
         projectId: ctx.session.projectId,
@@ -240,7 +215,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       const service = serviceForContext(ctx);
       await service.delete(ctx.session.projectId, input.evaluatorId);
@@ -253,7 +228,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       const service = serviceForContext(ctx);
       await service.deleteMany({
@@ -269,7 +244,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       return serviceForContext(ctx).testEvaluator({
         orgId: ctx.session.orgId,
@@ -290,7 +265,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       return serviceForContext(ctx).suggestName({
         ...input,
@@ -305,7 +280,7 @@ export const evaluatorRouter = createTRPCRouter({
       throwIfNoProjectAccess({
         session: ctx.session,
         projectId: ctx.session.projectId,
-        scope: "evaluator:CUD",
+        scope: "evalTemplate:CUD",
       });
       return serviceForContext(ctx).suggestDescription({
         ...input,

@@ -15,7 +15,6 @@ import { SCORES_DEPRECATION } from "@/src/features/public-api/server/deprecation
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get Score",
-    action: "scores:read",
     querySchema: GetScoreQueryV1,
     responseSchema: GetScoreResponseV1,
     deprecation: SCORES_DEPRECATION,
@@ -44,7 +43,6 @@ export default withMiddlewares({
   }),
   DELETE: createAuthedProjectAPIRoute({
     name: "Delete Score",
-    action: "scores:CUD",
     querySchema: DeleteScoreQueryV1,
     responseSchema: DeleteScoreResponseV1,
     rateLimitResource: "score-delete",

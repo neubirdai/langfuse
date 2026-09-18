@@ -4,7 +4,7 @@ import { DataTable } from "@/src/components/table/data-table";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
 import { createStatusTableColumn } from "@/src/components/design-system/table/columns/createStatusTableColumn";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
+import { IOTableCell } from "@/src/components/ui/IOTableCell";
 import { useQueryParams, withDefault, NumberParam } from "use-query-params";
 import { formatDistanceToNow } from "date-fns";
 import { formatIntervalSeconds } from "@/src/utils/dates";
@@ -101,16 +101,25 @@ export const AutomationExecutionsTable: React.FC<
         );
       },
     },
-    createIOTableColumn<ActionExecutionRow>({
+    {
       accessorKey: "input",
       header: "Input",
-    }),
-    createIOTableColumn<ActionExecutionRow>({
+      id: "input",
+      cell: ({ row }) => {
+        const value = row.getValue("input");
+        return <IOTableCell data={value} />;
+      },
+    },
+    {
       accessorKey: "output",
       header: "Output",
-      getCell: (value) => value || "-",
-      variant: "output",
-    }),
+      id: "output",
+      cell: ({ row }) => {
+        const value = row.getValue("output");
+        if (!value) return <span className="text-muted-foreground">-</span>;
+        return <IOTableCell data={value} />;
+      },
+    },
     {
       accessorKey: "error",
       header: "Error",
@@ -155,7 +164,6 @@ export const AutomationExecutionsTable: React.FC<
   return (
     <>
       <DataTableToolbar
-        tableName="automation-executions"
         columns={columns}
         rowHeight={rowHeight}
         setRowHeight={setRowHeight}

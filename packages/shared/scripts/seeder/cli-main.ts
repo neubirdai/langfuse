@@ -294,7 +294,7 @@ const main = async (): Promise<number> => {
     },
   };
 
-  if (!ctx.dryRun && scenario.target !== "api") {
+  if (!ctx.dryRun) {
     await preflight({
       projectId: ctx.projectId,
       needV4: scenario.supportsV4 && params["v4"] === true,

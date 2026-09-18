@@ -64,15 +64,7 @@ const INTERNAL_MAPPING_COLUMN_TO_PUBLIC_SOURCE: Record<
   experiment_item_metadata: "experiment_item_metadata",
 };
 
-export function toPublicEvaluatorType(type: EvalTemplateType) {
-  return type === EvalTemplateType.CODE
-    ? PUBLIC_EVALUATOR_TYPE_CODE
-    : PUBLIC_EVALUATOR_TYPE_LLM_AS_JUDGE;
-}
-
-export function toStoredMappingList(
-  mappings: PromptVariableMappingInputType[],
-) {
+function toStoredMappingList(mappings: PromptVariableMappingInputType[]) {
   return observationVariableMappingList.parse(
     mappings.map((mapping) => ({
       templateVariable: mapping.variable,
@@ -83,9 +75,7 @@ export function toStoredMappingList(
   );
 }
 
-export function toApiReadMappings(
-  mappings: unknown,
-): PromptVariableMappingReadType[] {
+function toApiReadMappings(mappings: unknown): PromptVariableMappingReadType[] {
   const parsed = observationVariableMappingList.safeParse(mappings);
   if (!parsed.success) {
     logger.error("Failed to parse public evaluation rule mappings", {
@@ -236,7 +226,7 @@ export function toEvaluatorServiceDefinition(
         }
       : {
           type: EvalTemplateType.LLM_AS_JUDGE,
-          promptMessages: definition.prompt,
+          prompt: definition.prompt[0]!.content,
           modelConfig: definition.modelConfig ?? null,
           variableMapping:
             definition.variableMapping == null
@@ -277,10 +267,10 @@ export function toPublicEvaluatorVersion(
     });
   }
 
-  if (!version.promptMessages) {
-    throw new InternalServerError("Evaluator prompt messages are corrupted");
+  if (!version.prompt) {
+    throw new InternalServerError("Evaluator prompt is corrupted");
   }
-  const prompt = version.promptMessages;
+  const prompt = [{ role: "user" as const, content: version.prompt }];
   return EvaluatorVersion.parse({
     ...common,
     type: PUBLIC_EVALUATOR_TYPE_LLM_AS_JUDGE,

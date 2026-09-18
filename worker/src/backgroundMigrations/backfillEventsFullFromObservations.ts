@@ -1,9 +1,4 @@
-import {
-  logger,
-  queryClickhouse,
-  quoteClickhouseString,
-  sleep,
-} from "@langfuse/shared/src/server";
+import { logger, queryClickhouse, sleep } from "@langfuse/shared/src/server";
 import { env } from "../env";
 import {
   BaseChunkTodo,
@@ -150,7 +145,7 @@ export default class BackfillEventsFullFromObservations extends ChunkedClickhous
           sum(future_parts) AS total_future_parts,
           countIf(is_session_expired) AS expired_replicas,
           countIf(is_readonly) AS readonly_replicas
-        FROM clusterAllReplicas(${quoteClickhouseString(cluster)}, 'system.replicas')
+        FROM clusterAllReplicas('${cluster}', 'system.replicas')
         WHERE database = currentDatabase()
           AND table = '${PID_TID_SORTING_TABLE}'
       `,

@@ -56,14 +56,15 @@ export const isTraceTarget = (targetObject: string): boolean => {
 
 export const isTraceTargetOnV4 = (
   targetObject: string,
-  isV4: boolean,
-): boolean => isTraceTarget(targetObject) && isV4;
+  isBetaEnabled: boolean,
+): boolean => isTraceTarget(targetObject) && isBetaEnabled;
 
 export const shouldShowLegacyTracePreview = (
   targetObject: string,
-  isV4: boolean,
+  isBetaEnabled: boolean,
 ): boolean =>
-  isTraceTarget(targetObject) && !isTraceTargetOnV4(targetObject, isV4);
+  isTraceTarget(targetObject) &&
+  !isTraceTargetOnV4(targetObject, isBetaEnabled);
 
 export const isEventTarget = (targetObject: string): boolean => {
   return targetObject === EvalTargetObject.EVENT;

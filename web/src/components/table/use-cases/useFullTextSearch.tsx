@@ -6,18 +6,9 @@ import {
   ArrayParam,
 } from "use-query-params";
 import { usePeekTableState } from "@/src/components/table/peek/contexts/PeekTableStateContext";
-import { hasFullTextSearchType } from "@/src/components/table/utils/searchUtils";
 
-export const useFullTextSearch = ({
-  tableAllowsFullTextSearch = true,
-}: {
-  tableAllowsFullTextSearch?: boolean;
-} = {}) => {
+export const useFullTextSearch = () => {
   const peekContext = usePeekTableState();
-  // Apply the host policy on reads too: instance config can resolve after a
-  // URL has already restored its scope.
-  const allowedSearchType = (type: TracingSearchType[]): TracingSearchType[] =>
-    !tableAllowsFullTextSearch && hasFullTextSearchType(type) ? ["id"] : type;
 
   const [searchQuery, setSearchQuery] = useQueryParam(
     "search",
@@ -37,47 +28,43 @@ export const useFullTextSearch = ({
     const { query, type } = peekContext.tableState.search;
 
     const setSearchQuery = (newQuery: string | null) => {
-      peekContext.setTableState((state) => ({
-        ...state,
-        search: { ...state.search, query: newQuery },
-      }));
+      peekContext.setTableState({
+        ...peekContext.tableState,
+        search: { ...peekContext.tableState.search, query: newQuery },
+      });
     };
 
-    const setSearchType = (newType: TracingSearchType[]) => {
-      peekContext.setTableState((state) => ({
-        ...state,
-        search: {
-          ...state.search,
-          type: allowedSearchType(newType),
-        },
-      }));
+    const setSearchType = (newType: string[]) => {
+      peekContext.setTableState({
+        ...peekContext.tableState,
+        search: { ...peekContext.tableState.search, type: newType },
+      });
     };
 
     return {
       searchQuery: query,
-      searchType: allowedSearchType(type as TracingSearchType[]),
+      searchType: type as TracingSearchType[],
       setSearchQuery,
       setSearchType,
     };
   }
 
   const setSearchType = (newSearchType: TracingSearchType[]) => {
-    const allowedType = allowedSearchType(newSearchType);
     // Reverting to the default scope (id) removes the `searchType` param
     // entirely instead of writing an explicit `?searchType=id`, so URLs and
     // saved views match the no-scope state regardless of which surface (search
     // bar or legacy toolbar) produced the change.
     const isDefault =
-      allowedType.length === 0 ||
-      (allowedType.length === 1 && allowedType[0] === "id");
-    handleSearchTypeChange(isDefault ? undefined : allowedType);
+      newSearchType.length === 0 ||
+      (newSearchType.length === 1 && newSearchType[0] === "id");
+    handleSearchTypeChange(isDefault ? undefined : newSearchType);
   };
 
   const typedSearchType = (searchType ?? ["id"]) as TracingSearchType[];
 
   return {
     searchQuery,
-    searchType: allowedSearchType(typedSearchType),
+    searchType: typedSearchType,
     setSearchQuery,
     setSearchType,
   };

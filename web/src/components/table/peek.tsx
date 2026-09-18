@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { Sheet, SheetPortal } from "@/src/components/ui/sheet";
 import { Drawer, DrawerContent, DrawerTitle } from "@/src/components/ui/drawer";

@@ -1,5 +1,4 @@
 import { stringifyValue } from "../../utils/stringChecks";
-import type { EvalExecutionContext } from "../../features/evals/evalExecutionMetadata";
 import {
   INTERNAL_TRACE_EVENT_SOURCE,
   type InternalTraceEventInput,
@@ -45,9 +44,6 @@ const USER_VISIBLE_CODE_EVAL_ERROR_MESSAGE_BY_CODE: Partial<
   ),
   [CodeEvalDispatcherErrorCodes.TIMEOUT]: withCodeEvalDocs(
     "Evaluator timed out. Code-based evaluators must complete within the configured runtime limit. Long executions can be caused by network calls, which are forbidden and may never complete. Remove network calls, optimize your evaluator code, and try again.",
-  ),
-  [CodeEvalDispatcherErrorCodes.OUT_OF_MEMORY]: withCodeEvalDocs(
-    "Evaluator exceeded the available memory limit. Reduce memory usage in your evaluator code to stay within the limit, then try again.",
   ),
   [CodeEvalDispatcherErrorCodes.SOURCE_TOO_LARGE]: withCodeEvalDocs(
     `Evaluator source code is too large. Code-based evaluator source code is limited to ${formatCodeEvalByteLimit(CODE_EVAL_SOURCE_MAX_BYTES)}. Shorten the evaluator code and try again.`,
@@ -222,7 +218,6 @@ export async function runCodeBasedEvaluationDispatch(params: {
   hasExperimentContext?: boolean;
   traceName: string;
   metadata: Record<string, unknown>;
-  evaluationContext?: EvalExecutionContext;
   writeTrace?: InternalTraceWriter;
 }): Promise<CodeBasedEvaluationDispatchResult> {
   const payload = buildCodeEvalPayload({
@@ -255,7 +250,6 @@ export async function runCodeBasedEvaluationDispatch(params: {
         payload,
         output: dispatchResult,
         metadata: params.metadata,
-        evaluationContext: params.evaluationContext,
         sourceCode: params.version.sourceCode,
       }),
     });
@@ -303,7 +297,6 @@ export async function runCodeBasedEvaluationDispatch(params: {
             : {}),
           error_retryable: errorDetails.retryable,
         },
-        evaluationContext: params.evaluationContext,
         sourceCode: params.version.sourceCode,
         level: "ERROR",
         statusMessage: `Code eval execution failed: ${visibleError.message}`,
@@ -327,7 +320,6 @@ function buildCodeEvalTraceInput(params: {
   payload: CodeEvalPayload;
   output: unknown;
   metadata: Record<string, unknown>;
-  evaluationContext?: EvalExecutionContext;
   sourceCode: string;
   level?: string;
   statusMessage?: string;
@@ -350,7 +342,6 @@ function buildCodeEvalTraceInput(params: {
       ...params.metadata,
       code_eval_source_code: params.sourceCode,
     },
-    evaluationContext: params.evaluationContext,
     source: INTERNAL_TRACE_EVENT_SOURCE,
   };
 

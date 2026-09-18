@@ -38,7 +38,7 @@ import {
   type V4WriteMode,
   type ExportSourceContext,
 } from "@langfuse/shared";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 // Shared export-source UI adapters; policy in export-source-policy.ts.
 import {
   buildExportSourceContext,
@@ -378,12 +378,10 @@ const MixpanelIntegrationSettingsForm = ({
         )}
         {!watchedValidation.ok && (
           <Alert variant="destructive">
-            <Alert.Title>
-              Saved export source is no longer available
-            </Alert.Title>
-            <Alert.Description>
+            <AlertTitle>Saved export source is no longer available</AlertTitle>
+            <AlertDescription>
               {getExportSourceUnavailableMessage(watchedValidation.reason)}
-            </Alert.Description>
+            </AlertDescription>
           </Alert>
         )}
         <FormField

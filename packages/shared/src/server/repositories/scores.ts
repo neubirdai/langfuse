@@ -225,9 +225,7 @@ const formatMetadataSelect = (
   includeHasMetadata: boolean,
 ) => {
   return [
-    !excludeMetadata
-      ? "* EXCEPT (evaluator_id, evaluation_rule_id)"
-      : "* EXCEPT (metadata, evaluator_id, evaluation_rule_id)",
+    !excludeMetadata ? "*" : "* EXCEPT (metadata)",
     includeHasMetadata
       ? "length(mapKeys(s.metadata)) > 0 AS has_metadata"
       : null,
@@ -646,7 +644,14 @@ export const getScoresForObservations = async <
     includeHasMetadata = false,
   } = props;
 
-  const select = formatMetadataSelect(excludeMetadata, includeHasMetadata);
+  const select = [
+    !excludeMetadata ? "*" : "* EXCEPT (metadata)",
+    includeHasMetadata
+      ? "length(mapKeys(s.metadata)) > 0 AS has_metadata"
+      : null,
+  ]
+    .filter((s) => s != null)
+    .join(", ");
 
   const query = `
       select
@@ -1554,7 +1559,7 @@ const getScoresUiGenericFromEvents = async <T>(props: {
         s.source,
         s.data_type,
         s.comment,
-        s.evaluator_id,
+        s.metadata['evaluator_id'] AS evaluator_id,
         ${excludeMetadata ? "" : "s.metadata,"}
         s.trace_id,
         s.session_id,

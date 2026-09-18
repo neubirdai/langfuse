@@ -1,5 +1,6 @@
 import { api } from "@/src/utils/api";
-import { useEventsTraceData, useReadPath } from "@/src/features/events";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
+import { useEventsTraceData } from "@/src/features/events/hooks/useEventsTraceData";
 import { useSession } from "next-auth/react";
 
 /**
@@ -20,7 +21,7 @@ export function useTraceDetailData({
   timestamp?: Date;
   enabled?: boolean;
 }) {
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const { status: sessionStatus } = useSession();
   const isUnauthenticated = sessionStatus === "unauthenticated";
   const traceReadConfig = api.public.traceReadConfig.useQuery(undefined, {
@@ -34,7 +35,7 @@ export function useTraceDetailData({
     traceReadConfig.data?.v4WriteMode === "dual" ||
     traceReadConfig.data?.v4WriteMode === "events_only";
   const useEventsTraceSource =
-    isV4 || (isUnauthenticated && unauthenticatedEventsReadEnabled);
+    isBetaEnabled || (isUnauthenticated && unauthenticatedEventsReadEnabled);
 
   // Old path: traces table (beta OFF).
   const tracesQuery = api.traces.byIdWithObservationsAndScores.useQuery(

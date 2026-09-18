@@ -14,7 +14,6 @@ import {
 export default withMiddlewares({
   POST: createAuthedProjectAPIRoute({
     name: "Create Score Config",
-    action: "scoreConfigs:CUD",
     bodySchema: PostScoreConfigBody,
     responseSchema: PostScoreConfigResponse,
     fn: async ({ body, auth }) => {
@@ -26,7 +25,6 @@ export default withMiddlewares({
   }),
   GET: createAuthedProjectAPIRoute({
     name: "Get Score Configs",
-    action: "scoreConfigs:read",
     querySchema: GetScoreConfigsQuery,
     responseSchema: GetScoreConfigsResponse,
     fn: async ({ query, auth }) => {

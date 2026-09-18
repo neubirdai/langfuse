@@ -324,19 +324,21 @@ describe("codeEvalExecutionQueueProcessor", () => {
     );
   });
 
-  it("should treat code eval timeouts as terminal without retrying", async () => {
+  it("should preserve retryable code eval timeout messages on the final retry attempt", async () => {
     const timeoutMessage =
       "Evaluator timed out. Code-based evaluators must complete within the configured runtime limit. Long executions can be caused by network calls, which are forbidden and may never complete. Remove network calls, optimize your evaluator code, and try again. See https://langfuse.com/docs/evaluation/evaluation-methods/code-evaluators for details.";
     const error = new CodeEvalExecutionError({
       code: CodeEvalDispatcherErrorCodes.TIMEOUT,
       message: timeoutMessage,
-      retryable: false,
+      retryable: true,
     });
     (processObservationEval as Mock).mockRejectedValue(error);
 
     await expect(
-      codeEvalExecutionQueueProcessor(createMockJob()),
-    ).resolves.toBeUndefined();
+      codeEvalExecutionQueueProcessor(
+        createMockJob({ attemptsMade: 9, opts: { attempts: 10 } }),
+      ),
+    ).rejects.toThrow(error);
 
     expect(prisma.jobExecution.update).toHaveBeenCalledWith({
       where: {
@@ -350,7 +352,7 @@ describe("codeEvalExecutionQueueProcessor", () => {
         executionTraceId: "test-trace-id",
       },
     });
-    expect(traceException).not.toHaveBeenCalled();
+    expect(traceException).toHaveBeenCalledWith(error);
     expect(recordIncrement).toHaveBeenCalledWith(
       "langfuse.evaluation.execution.terminal",
       1,

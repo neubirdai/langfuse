@@ -23,11 +23,8 @@ import type { TelemetryOptions } from "ai";
 import { stringifyValue } from "../../../utils/stringChecks";
 import { traceException } from "../../instrumentation";
 import { logger } from "../../logger";
-import {
-  AI_FEATURE_OTEL_SDK_NAME,
-  buildEvaluationAttributes,
-  LangfuseOtelSpanAttributes,
-} from "../../otel/attributes";
+import { LangfuseOtelSpanAttributes } from "../../otel/attributes";
+import { AI_FEATURE_OTEL_SDK_NAME } from "../../otel/internalAiFeatureOtelWriter";
 import { publishInternalOtelSpans } from "../../otel/internalTraceOtelWriter";
 import type { InternalTraceExperimentContext } from "../internalTraceEvents";
 import type { TraceSinkParams } from "../types";
@@ -91,10 +88,8 @@ export function createAiSdkTelemetryCapture(params: {
   traceSinkParams: TraceSinkParams;
   /** Recorded as the root span's (and trace's) input. */
   rootInput?: unknown;
-  /** Trace-visible generation input. Pass media-reference messages instead of the exact provider egress payload when needed. */
-  generationInput?: unknown;
 }): AiSdkTelemetryCapture | undefined {
-  const { traceSinkParams, rootInput, generationInput } = params;
+  const { traceSinkParams, rootInput } = params;
   const isAiFeatureProductTrace = Boolean(
     traceSinkParams.aiFeatureOtelIngestion,
   );
@@ -147,9 +142,6 @@ export function createAiSdkTelemetryCapture(params: {
 
   const serializedInput =
     rootInput !== undefined ? stringifyValue(rootInput) : undefined;
-  const evaluationAttributes = traceSinkParams.evaluationContext
-    ? buildEvaluationAttributes(traceSinkParams.evaluationContext)
-    : undefined;
 
   const rootSpan: Span = tracer.startSpan(
     traceSinkParams.traceName,
@@ -163,7 +155,6 @@ export function createAiSdkTelemetryCapture(params: {
                 traceSinkParams.userId,
             }
           : {}),
-        ...(evaluationAttributes ?? {}),
         ...(traceSinkParams.metadata
           ? {
               [LangfuseOtelSpanAttributes.TRACE_METADATA]: JSON.stringify(
@@ -214,12 +205,10 @@ export function createAiSdkTelemetryCapture(params: {
 
   const otelIntegration = createGenerationSpanTelemetry({
     tracer,
-    recordedInput: generationInput,
     attributes: {
       // Experiment linkage goes on every span so every materialized event
       // remains associated with the run item root.
       ...(experimentAttributes ?? {}),
-      ...(evaluationAttributes ?? {}),
       ...(promptAttributes ?? {}),
       [LangfuseOtelSpanAttributes.TRACE_NAME]: traceSinkParams.traceName,
       [LangfuseOtelSpanAttributes.ENVIRONMENT]: traceSinkParams.environment,
@@ -327,13 +316,8 @@ function createGenerationSpanTelemetry(params: {
    * experiment linkage).
    */
   attributes?: Attributes;
-  /**
-   * Safe input to record instead of the provider-bound messages. The latter
-   * may contain short-lived signed media URLs that must not enter traces.
-   */
-  recordedInput?: unknown;
 }): Telemetry {
-  const { tracer, attributes, recordedInput } = params;
+  const { tracer, attributes } = params;
   const openSpans = new Map<string, Span>();
 
   const endAllOpenSpans = (error?: unknown): void => {
@@ -371,12 +355,8 @@ function createGenerationSpanTelemetry(params: {
               "gen_ai.request.temperature": event.temperature,
               "gen_ai.request.top_p": event.topP,
             }),
-            ...(recordedInput !== undefined || event.messages !== undefined
-              ? {
-                  "gen_ai.input.messages": safeJsonStringify(
-                    recordedInput ?? event.messages,
-                  ),
-                }
+            ...(event.messages !== undefined
+              ? { "gen_ai.input.messages": safeJsonStringify(event.messages) }
               : {}),
             ...(event.tools && event.tools.length > 0
               ? { "gen_ai.tool.definitions": safeJsonStringify(event.tools) }

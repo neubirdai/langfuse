@@ -5,7 +5,6 @@ import {
   asString,
   asStringArray,
 } from "../../utils/objects";
-import type { EvalExecutionContext } from "../../features/evals/evalExecutionMetadata";
 import { stringifyValue } from "../../utils/stringChecks";
 import {
   ObservationTypeDomain,
@@ -93,7 +92,6 @@ export type InternalTraceEventInput = {
   blobStorageFilePath?: string;
   eventRaw?: string;
   eventBytes?: number;
-  evaluationContext?: EvalExecutionContext;
   experimentId?: string;
   experimentName?: string;
   experimentMetadataNames?: string[];

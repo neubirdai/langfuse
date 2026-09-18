@@ -4,11 +4,9 @@ import {
 } from "@langfuse/shared";
 import { AnnotationDrawerSection } from "../shared/AnnotationDrawerSection";
 import { AnnotationProcessingLayout } from "../shared/AnnotationProcessingLayout";
-import {
-  SessionIO,
-  LazyTraceEventsRow,
-  asCommentCounts,
-} from "@/src/features/sessions";
+import { SessionIO } from "@/src/components/session";
+import { LazyTraceEventsRow } from "@/src/components/session/TraceEventsRow";
+import { asCommentCounts } from "@/src/components/session/sessionDetailPageTypes";
 import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/src/components/ui/button";
 import { ActionButtonCountBadge } from "@/src/components/ui/action-button-count-badge";
@@ -18,7 +16,7 @@ import { Badge } from "@/src/components/ui/badge";
 import { Separator } from "@/src/components/ui/separator";
 import Link from "next/link";
 import { Card } from "@/src/components/ui/card";
-import { useReadPath } from "@/src/features/events";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import { api } from "@/src/utils/api";
 import { JsonSkeleton } from "@/src/components/ui/CodeJsonViewer";
 import { CommentDrawerController } from "@/src/features/comments/CommentDrawerController";
@@ -47,14 +45,14 @@ export const SessionAnnotationProcessor: React.FC<
   SessionAnnotationProcessorProps
 > = ({ item, data, configs, projectId }) => {
   const [visibleTraces, setVisibleTraces] = useState(PAGE_SIZE);
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
 
   // Fetch traces separately when v4 beta is enabled (events table path)
   // The byIdWithScoresFromEvents endpoint doesn't include traces array
   const tracesFromEventsQuery = api.sessions.tracesFromEvents.useQuery(
     { projectId, sessionId: item.objectId },
     {
-      enabled: isV4,
+      enabled: isBetaEnabled,
       retry(failureCount, error) {
         if (
           error.data?.code === "UNAUTHORIZED" ||
@@ -72,7 +70,7 @@ export const SessionAnnotationProcessor: React.FC<
         projectId,
         sessionId: item.objectId,
       },
-      { enabled: isV4 },
+      { enabled: isBetaEnabled },
     );
 
   const sessionCommentCounts = api.comments.getCountByObjectId.useQuery({
@@ -85,20 +83,20 @@ export const SessionAnnotationProcessor: React.FC<
   // - v4 beta OFF: traces come from data.traces (byIdWithScores endpoint)
   // - v4 beta ON: traces come from separate tracesFromEvents query
   const traces = useMemo(() => {
-    if (isV4) {
+    if (isBetaEnabled) {
       return tracesFromEventsQuery.data ?? [];
     }
     return data?.traces ?? [];
-  }, [isV4, tracesFromEventsQuery.data, data?.traces]);
+  }, [isBetaEnabled, tracesFromEventsQuery.data, data?.traces]);
 
   // For the "Total traces" badge, show countTraces from session metadata when available (v4),
   // or fall back to loaded traces length
   const totalTracesForBadge = useMemo(() => {
-    if (isV4) {
+    if (isBetaEnabled) {
       return data?.countTraces ?? traces.length;
     }
     return traces.length;
-  }, [isV4, data?.countTraces, traces.length]);
+  }, [isBetaEnabled, data?.countTraces, traces.length]);
 
   // Stable callback to avoid creating new function reference on every render (defeats React.memo)
   const openPeek = useCallback(
@@ -138,6 +136,8 @@ export const SessionAnnotationProcessor: React.FC<
           </div>
           <CommentDrawerController
             projectId={projectId}
+            objectId={item.objectId}
+            objectType="SESSION"
             count={getNumberFromMap(sessionCommentCounts.data, item.objectId)}
           >
             {({ disabled, openDrawer }) => (
@@ -145,13 +145,7 @@ export const SessionAnnotationProcessor: React.FC<
                 type="button"
                 variant="outline"
                 disabled={disabled}
-                onClick={() =>
-                  openDrawer({
-                    type: "comments",
-                    objectId: item.objectId,
-                    objectType: "SESSION",
-                  })
-                }
+                onClick={openDrawer}
                 className="gap-1"
               >
                 {disabled ? (
@@ -198,7 +192,7 @@ export const SessionAnnotationProcessor: React.FC<
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
           {/* Loading state for v4 beta traces */}
-          {isV4 && tracesFromEventsQuery.isLoading && (
+          {isBetaEnabled && tracesFromEventsQuery.isLoading && (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Card
@@ -214,13 +208,13 @@ export const SessionAnnotationProcessor: React.FC<
             </div>
           )}
           {/* Error state for v4 beta traces */}
-          {isV4 && tracesFromEventsQuery.isError && (
+          {isBetaEnabled && tracesFromEventsQuery.isError && (
             <div className="text-destructive p-2 text-sm">
               Failed to load traces for this session.
             </div>
           )}
           {/* Trace list - v4 path uses LazyTraceEventsRow for deferred loading */}
-          {isV4 &&
+          {isBetaEnabled &&
             tracesFromEventsQuery.isSuccess &&
             traces
               .slice(0, visibleTraces)
@@ -240,7 +234,7 @@ export const SessionAnnotationProcessor: React.FC<
                 />
               ))}
           {/* Trace list - v3 path uses SessionIO */}
-          {!isV4 &&
+          {!isBetaEnabled &&
             traces.slice(0, visibleTraces).map((trace: any) => (
               <Card
                 className="border-border hover:border-ring group mb-2 grid gap-2 p-2 shadow-none"
@@ -266,7 +260,7 @@ export const SessionAnnotationProcessor: React.FC<
                 />
               </Card>
             ))}
-          {(!isV4 || tracesFromEventsQuery.isSuccess) &&
+          {(!isBetaEnabled || tracesFromEventsQuery.isSuccess) &&
             traces.length > visibleTraces && (
               <div className="flex justify-center py-4">
                 <Button

@@ -9,9 +9,8 @@ import { type metricAggregations, type views } from "@langfuse/shared/query";
 import { type z } from "zod";
 import { SelectDashboardDialog } from "@/src/features/dashboard/components/SelectDashboardDialog";
 import { useState } from "react";
-import { useReadPath } from "@/src/features/events/hooks/useReadPath";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import { getDefaultView } from "@/src/features/widgets/utils";
-import { NoDataOrLoading } from "@/src/components/NoDataOrLoading";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 
 export default function NewWidget() {
@@ -20,7 +19,7 @@ export default function NewWidget() {
     projectId: string;
     dashboardId?: string;
   };
-  const { isV4, isResolved } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const capture = usePostHogClientCapture();
 
   const createWidgetMutation = api.dashboardWidgets.create.useMutation({
@@ -79,24 +78,6 @@ export default function NewWidget() {
   const [dashboardDialogOpen, setDashboardDialogOpen] = useState(false);
   const [pendingWidgetId, setPendingWidgetId] = useState<string | null>(null);
 
-  // The form seeds its default view from the read path once, at mount — an
-  // unresolved session would permanently seed the v3 default for a v4 user.
-  if (!isResolved) {
-    return (
-      <Page
-        withPadding
-        headerProps={{
-          title: "New Widget",
-          help: {
-            description: "Create a new widget",
-          },
-        }}
-      >
-        <NoDataOrLoading isLoading />
-      </Page>
-    );
-  }
-
   return (
     <Page
       withPadding
@@ -109,7 +90,7 @@ export default function NewWidget() {
     >
       <WidgetForm
         // No `key` on the beta flag: WidgetForm derives viewVersion (and its
-        // available views/measures/filter columns) reactively from isV4
+        // available views/measures/filter columns) reactively from isBetaEnabled
         // + the selected view, so a live beta toggle re-derives them without a
         // remount — preserving the in-progress form. The only tradeoff is that
         // an untouched form's default view no longer auto-switches on toggle;
@@ -119,7 +100,7 @@ export default function NewWidget() {
         initialValues={{
           name: "",
           description: "",
-          view: getDefaultView(isV4),
+          view: getDefaultView(isBetaEnabled),
           dimension: "none",
           measure: "count",
           aggregation: "count",

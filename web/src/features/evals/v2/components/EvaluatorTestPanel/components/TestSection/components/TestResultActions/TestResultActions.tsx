@@ -8,10 +8,10 @@ export function TestResultActions({
   executionTraceId,
   onOpenExecutionTrace,
 }: {
-  executionTraceId: string;
+  executionTraceId: string | null;
   onOpenExecutionTrace: (traceId: string) => void;
 }) {
-  return (
+  return executionTraceId ? (
     <TestResultTraceActions
       executionTraceId={executionTraceId}
       onOpenExecutionTrace={onOpenExecutionTrace}
@@ -20,5 +20,5 @@ export function TestResultActions({
         <TestResultTraceActionsTrigger />
       </DropdownMenuTrigger>
     </TestResultTraceActions>
-  );
+  ) : null;
 }

@@ -82,9 +82,6 @@ export function createObservationEvalSchedulerDeps(): ObservationEvalSchedulerDe
         ...(params.evaluationRuleId
           ? { evaluationRuleId: params.evaluationRuleId }
           : {}),
-        ...(params.variableMapping != null
-          ? { variableMapping: params.variableMapping }
-          : {}),
       };
 
       if (params.evalTemplateType === EvalTemplateType.CODE) {

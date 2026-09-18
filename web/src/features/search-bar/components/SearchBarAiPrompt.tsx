@@ -21,12 +21,12 @@ import { useStore } from "zustand";
 import { type FilterState } from "@langfuse/shared";
 import type { FieldRegistry } from "@/src/features/search-bar/lib/fields";
 import { KeyboardShortcut } from "@/src/components/design-system/KeyboardShortcut/KeyboardShortcut";
-import { showErrorToast } from "@/src/features/notifications";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
 import type { ObservedScoreNames } from "@/src/features/search-bar/lib/observed-options";
 import type { SearchBarStore } from "@/src/features/search-bar/store/searchBarStore";
 import { api } from "@/src/utils/api";
 import { cn } from "@/src/utils/tailwind";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 
 // "No such score X" note for score filters the server dropped because their
 // name matches no observed score (exactly or normalized).
@@ -40,7 +40,6 @@ function unknownScoresMessage(names: string[]): string {
 export function SearchBarAiPrompt({
   projectId,
   tableName,
-  isV4 = true,
   store,
   dataContext,
   scoreNames,
@@ -51,7 +50,6 @@ export function SearchBarAiPrompt({
   projectId: string;
   /** Table this bar filters — the `tableName` analytics dimension. */
   tableName: string;
-  isV4?: boolean;
   /** The bar store; its `draft` is read as the live refine context. */
   store: SearchBarStore;
   /** Observed values + metadata keys + result count, so the model maps to the
@@ -61,17 +59,7 @@ export function SearchBarAiPrompt({
    *  model's returned score keys against these (a misspelled name would
    *  otherwise apply as a dead filter that silently matches nothing). */
   scoreNames?: ObservedScoreNames;
-  registryId?: Extract<
-    FieldRegistry["id"],
-    | "events"
-    | "evaluationRules"
-    | "evaluatorSamples"
-    | "ruleSamples"
-    | "sessions"
-    | "scores"
-    | "experiments"
-    | "users"
-  >;
+  registryId?: FieldRegistry["id"];
   /** Apply generated filters via the bar's setFilterState (apply-immediately). */
   onApply: (filters: FilterState) => void;
   /** Leave AI mode and restore the grammar composer. */
@@ -128,12 +116,13 @@ export function SearchBarAiPrompt({
     // mid-request; the model returns the COMPLETE set based on this snapshot.
     const refine = store.getState().draft.trim();
     const refineMode = refine.length > 0;
-    // Report prompt length, never prompt text. The host supplies its read path.
+    // Analytics (LFE-10781): METADATA ONLY — `promptLength` is a CHAR COUNT, the
+    // prompt text itself is never sent. Ask-AI is a v4-only surface (isV4 true).
     capture("filters:ai_generate_requested", {
       tableName,
       refineMode,
       promptLength: prompt.length,
-      isV4,
+      isV4: true,
     });
     try {
       const result = await generateFilter.mutateAsync({
@@ -156,7 +145,7 @@ export function SearchBarAiPrompt({
           tableName,
           refineMode,
           reason: "stale",
-          isV4,
+          isV4: true,
         });
         setError("Filters changed while generating — try again.");
         return;
@@ -166,7 +155,7 @@ export function SearchBarAiPrompt({
           tableName,
           refineMode,
           reason: "empty",
-          isV4,
+          isV4: true,
         });
         // A dropped unknown score name explains the empty result better than
         // the generic rephrase hint ("no such score X" beats a dead filter).
@@ -181,7 +170,7 @@ export function SearchBarAiPrompt({
         tableName,
         refineMode,
         generatedFilterCount: result.filters.length,
-        isV4,
+        isV4: true,
       });
       onApply(result.filters as FilterState);
       if (result.unknownScoreNames.length > 0) {
@@ -205,7 +194,7 @@ export function SearchBarAiPrompt({
         tableName,
         refineMode,
         reason: "error",
-        isV4,
+        isV4: true,
       });
       setError("Couldn't reach the AI service. Please try again.");
     }

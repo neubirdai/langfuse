@@ -1,3 +1,4 @@
+import React from "react";
 import {
   SplashScreen,
   type ValueProposition,
@@ -13,24 +14,24 @@ export function DatasetsOnboarding({ projectId }: { projectId: string }) {
       title: "Continuous improvement",
       description:
         "Create datasets from production edge cases to improve your application",
-      icon: Zap,
+      icon: <Zap className="h-4 w-4" />,
     },
     {
       title: "Pre-deployment testing",
       description: "Benchmark new releases before deploying to production",
-      icon: Beaker,
+      icon: <Beaker className="h-4 w-4" />,
     },
     {
       title: "Structured testing",
       description:
         "Run experiments on collections of inputs and expected outputs",
-      icon: Database,
+      icon: <Database className="h-4 w-4" />,
     },
     {
       title: "Custom workflows",
       description:
         "Build custom workflows around your datasets via the API and SDKs, e.g. for fine-tuning, few-shotting",
-      icon: Code,
+      icon: <Code className="h-4 w-4" />,
     },
   ];
 

@@ -1,4 +1,3 @@
-import { showSuccessToast, showErrorToast } from "@/src/features/notifications";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { TRPCClientError } from "@trpc/client";
@@ -17,7 +16,6 @@ import { usePeekNavigation } from "@/src/components/table/peek/hooks/usePeekNavi
 import { TablePeekViewTraceDetail } from "@/src/components/table/peek/peek-trace-detail";
 import { Button } from "@/src/components/ui/button";
 import { ConfirmDialog } from "@/src/components/ui/confirm-dialog";
-import useLocalStorage from "@/src/components/useLocalStorage";
 import { ResizableSplitLayout } from "@/src/components/ui/resizable-split-layout";
 import { EvaluatorVersionHistorySheet } from "../components/Evaluators/EvaluatorVersionHistorySheet/EvaluatorVersionHistorySheet";
 import type { EvaluatorVersion } from "../components/Evaluators/EvaluatorVersionHistorySheet/types";
@@ -27,10 +25,12 @@ import { EvaluatorSetupFooter } from "@/src/features/evals/v2/components/Evaluat
 import { SampleObservationSelectorContainer } from "@/src/features/evals/v2/components/EvaluatorTestPanel/components/SampleObservationSelectorContainer/SampleObservationSelectorContainer";
 import { EvaluatorTestPanelContainer } from "@/src/features/evals/v2/components/EvaluatorTestPanel/components/EvaluatorTestPanelContainer/EvaluatorTestPanelContainer";
 import { prepareEvaluatorDraft } from "@/src/features/evals/v2/fns/evaluators/prepareEvaluatorDraft";
-import type { NormalizedEvaluatorDefinition } from "../server/evaluators/evaluatorTypes";
+import type { EvaluatorDefinition } from "../server/evaluators/evaluatorTypes";
 import { api } from "@/src/utils/api";
 import { trpcErrorToast } from "@/src/utils/trpcErrorToast";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { detailPageListKeys } from "@/src/features/navigate-detail-pages/context";
 import { TableHeaderControls } from "@/src/components/table/table-header-controls";
 import { useTableDateRange } from "@/src/hooks/useTableDateRange";
@@ -45,32 +45,24 @@ import { DefaultModelChangeConfirmationDialog } from "@/src/features/evals/v2/co
 import { useProjectDefaultModel } from "@/src/features/evals/v2/hooks/useProjectDefaultModel";
 import { safeRandomUUID } from "@/src/utils/safe-random-uuid";
 import { EvaluatorSavedDialogContainer } from "@/src/features/evals/v2/components/Evaluators/EvaluatorSavedDialogContainer/EvaluatorSavedDialogContainer";
-import { EVALUATOR_FILTER_EXPERIENCE_STORAGE_KEY } from "@/src/features/evals/v2/constants/evaluatorFilterExperience";
-import type { EvaluatorFilterExperience } from "@/src/features/evals/v2/types/evaluatorFilterExperience";
 import { useLangfuseCloudRegion } from "@/src/features/organizations/hooks";
 import { useProject } from "@/src/features/projects/hooks";
 import { EvaluatorBlockedBanner } from "@/src/features/evals/v2/components/Evaluators/EvaluatorBlockedBanner/EvaluatorBlockedBanner";
 import { useIsMobile } from "@/src/hooks/use-mobile";
 import { prepareEvaluatorMetadataForSave } from "@/src/features/evals/v2/fns/prepareEvaluatorMetadataForSave";
-import { useHasProjectAccess } from "@/src/features/rbac";
-import { useEvaluatorAlerts } from "@/src/features/evals/v2/hooks/useEvaluatorAlerts";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { useCodeEvalSourceValidation } from "@/src/features/evals/hooks/useCodeEvalSourceValidation";
-import { EvaluatorAlertButton } from "@/src/features/evals/v2/components/Evaluators/EvaluatorAlertButton/EvaluatorAlertButton";
-import { toScoreOutputFormState } from "@/src/features/evals/v2/fns/scoreOutput/toScoreOutputFormState";
-import { getFirstCodeEvaluatorScoreDataType } from "@/src/features/evals/v2/fns/evaluators/getFirstCodeEvaluatorScoreDataType";
 import {
   getEvaluatorCreationAnalyticsProperties,
-  getJudgePromptAnalyticsProperties,
   type EvaluatorCreationSource,
 } from "@/src/features/evals/v2/fns/evaluators/getEvaluatorCreationAnalyticsProperties";
-import { getFilterAnalyticsProperties } from "@/src/features/evals/v2/fns/getFilterAnalyticsProperties";
 
 type InitialEvaluator = {
   id: string;
   name: string;
   description: string | null;
   type: EvalTemplateType;
-  definition: NormalizedEvaluatorDefinition;
+  definition: EvaluatorDefinition;
   blockedAt: Date | null;
   blockReason: EvaluatorBlockReason | null;
   blockMessage: string | null;
@@ -94,7 +86,7 @@ export function applyEvaluatorSuggestion(
 
 export function getEvaluatorVersionDefinition(
   version: EvaluatorVersion,
-): NormalizedEvaluatorDefinition {
+): EvaluatorDefinition {
   if (version.type === "CODE") {
     return {
       type: version.type,
@@ -104,13 +96,13 @@ export function getEvaluatorVersionDefinition(
   }
 
   type LlmEvaluatorDefinition = Extract<
-    NormalizedEvaluatorDefinition,
+    EvaluatorDefinition,
     { type: "LLM_AS_JUDGE" }
   >;
 
   return {
     type: version.type,
-    promptMessages: version.promptMessages!,
+    prompt: version.prompt ?? "",
     provider: version.provider,
     model: version.model,
     modelParams: version.modelParams,
@@ -167,27 +159,10 @@ export function EvaluatorSetupPage(
   const router = useRouter();
   const utils = api.useUtils();
   const capture = usePostHogClientCapture();
-  const [filterExperience] = useLocalStorage<EvaluatorFilterExperience>(
-    EVALUATOR_FILTER_EXPERIENCE_STORAGE_KEY,
-    "query",
-  );
   const canReactivate = useHasProjectAccess({
     projectId,
-    scope: "evaluator:CUD",
+    scope: "evalTemplate:CUD",
   });
-  const evaluatorAlerts = useEvaluatorAlerts({
-    scope: "evaluator",
-    projectId,
-    evaluatorId: initialEvaluator?.id ?? null,
-  });
-  const scoreDataType = initialEvaluator
-    ? initialEvaluator.definition.type === "LLM_AS_JUDGE"
-      ? toScoreOutputFormState(initialEvaluator.definition.outputDefinition)
-          .dataType
-      : getFirstCodeEvaluatorScoreDataType(
-          initialEvaluator.definition.sourceCode,
-        )
-    : undefined;
   const projectDefaultModel = useProjectDefaultModel({
     projectId,
     source: "editor",
@@ -237,9 +212,6 @@ export function EvaluatorSetupPage(
   );
   const [rawResultOpen, setRawResultOpen] = useState(false);
   const hasRequestedName = useRef(false);
-  const saveInFlightRef = useRef(false);
-  const hasCreatedRef = useRef(false);
-  const [saveInFlight, setSaveInFlight] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -294,8 +266,7 @@ export function EvaluatorSetupPage(
     type: initialEvaluator?.type ?? "LLM_AS_JUDGE",
     sourceCode: version.sourceCode,
     sourceCodeLanguage: version.sourceCodeLanguage,
-    promptMessages:
-      initialEvaluator?.type === "LLM_AS_JUDGE" ? version.promptMessages : null,
+    prompt: version.prompt,
     provider: version.provider,
     model: version.model,
     modelParams: version.modelParams as EvaluatorVersion["modelParams"],
@@ -362,7 +333,7 @@ export function EvaluatorSetupPage(
   const getSuggestionDefinition = () => {
     const state = evaluatorSetupStore.getState();
     return state.type === "LLM_AS_JUDGE"
-      ? { type: state.type, promptMessages: state.promptMessages }
+      ? { type: state.type, prompt: state.prompt }
       : { type: state.type, sourceCode: state.sourceCode };
   };
 
@@ -447,9 +418,6 @@ export function EvaluatorSetupPage(
   };
 
   const save = async () => {
-    if (saveInFlightRef.current || hasCreatedRef.current) return;
-    saveInFlightRef.current = true;
-    setSaveInFlight(true);
     try {
       let state = evaluatorSetupStore.getState();
       const metadata = await prepareEvaluatorMetadataForSave({
@@ -507,14 +475,7 @@ export function EvaluatorSetupPage(
           description,
           definition,
         });
-        capture("evaluators:update", {
-          evaluatorType: state.type,
-          filterExperience,
-          ...getFilterAnalyticsProperties(state.sampleFilter),
-          ...(definition.type === "LLM_AS_JUDGE"
-            ? getJudgePromptAnalyticsProperties(definition.promptMessages)
-            : {}),
-        });
+        capture("evaluators:update", { evaluatorType: state.type });
         showSuccessToast({
           title: "Evaluator saved",
           description: "Your evaluator changes are saved.",
@@ -532,9 +493,9 @@ export function EvaluatorSetupPage(
         description,
         definition,
       });
-      hasCreatedRef.current = true;
-      capture("evaluators:create", {
-        ...getEvaluatorCreationAnalyticsProperties({
+      capture(
+        "evaluators:create",
+        getEvaluatorCreationAnalyticsProperties({
           evaluatorType: state.type,
           creationSource: props.creationSource,
           sourceCodeLanguage:
@@ -542,10 +503,6 @@ export function EvaluatorSetupPage(
           variableMapping:
             definition.type === "LLM_AS_JUDGE"
               ? definition.variableMapping
-              : undefined,
-          promptMessages:
-            definition.type === "LLM_AS_JUDGE"
-              ? definition.promptMessages
               : undefined,
           evaluatorConfig:
             state.type === "LLM_AS_JUDGE"
@@ -558,9 +515,7 @@ export function EvaluatorSetupPage(
                 }
               : undefined,
         }),
-        filterExperience,
-        ...getFilterAnalyticsProperties(state.sampleFilter),
-      });
+      );
       initialSnapshot.current = getCurrentSnapshot(state);
       await utils.evalsV2.filterOptions.invalidate({ projectId });
       if (!shouldOfferRuleAttachment(evaluator)) {
@@ -579,7 +534,6 @@ export function EvaluatorSetupPage(
         testRunCostUsd: lastTestRunCostUsd,
       });
     } catch (error) {
-      hasCreatedRef.current = false;
       if (
         initialEvaluator &&
         error instanceof TRPCClientError &&
@@ -589,9 +543,6 @@ export function EvaluatorSetupPage(
       } else {
         trpcErrorToast(error);
       }
-    } finally {
-      saveInFlightRef.current = false;
-      setSaveInFlight(false);
     }
   };
 
@@ -715,18 +666,9 @@ export function EvaluatorSetupPage(
                 initialEvaluator.definition.variableMapping
               }
             />
-            <EvaluatorAlertButton
-              scope="evaluator"
-              projectId={projectId}
-              evaluatorId={initialEvaluator.id}
-              evaluatorType={initialEvaluator.type}
-              scoreDataType={scoreDataType}
-              {...evaluatorAlerts}
-            />
             <Button
               type="button"
               variant="outline"
-              title="View version history"
               onClick={() => {
                 capture("evaluators:version_history_interaction", {
                   action: "open",
@@ -805,7 +747,6 @@ export function EvaluatorSetupPage(
           initialSnapshot={initialSnapshot.current}
           isEditing={Boolean(initialEvaluator)}
           isSaving={
-            saveInFlight ||
             create.isPending ||
             update.isPending ||
             suggestName.isPending ||

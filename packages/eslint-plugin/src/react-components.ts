@@ -9,19 +9,8 @@ type RootElementCallbacks = {
   onRootElement: (node: TSESTree.JSXElement) => void;
 };
 
-type ResolveReturnExpression = (
-  expression: TSESTree.Expression,
-) => TSESTree.Expression;
-
 type ReturnExpressionCallbacks = {
-  onReturnExpression?: (
-    node: TSESTree.Expression,
-    resolve?: ResolveReturnExpression,
-  ) => void;
-  onComponentReturns?: (
-    expressions: TSESTree.Expression[],
-    resolve: ResolveReturnExpression,
-  ) => void;
+  onReturnExpression: (node: TSESTree.Expression) => void;
 };
 
 const REACT_COMPONENT_TYPES = new Set([
@@ -63,12 +52,7 @@ function expressionReturnsJsxOrNull(
   node: TSESTree.Node | null | undefined,
 ): boolean {
   if (!node) return false;
-  if (
-    isJsxNode(node) ||
-    isNullLiteral(node) ||
-    (node.type === AST_NODE_TYPES.Literal && node.value === false)
-  )
-    return true;
+  if (isJsxNode(node) || isNullLiteral(node)) return true;
 
   switch (node.type) {
     case AST_NODE_TYPES.ConditionalExpression:
@@ -396,40 +380,37 @@ export function createComponentRootElementVisitors(
 
 function visitReturnExpressionsInStatement(
   statement: TSESTree.Statement | null | undefined,
-  onReturnExpression: (node: TSESTree.Expression) => void,
+  callbacks: ReturnExpressionCallbacks,
 ): void {
   if (!statement) return;
 
   if (statement.type === AST_NODE_TYPES.ReturnStatement) {
-    if (statement.argument) onReturnExpression(statement.argument);
+    if (statement.argument) callbacks.onReturnExpression(statement.argument);
     return;
   }
   if (statement.type === AST_NODE_TYPES.BlockStatement) {
     for (const child of statement.body) {
-      visitReturnExpressionsInStatement(child, onReturnExpression);
+      visitReturnExpressionsInStatement(child, callbacks);
     }
     return;
   }
   if (statement.type === AST_NODE_TYPES.IfStatement) {
-    visitReturnExpressionsInStatement(statement.consequent, onReturnExpression);
-    visitReturnExpressionsInStatement(statement.alternate, onReturnExpression);
+    visitReturnExpressionsInStatement(statement.consequent, callbacks);
+    visitReturnExpressionsInStatement(statement.alternate, callbacks);
     return;
   }
   if (statement.type === AST_NODE_TYPES.SwitchStatement) {
     for (const switchCase of statement.cases) {
       for (const child of switchCase.consequent) {
-        visitReturnExpressionsInStatement(child, onReturnExpression);
+        visitReturnExpressionsInStatement(child, callbacks);
       }
     }
     return;
   }
   if (statement.type === AST_NODE_TYPES.TryStatement) {
-    visitReturnExpressionsInStatement(statement.block, onReturnExpression);
-    visitReturnExpressionsInStatement(
-      statement.handler?.body,
-      onReturnExpression,
-    );
-    visitReturnExpressionsInStatement(statement.finalizer, onReturnExpression);
+    visitReturnExpressionsInStatement(statement.block, callbacks);
+    visitReturnExpressionsInStatement(statement.handler?.body, callbacks);
+    visitReturnExpressionsInStatement(statement.finalizer, callbacks);
   }
 }
 
@@ -471,16 +452,8 @@ export function createComponentReturnExpressionVisitors(
     expression: TSESTree.Expression,
     initializers: Map<string, TSESTree.Expression>,
   ) {
-    const seen = new Set<string>();
-    let current: TSESTree.Expression = expression;
-    while (current.type === AST_NODE_TYPES.Identifier) {
-      if (seen.has(current.name)) return current;
-      seen.add(current.name);
-      const init = initializers.get(current.name);
-      if (!init) return current;
-      current = init;
-    }
-    return current;
+    if (expression.type !== AST_NODE_TYPES.Identifier) return expression;
+    return initializers.get(expression.name) ?? expression;
   }
 
   function maybeVisitFunctionComponentReturns(
@@ -497,32 +470,32 @@ export function createComponentReturnExpressionVisitors(
       node.expression
     ) {
       if (!expressionReturnsJsxOrNull(node.body)) return;
-      const resolve = (expression: TSESTree.Expression) => expression;
-      callbacks.onComponentReturns?.([node.body], resolve);
-      callbacks.onReturnExpression?.(node.body, resolve);
+      callbacks.onReturnExpression(node.body);
       return;
     }
 
     const initializers = getDirectVariableInitializers(node);
-    const resolve = (expression: TSESTree.Expression) =>
-      resolveDirectVariable(expression, initializers);
     const returnExpressions: TSESTree.Expression[] = [];
     for (const statement of (node.body as TSESTree.BlockStatement).body) {
       if (statement.type === AST_NODE_TYPES.ReturnStatement) {
         if (statement.argument) {
-          returnExpressions.push(resolve(statement.argument));
+          returnExpressions.push(
+            resolveDirectVariable(statement.argument, initializers),
+          );
         }
         continue;
       }
-      visitReturnExpressionsInStatement(statement, (expression) => {
-        returnExpressions.push(resolve(expression));
+      visitReturnExpressionsInStatement(statement, {
+        onReturnExpression(expression) {
+          returnExpressions.push(
+            resolveDirectVariable(expression, initializers),
+          );
+        },
       });
     }
     if (!returnExpressions.some(expressionReturnsJsxOrNull)) return;
-    callbacks.onComponentReturns?.(returnExpressions, resolve);
-    if (!callbacks.onReturnExpression) return;
     for (const expression of returnExpressions) {
-      callbacks.onReturnExpression(expression, resolve);
+      callbacks.onReturnExpression(expression);
     }
   }
 

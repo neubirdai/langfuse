@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  autoComparisonPreferenceChangedProps,
+  analyticsTabOpenedProps,
   baselineChangedProps,
   chartMetricChangedProps,
   chartMetricGroup,
+  chartsSectionToggledProps,
   comparisonChangedProps,
   comparisonPickerOpenedProps,
-  diffModeChangedProps,
   isSameDataset,
   itemRegressionFilterAppliedProps,
-  layoutChangedProps,
   scoreColumnGroupScope,
   scoreColumnScopeToggledProps,
   uniqueDatasetCount,
@@ -48,50 +47,23 @@ describe("experiment analytics payloads", () => {
     expect(uniqueDatasetCount(["ds-1", null, "ds-2", "ds-1"])).toBe(2);
   });
 
-  // The four-slot chart grid became one strip, so `chartIndex`/`slotCount` are
-  // gone; the score's level and data type take their place. Same event name.
-  it("maps chart metric ids to a shape without keeping the id", () => {
+  it("maps chart metric ids to groups without keeping the id", () => {
     expect(chartMetricGroup("base:cost")).toBe("base");
     expect(chartMetricGroup("obs-score-numeric:helpfulness")).toBe("score");
     const payload = chartMetricChangedProps({
       tableName: "experiments",
       metricId: "obs-score-numeric:helpfulness",
+      chartIndex: 1,
+      slotCount: 3,
     });
     expect(payload).toEqual({
       isV4: true,
       tableName: "experiments",
       metricGroup: "score",
-      scoreLevel: "observation",
-      dataType: "numeric",
+      chartIndex: 1,
+      slotCount: 3,
     });
     expectMetadataOnly(payload);
-
-    expect(
-      chartMetricChangedProps({
-        tableName: "experiments",
-        metricId: "base:cost",
-      }),
-    ).toEqual({
-      isV4: true,
-      tableName: "experiments",
-      metricGroup: "base",
-      scoreLevel: "none",
-      dataType: "none",
-    });
-
-    // Trace-level scores only became selectable in this change.
-    expect(
-      chartMetricChangedProps({
-        tableName: "experiments",
-        metricId: "trace-score-categorical:tone",
-      }),
-    ).toMatchObject({ scoreLevel: "trace", dataType: "categorical" });
-    expect(
-      chartMetricChangedProps({
-        tableName: "experiments",
-        metricId: "experiment-score-numeric:accuracy",
-      }),
-    ).toMatchObject({ scoreLevel: "experiment", dataType: "numeric" });
   });
 
   it("maps score column groups to scopes and ignores unknown groups", () => {
@@ -146,10 +118,7 @@ describe("experiment analytics payloads", () => {
     expectMetadataOnly(payload);
   });
 
-  // `charts_section_toggled` and `analytics_tab_opened` are gone with the
-  // accordion and the Analytics route; the layout, diff-mode and
-  // auto-comparison events replace them on the surfaces that exist now.
-  it("keeps baseline, layout, diff mode and the auto preference on metadata only", () => {
+  it("keeps baseline, charts toggle, and analytics tab on metadata only", () => {
     expect(
       baselineChangedProps({
         tableName: "experiment-items",
@@ -160,97 +129,54 @@ describe("experiment analytics payloads", () => {
       tableName: "experiment-items",
       source: "clear",
     });
-    const layout = layoutChangedProps({
-      tableName: "experiment-items",
-      layout: "matrix",
-      comparisonCount: 2,
-    });
-    expect(layout).toEqual({
-      isV4: true,
-      tableName: "experiment-items",
-      layout: "matrix",
-      comparisonCount: 2,
-    });
-    expectMetadataOnly(layout);
-    const diff = diffModeChangedProps({
-      tableName: "experiment-items",
-      mode: "expected",
-      comparisonCount: 0,
-    });
-    expect(diff).toEqual({
-      isV4: true,
-      tableName: "experiment-items",
-      mode: "expected",
-      comparisonCount: 0,
-    });
-    expectMetadataOnly(diff);
     expect(
-      autoComparisonPreferenceChangedProps({
+      chartsSectionToggledProps({
+        tableName: "experiments",
+        isExpanded: false,
+      }),
+    ).toEqual({
+      isV4: true,
+      tableName: "experiments",
+      isExpanded: false,
+    });
+    expect(
+      analyticsTabOpenedProps({
         tableName: "experiment-items",
-        isEnabled: false,
+        hasComparison: true,
       }),
     ).toEqual({
       isV4: true,
       tableName: "experiment-items",
-      isEnabled: false,
+      hasComparison: true,
     });
   });
 
-  // Same event name, repointed at the score-comparison filter ("worse than the
-  // comparison"). No `column`: here the filtered column is a score, and a score
-  // name is user content, so the level and data type describe it instead.
-  it("describes a score-comparison filter by shape, not by score name", () => {
-    const payload = itemRegressionFilterAppliedProps({
-      tableName: "experiment-items",
-      scoreLevel: "trace",
-      dataType: "NUMERIC",
-      operator: "lower",
-      comparisonExperimentId: "cmp-2",
-      comparisonIds: ["cmp-1", "cmp-2"],
-      source: "header_menu",
-    });
-    expect(payload).toEqual({
-      isV4: true,
-      tableName: "experiment-items",
-      scoreLevel: "trace",
-      dataType: "NUMERIC",
-      operator: "lower",
-      comparisonIndex: 1,
-      source: "header_menu",
-    });
-    expect(payload).not.toBeNull();
-    expectMetadataOnly(payload!);
-    expect(payload).not.toHaveProperty("column");
-
-    // An unknown data type is reported as such rather than dropped, so the
-    // property is present on every event.
+  it("emits regression-filter props only when retargeting to a comparison", () => {
     expect(
       itemRegressionFilterAppliedProps({
         tableName: "experiment-items",
-        scoreLevel: "observation",
-        dataType: undefined,
-        operator: "different",
-        comparisonExperimentId: "cmp-1",
+        column: "latency",
+        operator: ">",
+        toExperimentId: "baseline-1",
+        baselineId: "baseline-1",
         comparisonIds: ["cmp-1"],
-        source: "url",
-      }),
-    ).toMatchObject({ dataType: "unknown", comparisonIndex: 0 });
-  });
-
-  // A shared URL can outlive the run its filter points at. The table treats
-  // that filter as inactive, so there is no applied filter to report — an
-  // out-of-range index would be noise in the funnel.
-  it("reports no event for a filter pointing outside the compared runs", () => {
-    expect(
-      itemRegressionFilterAppliedProps({
-        tableName: "experiment-items",
-        scoreLevel: "trace",
-        dataType: "NUMERIC",
-        operator: "lower",
-        comparisonExperimentId: "cmp-gone",
-        comparisonIds: ["cmp-1", "cmp-2"],
-        source: "url",
       }),
     ).toBeNull();
+    expect(
+      itemRegressionFilterAppliedProps({
+        tableName: "experiment-items",
+        column: "latency",
+        operator: ">",
+        toExperimentId: "cmp-1",
+        baselineId: "baseline-1",
+        comparisonIds: ["cmp-1", "cmp-2"],
+      }),
+    ).toEqual({
+      isV4: true,
+      tableName: "experiment-items",
+      column: "latency",
+      comparisonIndex: 0,
+      operator: ">",
+    });
   });
 });

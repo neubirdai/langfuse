@@ -1,4 +1,5 @@
 import { type RouterOutputs } from "@/src/utils/api";
+import { type NextRouter, useRouter } from "next/router";
 import { useState, useRef, useEffect } from "react";
 import { PromptVersionDiffDialogContent } from "./PromptVersionDiffDialog";
 import {
@@ -19,13 +20,12 @@ const PromptHistoryTraceNode = (props: {
   currentPrompt?: RouterOutputs["prompts"]["allVersions"]["promptVersions"][number];
   currentPromptVersion: number | undefined;
   setCurrentPromptVersion: (version: number | undefined) => void;
-  openCommentDrawer: (promptId: string, promptVersion: number) => void;
+  router: NextRouter;
   commentCounts?: Map<string, number>;
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isLabelPopoverOpen, setIsLabelPopoverOpen] = useState(false);
   const { prompt } = props;
-  const commentCount = props.commentCounts?.get(prompt.id);
 
   // Add ref for scroll into view
   const currentPromptRef = useRef<HTMLDivElement>(null);
@@ -108,16 +108,29 @@ const PromptHistoryTraceNode = (props: {
               setIsOpen={setIsLabelPopoverOpen}
               showOnlyOnHover
             />
-            {commentCount ? (
+            {props.commentCounts?.get(prompt.id) ? (
               <span
                 onClick={(e) => {
                   e.stopPropagation();
-                  props.openCommentDrawer(prompt.id, prompt.version);
+                  props.router.push(
+                    {
+                      pathname: props.router.pathname,
+                      query: {
+                        ...props.router.query,
+                        version: prompt.version,
+                        comments: "open",
+                        commentObjectType: "PROMPT",
+                        commentObjectId: prompt.id,
+                      },
+                    },
+                    undefined,
+                    { shallow: true },
+                  );
                 }}
                 className="cursor-pointer"
                 role="button"
               >
-                <CommentCountIcon count={commentCount} />
+                <CommentCountIcon count={props.commentCounts.get(prompt.id)} />
               </span>
             ) : null}
           </div>
@@ -153,23 +166,24 @@ const PromptHistoryTraceNode = (props: {
                     />
                   )}
                 >
-                  {({ isOpen, openDialog }) =>
+                  {({ isOpen, Trigger }) =>
                     isHovered ||
                     props.currentPromptVersion === prompt.version ||
                     isOpen ? (
-                      <Button
-                        variant="outline"
-                        type="button"
-                        size="icon"
-                        className="h-7 w-7 px-0"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openDialog();
-                        }}
-                        title="Compare with selected prompt"
-                      >
-                        <FileDiffIcon className="h-4 w-4" />
-                      </Button>
+                      <Trigger asChild>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          size="icon"
+                          className="h-7 w-7 px-0"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                          }}
+                          title="Compare with selected prompt"
+                        >
+                          <FileDiffIcon className="h-4 w-4" />
+                        </Button>
+                      </Trigger>
                     ) : null
                   }
                 </DialogController>
@@ -186,9 +200,9 @@ export const PromptHistoryNode = (props: {
   prompts: RouterOutputs["prompts"]["allVersions"]["promptVersions"];
   currentPromptVersion: number | undefined;
   setCurrentPromptVersion: (id: number | undefined) => void;
-  openCommentDrawer: (promptId: string, promptVersion: number) => void;
   commentCounts?: Map<string, number>;
 }) => {
+  const router = useRouter();
   const currentPrompt = props.prompts.find(
     (p) => p.version === props.currentPromptVersion,
   );
@@ -203,7 +217,7 @@ export const PromptHistoryNode = (props: {
           currentPrompt={currentPrompt}
           currentPromptVersion={props.currentPromptVersion}
           setCurrentPromptVersion={props.setCurrentPromptVersion}
-          openCommentDrawer={props.openCommentDrawer}
+          router={router}
           commentCounts={props.commentCounts}
         />
       ))}

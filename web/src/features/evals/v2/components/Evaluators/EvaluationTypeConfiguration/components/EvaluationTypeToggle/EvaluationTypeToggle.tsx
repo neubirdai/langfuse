@@ -1,7 +1,7 @@
 import { Code2, Sparkles } from "lucide-react";
 import { EvalTemplateTypeEnum, type EvalTemplateType } from "@langfuse/shared";
 
-import { Tabs } from "@/src/components/design-system/Tabs/Tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/src/components/ui/tabs";
 
 /** Selects the evaluator implementation. */
 export function EvaluationTypeToggle({
@@ -18,24 +18,28 @@ export function EvaluationTypeToggle({
       value={value}
       onValueChange={(mode) => onValueChange(mode as EvalTemplateType)}
     >
-      <Tabs.List variant="outline">
+      <TabsList className="bg-background **:data-[state=active]:bg-muted border">
         {!disabled || value === EvalTemplateTypeEnum.LLM_AS_JUDGE ? (
-          <Tabs.Trigger
+          <TabsTrigger
             value={EvalTemplateTypeEnum.LLM_AS_JUDGE}
+            className="gap-1.5 leading-none"
             disabled={disabled}
-            icon={Sparkles}
-            label="LLM-as-a-judge"
-          />
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            LLM-as-a-judge
+          </TabsTrigger>
         ) : null}
         {!disabled || value === EvalTemplateTypeEnum.CODE ? (
-          <Tabs.Trigger
+          <TabsTrigger
             value={EvalTemplateTypeEnum.CODE}
+            className="gap-1.5 leading-none"
             disabled={disabled}
-            icon={Code2}
-            label="Code evaluator"
-          />
+          >
+            <Code2 className="h-3.5 w-3.5 shrink-0" />
+            Code evaluator
+          </TabsTrigger>
         ) : null}
-      </Tabs.List>
+      </TabsList>
     </Tabs>
   );
 }

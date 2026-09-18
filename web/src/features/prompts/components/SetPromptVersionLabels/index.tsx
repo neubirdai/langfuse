@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/src/components/ui/popover";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import useProjectIdFromURL from "@/src/hooks/useProjectIdFromURL";
 import { api, reportNonTrpcError } from "@/src/utils/api";
 import {
@@ -23,7 +23,7 @@ import {
   type Prompt,
 } from "@langfuse/shared";
 import { LabelCommandItem } from "./LabelCommandItem";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { isReservedPromptLabel } from "@/src/features/prompts/utils";
 import { TruncatedLabels } from "@/src/components/TruncatedLabels";
 import { cn } from "@/src/utils/tailwind";
@@ -178,12 +178,10 @@ export function SetPromptVersionLabels({
           )}
         >
           {title && title}
-          {promptLabels.length > 0 && (
-            <TruncatedLabels
-              labels={promptLabels}
-              maxVisibleLabels={maxVisibleLabels}
-            />
-          )}
+          <TruncatedLabels
+            labels={promptLabels}
+            maxVisibleLabels={maxVisibleLabels}
+          />
           <Button
             variant="outline"
             title="Add prompt label"

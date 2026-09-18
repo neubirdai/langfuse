@@ -18,7 +18,6 @@ import {
 export default withUnstablePublicApiMiddlewares({
   GET: createUnstablePublicApiRoute({
     name: "Get Unstable Dashboard Widget",
-    action: "dashboards:read",
     querySchema: DashboardWidgetIdQuery,
     responseSchema: GetUnstableDashboardWidgetResponse,
     fn: ({ query, auth }) =>
@@ -29,7 +28,6 @@ export default withUnstablePublicApiMiddlewares({
   }),
   PATCH: createUnstablePublicApiRoute({
     name: "Update Unstable Dashboard Widget",
-    action: "dashboards:CUD",
     querySchema: DashboardWidgetIdQuery,
     bodySchema: PatchUnstableDashboardWidgetBody,
     responseSchema: PatchUnstableDashboardWidgetResponse,
@@ -43,7 +41,6 @@ export default withUnstablePublicApiMiddlewares({
   }),
   DELETE: createUnstablePublicApiRoute({
     name: "Delete Unstable Dashboard Widget",
-    action: "dashboards:CUD",
     querySchema: DashboardWidgetIdQuery,
     responseSchema: DeleteUnstableDashboardWidgetResponse,
     fn: async ({ query, auth }) => {

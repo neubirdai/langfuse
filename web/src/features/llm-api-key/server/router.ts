@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { auditLog } from "@/src/features/audit-logs/server";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
 import {
   AuthMethod,
   CreateLlmApiKey,
@@ -7,7 +7,7 @@ import {
   SafeLlmApiKeySchema,
   type BedrockAuthMethod,
 } from "@/src/features/llm-api-key/types";
-import { throwIfNoProjectAccess } from "@/src/features/rbac";
+import { throwIfNoProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   createTRPCRouter,
   protectedProjectProcedure,

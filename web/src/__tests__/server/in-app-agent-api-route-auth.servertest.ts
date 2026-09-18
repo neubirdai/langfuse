@@ -54,7 +54,6 @@ describe("in-app agent public API route auth", () => {
   async function callRoute(params: { allowInAppAgentKey?: boolean }) {
     const handler = createAuthedProjectAPIRoute({
       name: "Test Route",
-      action: "project:read",
       ...(params.allowInAppAgentKey === undefined
         ? {}
         : { allowInAppAgentKey: params.allowInAppAgentKey }),

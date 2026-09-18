@@ -2,8 +2,6 @@ import { z } from "zod";
 import {
   AnalyticsIntegrationExportSource,
   OBSERVATION_FIELD_GROUPS_FULL,
-  BLOB_STORAGE_REGION_INVALID_MESSAGE,
-  BLOB_STORAGE_REGION_REGEX,
 } from "@langfuse/shared";
 import {
   validateAzureContainerName,
@@ -101,9 +99,7 @@ export const CreateBlobStorageIntegrationRequest = z
     type: BlobStorageIntegrationType,
     bucketName: z.string().min(1),
     endpoint: z.string().nullable().optional(),
-    region: z.string().trim().min(1).regex(BLOB_STORAGE_REGION_REGEX, {
-      message: BLOB_STORAGE_REGION_INVALID_MESSAGE,
-    }),
+    region: z.string(),
     accessKeyId: z.string().nullable().optional(),
     secretAccessKey: z.string().nullable().optional(),
     prefix: z

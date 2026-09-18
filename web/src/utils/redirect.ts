@@ -1,37 +1,14 @@
 import { env } from "@/src/env.mjs";
 
 /**
- * Dummy https origin used only so the WHATWG URL parser can resolve the
- * input the same way a browser would. Never returned to callers.
- */
-const REDIRECT_ORIGIN = "https://langfuse.invalid";
-
-/**
- * A path segment that is still a Next.js pages-router dynamic param
- * (`[id]`, `[...slug]`, `[[...slug]]`). Passing that string to
- * `router.push`/`replace` throws href-interpolation-failed.
- */
-const UNINTERPOLATED_ROUTE_SEGMENT =
-  /(?:^|\/)(?:\[(?:\.\.\.)?[A-Za-z_][\w]*\]|\[\[(?:\.\.\.)?[A-Za-z_][\w]*\]\])(?=\/|$)/;
-
-function pathnameHasUninterpolatedRouteParam(pathname: string): boolean {
-  return UNINTERPOLATED_ROUTE_SEGMENT.test(pathname);
-}
-
-/**
  * Validates and sanitizes a redirect path to prevent open redirect attacks.
  *
  * Security Requirements:
- * - Only allows path-absolute relative paths that start with "/"
- * - Parses with the WHATWG URL constructor and rejects off-origin results
- *   (protocol-relative, backslash-normalized, absolute http(s), other schemes)
- * - Rejects serialized output that starts with "//" after dot-segment resolution
- * - Rejects pathnames that still contain Next.js dynamic segments
- *   (`[param]`, `[[...param]]`) — those are unhydrated route patterns, not URLs
+ * - Only allows relative paths starting with "/" (e.g., "/dashboard", "/project/123")
+ * - Blocks protocol-relative URLs (e.g., "//evil.com")
+ * - Blocks absolute URLs (e.g., "http://evil.com", "https://evil.com")
+ * - Blocks javascript: and data: URIs
  * - Automatically prepends NEXT_PUBLIC_BASE_PATH if configured
- *
- * Returned paths are URL-serialized: spaces and control characters are
- * percent-encoded, and dot segments are resolved.
  *
  * @param targetPath - The path to validate (typically from query params or user input)
  * @returns A safe redirect path with basePath prepended, or "/" (with basePath) if invalid
@@ -53,42 +30,48 @@ export function getSafeRedirectPath(
   const basePath = env.NEXT_PUBLIC_BASE_PATH ?? "";
   const safeDefault = basePath ? `${basePath}/` : "/";
 
-  if (typeof targetPath !== "string") {
+  // Handle empty/null/undefined
+  if (!targetPath || typeof targetPath !== "string") {
     return safeDefault;
   }
 
-  const input = targetPath.trim();
+  // Trim whitespace
+  const trimmed = targetPath.trim();
 
-  if (!input.startsWith("/")) {
+  if (!trimmed) {
     return safeDefault;
   }
 
-  let url: URL;
-  try {
-    url = new URL(input, REDIRECT_ORIGIN);
-  } catch {
+  // Strip ASCII control characters (0x00-0x1F, 0x7F) to defend against
+  // newline injection (HTTP header / log forging) and null-byte injection
+  // (path-extension confusion). These characters are not valid in URL
+  // paths per RFC 3986. Unicode bidi-formatting characters (e.g.
+  // U+202E RTL-override) are intentionally out of scope for this fix.
+  const sanitized = trimmed.replace(/[\x00-\x1F\x7F]/g, "");
+
+  if (!sanitized) {
     return safeDefault;
   }
 
-  const path = `${url.pathname}${url.search}${url.hash}`;
-
-  // Origin rejects `/\evil.com` (HTTPS parser resolves it off-site).
-  // Leading `//` after serialization rejects `/x/..//evil.com`.
-  if (url.origin !== REDIRECT_ORIGIN || path.startsWith("//")) {
+  // Only allow paths starting with "/" but not "//" (protocol-relative URLs)
+  // This blocks:
+  // - Protocol-relative: "//evil.com"
+  // - Absolute URLs: "http://evil.com", "https://evil.com"
+  // - JavaScript URIs: "javascript:alert(1)"
+  // - Data URIs: "data:text/html,..."
+  // - Other schemes: "file://", "ftp://", etc.
+  if (!sanitized.startsWith("/") || sanitized.startsWith("//")) {
     return safeDefault;
   }
 
-  // Pre-hydration asPath on a statically-optimized dynamic route is the raw
-  // pattern. router.replace(that) throws instead of navigating.
-  if (pathnameHasUninterpolatedRouteParam(url.pathname)) {
-    return safeDefault;
+  // If basePath is configured, check if the path already starts with it
+  // This prevents double-prepending when the path already includes the base path
+  if (basePath && sanitized.startsWith(basePath)) {
+    return sanitized;
   }
 
-  const includesBasePath =
-    basePath &&
-    (url.pathname === basePath || url.pathname.startsWith(`${basePath}/`));
-
-  return includesBasePath ? path : basePath + path;
+  // Prepend basePath if configured
+  return basePath + sanitized;
 }
 
 /**
@@ -105,23 +88,13 @@ export function stripBasePath(path: string): string {
     return "/";
   }
 
-  // Strip ASCII control characters (0x00-0x1F, 0x7F) so a newline or
-  // null byte cannot split the basePath prefix from the remainder.
+  if (!path.startsWith(basePath)) {
+    return path;
+  }
+
+  // Strip ASCII control characters (0x00-0x1F, 0x7F) before further
+  // processing. See getSafeRedirectPath for the rationale.
   const cleaned = path.replace(/[\x00-\x1F\x7F]/g, "");
-
-  if (cleaned === basePath) {
-    return "/";
-  }
-
-  // Require a path-segment boundary so `/my-app` does not strip the
-  // prefix of `/my-application`.
-  if (
-    !cleaned.startsWith(`${basePath}/`) &&
-    !cleaned.startsWith(`${basePath}?`) &&
-    !cleaned.startsWith(`${basePath}#`)
-  ) {
-    return cleaned || "/";
-  }
 
   const stripped = cleaned.slice(basePath.length) || "/";
   return stripped.startsWith("/") ? stripped : `/${stripped}`;

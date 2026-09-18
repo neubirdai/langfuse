@@ -1,9 +1,8 @@
-/* eslint-disable boundaries/dependencies */
 import { type CellContext, type RowData } from "@tanstack/react-table";
 import { Folder } from "lucide-react";
 
+import { TableTextLoadingCell } from "@/src/components/table/loading-cells";
 import { TextLink } from "@/src/components/design-system/TextLink/TextLink";
-import { Skeleton } from "@/src/components/ui/skeleton";
 import {
   createTableColumn,
   type TableColumnOptions,
@@ -31,7 +30,7 @@ export function createFolderKeyTableColumn<
 }) {
   return createTableColumn<TData, TValue>({
     ...options,
-    loadingCell: <Skeleton className="h-4 w-1/2" />,
+    loadingCell: <TableTextLoadingCell />,
     renderCell: (value, context) => {
       const cell = getCell(value, context);
       if (!cell) return null;

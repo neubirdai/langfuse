@@ -193,7 +193,7 @@ describe("LocalCodeEvalDispatcher", () => {
       }),
     ).rejects.toMatchObject({
       code: "TIMEOUT",
-      retryable: false,
+      retryable: true,
     } satisfies Partial<CodeEvalDispatcherError>);
   });
 
@@ -221,7 +221,7 @@ describe("LocalCodeEvalDispatcher", () => {
     expect(result).toBeInstanceOf(CodeEvalDispatcherError);
     expect(result).toMatchObject({
       code: "TIMEOUT",
-      retryable: false,
+      retryable: true,
     } satisfies Partial<CodeEvalDispatcherError>);
   });
 

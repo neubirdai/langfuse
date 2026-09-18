@@ -1,5 +1,6 @@
 import { DatasetRunsTable } from "@/src/features/datasets/components/DatasetRunsTable";
 import { api } from "@/src/utils/api";
+import { useRouter } from "next/router";
 import Link from "next/link";
 import { DetailPageNav } from "@/src/features/navigate-detail-pages/DetailPageNav";
 import { UpdateDatasetDialogController } from "@/src/features/datasets/components/UpdateDatasetDialogController";
@@ -43,30 +44,12 @@ import { getDatasetBreadcrumb } from "@/src/features/datasets/utils/getDatasetBr
 import { ExperimentsTable } from "@/src/features/experiments/components/table";
 import { singleRunToExperimentsUrl } from "@/src/features/experiments/utils/experimentUrlTranslation";
 import { Skeleton } from "@/src/components/ui/skeleton";
-import {
-  RouteParamsPendingFallback,
-  useReadyRouteParams,
-} from "@/src/hooks/useReadyRouteParams";
 
-export default function DatasetExperimentsPage() {
-  const route = useReadyRouteParams(["projectId", "datasetId"]);
-  if (!route.ready) return <RouteParamsPendingFallback />;
-  return (
-    <DatasetExperimentsView
-      projectId={route.params.projectId}
-      datasetId={route.params.datasetId}
-    />
-  );
-}
-
-function DatasetExperimentsView({
-  projectId,
-  datasetId,
-}: {
-  projectId: string;
-  datasetId: string;
-}) {
+export default function Dataset() {
+  const router = useRouter();
   const capture = usePostHogClientCapture();
+  const projectId = router.query.projectId as string;
+  const datasetId = router.query.datasetId as string;
   const utils = api.useUtils();
   const [isCreateExperimentDialogOpen, setIsCreateExperimentDialogOpen] =
     useState(false);
@@ -82,13 +65,10 @@ function DatasetExperimentsView({
     }[]
   >([]);
 
-  const dataset = api.datasets.byId.useQuery(
-    {
-      datasetId,
-      projectId,
-    },
-    { enabled: Boolean(projectId) && Boolean(datasetId) },
-  );
+  const dataset = api.datasets.byId.useQuery({
+    datasetId,
+    projectId,
+  });
 
   const hasReadAccess = useHasProjectAccess({
     projectId,
@@ -113,9 +93,6 @@ function DatasetExperimentsView({
     if (isExperimentsBetaActive) {
       utils.experiments.all.invalidate();
       utils.experiments.countAll.invalidate();
-      // The empty-window fallback is its own query, and a new run belongs in
-      // it: without this it keeps serving its cached list.
-      utils.experiments.mostRecent.invalidate();
     } else {
       utils.datasets.runsByDatasetId.invalidate();
       utils.datasets.baseRunDataByDatasetId.invalidate();
@@ -133,36 +110,25 @@ function DatasetExperimentsView({
     });
   };
 
-  const hasEvaluationRuleReadAccess = useHasProjectAccess({
+  const hasEvalReadAccess = useHasProjectAccess({
     projectId,
-    scope: "evaluationRule:read",
+    scope: "evalJob:read",
   });
 
-  const hasEvaluationRuleWriteAccess = useHasProjectAccess({
+  const hasEvalWriteAccess = useHasProjectAccess({
     projectId,
-    scope: "evaluationRule:CUD",
-  });
-
-  const hasEvaluatorReadAccess = useHasProjectAccess({
-    projectId,
-    scope: "evaluator:read",
+    scope: "evalJob:CUD",
   });
 
   const evalTemplates = api.evals.latestTemplates.useQuery(
     { projectId },
-    {
-      enabled:
-        !isExperimentsBetaActive &&
-        hasEvaluatorReadAccess &&
-        Boolean(projectId),
-    },
+    { enabled: !isExperimentsBetaActive },
   );
 
   const evaluators = api.evals.jobConfigsByTarget.useQuery(
     { projectId, targetObject: ["dataset", "experiment"] },
     {
-      enabled:
-        !isExperimentsBetaActive && hasEvaluationRuleReadAccess && !!datasetId,
+      enabled: !isExperimentsBetaActive && hasEvalReadAccess && !!datasetId,
     },
   );
 
@@ -300,7 +266,7 @@ function DatasetExperimentsView({
               </DialogContent>
             </Dialog>
 
-            {hasEvaluationRuleReadAccess && hasEvaluatorReadAccess ? (
+            {hasEvalReadAccess && (
               <div className="w-fit">
                 <TemplateSelector
                   projectId={projectId}
@@ -308,10 +274,10 @@ function DatasetExperimentsView({
                   evalTemplates={evalTemplates.data?.templates ?? []}
                   onConfigureTemplate={handleConfigureEvaluator}
                   onSelectEvaluator={handleSelectEvaluator}
-                  disabled={!hasEvaluationRuleWriteAccess}
+                  disabled={!hasEvalWriteAccess}
                 />
               </div>
-            ) : null}
+            )}
 
             <DatasetAnalytics
               key="dataset-analytics"

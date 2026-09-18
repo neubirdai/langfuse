@@ -1,5 +1,6 @@
 /* eslint-disable @repo/no-style-props, @repo/no-abstracted-overlay-trigger */
 import TagCommandItem from "@/src/features/tag/components/TagCommandItem";
+import TagCreateItem from "@/src/features/tag/components/TagCreateItem";
 import { TagInput } from "@/src/features/tag/components/TagInput";
 import TagList from "@/src/features/tag/components/TagList";
 import { useTagManager } from "@/src/features/tag/hooks/useTagManager";
@@ -9,9 +10,9 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/src/components/ui/popover";
-import { Command, CommandGroup, CommandItem, CommandList } from "cmdk";
+import { Command, CommandList, CommandGroup } from "cmdk";
 import { cn } from "@/src/utils/tailwind";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { Label } from "@/src/components/ui/label";
 
 type TagManagerProps = {
@@ -55,11 +56,6 @@ const TagManager = ({
       value.toLowerCase().includes(inputValue.trim().toLowerCase()) &&
       !selectedTags.includes(value),
   );
-  const canCreateTag =
-    inputValue !== "" &&
-    !filteredTags.some(
-      (value) => value.toLowerCase() === inputValue.toLowerCase(),
-    );
 
   const handlePopoverChange = (open: boolean) => {
     if (open) {
@@ -176,16 +172,12 @@ const TagManager = ({
                 />
               ))}
             </CommandGroup>
-            {canCreateTag && (
-              <CommandItem
-                key={inputValue}
-                value={inputValue.trim()}
-                className="text-muted-foreground hover:bg-secondary/80 flex min-h-8 cursor-pointer items-center rounded-sm px-3 py-1 text-sm"
-                onSelect={handleItemCreate}
-              >
-                Create new tag: &quot;{inputValue.trim()}&quot;
-              </CommandItem>
-            )}
+            <TagCreateItem
+              key={inputValue}
+              onSelect={handleItemCreate}
+              inputValue={inputValue}
+              options={filteredTags}
+            />
           </CommandList>
         </Command>
       </PopoverContent>

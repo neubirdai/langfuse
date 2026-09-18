@@ -11,7 +11,7 @@ import {
   validateEvalOutputResult,
 } from "@langfuse/shared";
 import {
-  buildEvalExecutionData,
+  buildEvalExecutionMetadata,
   type EvaluatorLlmErrorClassification,
 } from "@langfuse/shared/src/server";
 import { parseDispatchResult } from "../../../../packages/shared/src/server/evals/codeEvalDispatcherTypes";
@@ -267,7 +267,7 @@ describe("evaluation helpers", () => {
     });
   });
 
-  describe("buildEvalExecutionData", () => {
+  describe("buildEvalExecutionMetadata", () => {
     it("should include all provided fields", () => {
       const params = {
         type: "JOB" as const,
@@ -278,20 +278,14 @@ describe("evaluation helpers", () => {
         targetDatasetItemId: "dataset-def",
       };
 
-      const result = buildEvalExecutionData(params);
+      const result = buildEvalExecutionMetadata(params);
 
       expect(result).toEqual({
-        executionMetadata: {
-          job_execution_id: "exec-123",
-          job_configuration_id: "config-456",
-          target_trace_id: "trace-789",
-          target_observation_id: "obs-abc",
-          target_dataset_item_id: "dataset-def",
-        },
-        evaluationContext: {
-          evaluationRuleId: "config-456",
-          evaluatorExecutionIsTest: false,
-        },
+        job_execution_id: "exec-123",
+        job_configuration_id: "config-456",
+        target_trace_id: "trace-789",
+        target_observation_id: "obs-abc",
+        target_dataset_item_id: "dataset-def",
       });
     });
 
@@ -305,27 +299,15 @@ describe("evaluation helpers", () => {
         targetDatasetItemId: null,
       };
 
-      const result = buildEvalExecutionData(params);
+      const result = buildEvalExecutionMetadata(params);
 
       expect(result).toEqual({
-        executionMetadata: {
-          job_execution_id: "exec-123",
-          job_configuration_id: "config-456",
-        },
-        evaluationContext: {
-          evaluationRuleId: "config-456",
-          evaluatorExecutionIsTest: false,
-        },
+        job_execution_id: "exec-123",
+        job_configuration_id: "config-456",
       });
-      expect(Object.keys(result.executionMetadata)).not.toContain(
-        "target_trace_id",
-      );
-      expect(Object.keys(result.executionMetadata)).not.toContain(
-        "target_observation_id",
-      );
-      expect(Object.keys(result.executionMetadata)).not.toContain(
-        "target_dataset_item_id",
-      );
+      expect(Object.keys(result)).not.toContain("target_trace_id");
+      expect(Object.keys(result)).not.toContain("target_observation_id");
+      expect(Object.keys(result)).not.toContain("target_dataset_item_id");
     });
   });
 
@@ -531,11 +513,6 @@ describe("evaluation helpers", () => {
   });
 
   describe("buildEvalScoreWritePayloads", () => {
-    const evaluationContext = {
-      evaluationRuleId: "rule-1",
-      evaluatorExecutionIsTest: false,
-    };
-
     it("should build stable code eval score IDs when different score names reorder", () => {
       const originalPayloads = buildEvalScoreWritePayloads({
         scores: [
@@ -556,7 +533,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
       const reorderedPayloads = buildEvalScoreWritePayloads({
         scores: [
@@ -577,7 +553,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
 
       expect(originalPayloads[0].scoreId).toBe(reorderedPayloads[1].scoreId);
@@ -609,7 +584,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
       const scoreIds = result.map((payload) => payload.scoreId);
 
@@ -665,7 +639,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
 
       expect(result.map((payload) => payload.scoreId)).toEqual(
@@ -697,7 +670,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
 
       expect(result).toHaveLength(1);
@@ -734,7 +706,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
 
       expect(result).toHaveLength(1);
@@ -782,7 +753,6 @@ describe("evaluation helpers", () => {
         environment: "production",
         executionTraceId: "exec-trace-789",
         executionMetadata: { job_execution_id: "job-1" },
-        evaluationContext,
       });
 
       expect(result).toHaveLength(2);
@@ -828,11 +798,6 @@ describe("evaluation helpers", () => {
           job_execution_id: "job-1",
           dispatcher_name: "test-dispatcher",
         },
-        evaluationContext: {
-          evaluatorId: "evaluator-1",
-          evaluationRuleId: "legacy-rule-1",
-          evaluatorExecutionIsTest: false,
-        },
       });
 
       expect(result[0].event.body.metadata).toEqual({
@@ -841,17 +806,9 @@ describe("evaluation helpers", () => {
         job_execution_id: "job-1",
         dispatcher_name: "test-dispatcher",
       });
-      expect(result[0].event.body).toMatchObject({
-        evaluatorId: "evaluator-1",
-        evaluationRuleId: "legacy-rule-1",
-      });
       expect(result[1].event.body.metadata).toEqual({
         job_execution_id: "job-1",
         dispatcher_name: "test-dispatcher",
-      });
-      expect(result[1].event.body).toMatchObject({
-        evaluatorId: "evaluator-1",
-        evaluationRuleId: "legacy-rule-1",
       });
     });
   });

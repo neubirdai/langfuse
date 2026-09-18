@@ -10,11 +10,27 @@ import { generateJobExecutionCounts } from "@/src/features/evals/utils/job-execu
 import { EvaluatorPausedCallout } from "@/src/features/evals/components/evaluator-paused-callout";
 import {
   type EvalTargetObject,
+  type EvaluatorExecutionStatusCount,
   validateEvaluatorFiltersForTarget,
 } from "@langfuse/shared";
 import { useLazyEvaluatorExecutionCounts } from "@/src/features/evals/hooks/useLazyEvaluatorExecutionCounts";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+
+const JobExecutionCounts = ({
+  isLoading,
+  jobExecutionCounts,
+}: {
+  isLoading?: boolean;
+  jobExecutionCounts?: EvaluatorExecutionStatusCount[];
+}) => {
+  if (!isLoading && (!jobExecutionCounts || jobExecutionCounts.length === 0)) {
+    return null;
+  }
+
+  const counts = generateJobExecutionCounts(jobExecutionCounts);
+  return <LevelCountsDisplay counts={counts} isLoading={isLoading} />;
+};
 
 export const EvaluatorDetail = () => {
   const router = useRouter();
@@ -98,11 +114,9 @@ export const EvaluatorDetail = () => {
           <>
             {shouldRenderExecutionCounts && (
               <div className="bg-muted-gray flex min-h-6 min-w-24 flex-col items-center justify-center rounded-md px-2">
-                <LevelCountsDisplay
-                  counts={generateJobExecutionCounts(
-                    lazyExecutionCounts.jobExecutionCounts,
-                  )}
+                <JobExecutionCounts
                   isLoading={lazyExecutionCounts.isLoading}
+                  jobExecutionCounts={lazyExecutionCounts.jobExecutionCounts}
                 />
               </div>
             )}
@@ -126,13 +140,14 @@ export const EvaluatorDetail = () => {
         <div className="flex h-full flex-col overflow-hidden">
           {filterValidation && !filterValidation.isValid && (
             <div className="mx-3 mt-3">
-              <Alert variant="destructive" icon={AlertTriangle}>
-                <Alert.Title>Unsupported filters</Alert.Title>
-                <Alert.Description>
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Unsupported filters</AlertTitle>
+                <AlertDescription>
                   This evaluator contains deprecated or unsupported filters. The
                   filters must be removed. Until the filters are removed, the
                   evaluator is paused and will not be run.{" "}
-                </Alert.Description>
+                </AlertDescription>
               </Alert>
             </div>
           )}
@@ -141,7 +156,6 @@ export const EvaluatorDetail = () => {
               <EvaluatorPausedCallout
                 projectId={projectId}
                 evalConfig={existingEvaluator}
-                blockedAt={existingEvaluator.blockedAt}
                 allowReactivation
               />
             </div>

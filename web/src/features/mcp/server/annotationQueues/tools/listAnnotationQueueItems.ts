@@ -1,7 +1,7 @@
 import {
   GetAnnotationQueueItemsQuery,
   GetAnnotationQueueItemsResponse,
-} from "@/src/features/public-api/server";
+} from "@/src/features/public-api/types/annotation-queues";
 import { listAnnotationQueueItemsForApi } from "@/src/features/annotation-queues/server/publicAnnotationQueueService";
 import { defineTool } from "../../../core/define-tool";
 import { buildAnnotationQueueItemUrl } from "@langfuse/shared/src/server";

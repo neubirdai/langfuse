@@ -9,7 +9,6 @@ import { getAnnotationQueueForApi } from "@/src/features/annotation-queues/serve
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get annotation queue by ID",
-    action: "annotationQueues:read",
     querySchema: GetAnnotationQueueByIdQuery,
     responseSchema: GetAnnotationQueueByIdResponse,
     rateLimitResource: "annotation-queues",

@@ -11,13 +11,14 @@ import {
 } from "./evaluatorScoresUrl";
 
 describe("evaluatorScoresUrl", () => {
-  it("filters code evaluator scores by evaluator ID", () => {
+  it("filters code evaluator scores by evaluator and assigned rule IDs", () => {
     const url = new URL(
       evaluatorScoresUrl(
         "project-1",
         "evaluator-id",
         "Code evaluator",
         EvalTemplateTypeEnum.CODE,
+        ["rule-1", "rule-2"],
       ),
       "https://langfuse.local",
     );
@@ -29,7 +30,7 @@ describe("evaluatorScoresUrl", () => {
         column: "evaluatorId",
         type: "stringOptions",
         operator: "any of",
-        value: ["evaluator-id"],
+        value: ["evaluator-id", "rule-1", "rule-2"],
       },
       {
         column: "source",
@@ -47,6 +48,7 @@ describe("evaluatorScoresUrl", () => {
         "evaluator-id",
         "Correctness",
         EvalTemplateTypeEnum.LLM_AS_JUDGE,
+        ["rule-1"],
       ),
       "https://langfuse.local",
     );

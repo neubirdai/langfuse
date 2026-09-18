@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/src/components/ui/dialog";
-import { RadioGroup } from "@/src/components/design-system/RadioGroup/RadioGroup";
+import { RadioGroup, RadioGroupItem } from "@/src/components/ui/radio-group";
 import {
   Tooltip,
   TooltipContent,
@@ -41,7 +41,6 @@ export function EvaluatorSavedDialog({
   open,
   mode,
   modeContentByMode,
-  backfillContent,
   costSummary,
   canSubmit,
   isSubmitting,
@@ -50,13 +49,11 @@ export function EvaluatorSavedDialog({
   onDismiss,
   onSecondaryAction,
   onPrimaryAction,
-  onOpenAutoFocus,
   onCloseAnimationEnd,
 }: {
   open: boolean;
   mode: EvaluatorSavedMode;
   modeContentByMode: Record<EvaluatorSavedMode, ReactNode>;
-  backfillContent: ReactNode;
   costSummary: ReactNode;
   canSubmit: boolean;
   isSubmitting: boolean;
@@ -65,7 +62,6 @@ export function EvaluatorSavedDialog({
   onDismiss: () => void;
   onSecondaryAction: () => void;
   onPrimaryAction: () => void;
-  onOpenAutoFocus?: () => void;
   onCloseAnimationEnd?: () => void;
 }) {
   return (
@@ -78,17 +74,16 @@ export function EvaluatorSavedDialog({
       <DialogContent
         className="sm:max-w-4xl"
         closeOnInteractionOutside
-        onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={onCloseAnimationEnd}
       >
         <DialogHeader className="[&>div]:items-start [&>div>button]:-mt-1">
           <DialogTitle>Evaluator saved</DialogTitle>
           <DialogDescription>
-            Choose which observations this evaluator should score.
+            Would you like to run this evaluator on incoming observations?
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="gap-0 p-0">
-          <div className="grid h-[30rem] grid-cols-[minmax(0,1fr)_15rem] overflow-hidden">
+          <div className="grid h-[22rem] grid-cols-[minmax(0,1fr)_15rem] overflow-hidden">
             <div className="min-w-0 overflow-y-auto px-6 py-5 [scrollbar-gutter:stable]">
               <h3 className="mb-2 text-sm font-bold">
                 Set up rule to run on incoming observations
@@ -108,32 +103,19 @@ export function EvaluatorSavedDialog({
                     <Collapsible key={option.value} open={selected} asChild>
                       <div
                         className={cn(
-                          "min-w-0 rounded-md border p-3 transition-colors duration-200",
+                          "rounded-md border p-3 transition-colors duration-200",
                           selected
                             ? "border-foreground bg-background"
-                            : "bg-muted/30 hover:bg-muted/50 cursor-pointer",
+                            : "bg-muted/30 hover:bg-muted/50",
                         )}
-                        onClick={(event) => {
-                          if (selected) return;
-                          const target = event.target as HTMLElement;
-                          if (
-                            target.closest(
-                              "button, input, label, a, [role='radio']",
-                            )
-                          ) {
-                            return;
-                          }
-                          onModeChange(option.value);
-                        }}
                       >
                         <div className="flex items-start gap-2">
-                          <div className="mt-0.5">
-                            <RadioGroup.Item
-                              id={id}
-                              value={option.value}
-                              aria-controls={contentId}
-                            />
-                          </div>
+                          <RadioGroupItem
+                            id={id}
+                            value={option.value}
+                            aria-controls={contentId}
+                            className="mt-0.5"
+                          />
                           <div className="min-w-0 flex-1">
                             <label
                               htmlFor={id}
@@ -149,12 +131,11 @@ export function EvaluatorSavedDialog({
                         <CollapsibleContent
                           id={contentId}
                           aria-labelledby={id}
-                          className={cn(styles.collapsibleContent, "space-y-3")}
+                          className={styles.collapsibleContent}
                         >
                           <div className="mt-3 ml-6 min-w-0 pr-1">
                             {modeContentByMode[option.value]}
                           </div>
-                          {backfillContent}
                         </CollapsibleContent>
                       </div>
                     </Collapsible>

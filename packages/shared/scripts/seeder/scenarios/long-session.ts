@@ -8,7 +8,6 @@ import {
   createObservationsCh,
   createScoresCh,
   createEventsCh,
-  toClickhouseDateTime,
   EventRecordInsertType,
   ObservationRecordInsertType,
   ScoreRecordInsertType,
@@ -259,9 +258,7 @@ const run = async (
     // The root "session-turn" span must cover its children, otherwise the
     // waterfall shows children running after their parent already ended.
     if (observationsPerTrace > 1) {
-      observations[rootObservationIndex].end_time = toClickhouseDateTime(
-        maxChildEndTime + 25,
-      );
+      observations[rootObservationIndex].end_time = maxChildEndTime + 25;
     }
 
     if (t % 3 === 0) {
@@ -338,11 +335,7 @@ const run = async (
 
   const links = [
     sessionLink(ctx, sessionId),
-    traceLink(
-      ctx,
-      traces[0].id,
-      Date.parse(traces[0].timestamp.replace(" ", "T") + "Z"),
-    ),
+    traceLink(ctx, traces[0].id, traces[0].timestamp as number),
   ];
 
   // The session detail page 404s without the Postgres trace_sessions row.

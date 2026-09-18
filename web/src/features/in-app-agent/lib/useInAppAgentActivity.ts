@@ -4,8 +4,8 @@ import useLocalStorage from "@/src/components/useLocalStorage";
 import {
   IN_APP_AGENT_ACTIVITY_LIST_LIMIT,
   getInAppAgentActivityReceiptsStorageKey,
-  getInAppAgentActivityRefetchInterval,
   getInAppAgentDeliveredReceiptsStorageKey,
+  hasInFlightInAppAgentActivity,
   markInAppAgentActivityDelivered,
   markInAppAgentConversationHandled,
   mergeInAppAgentReceipts,
@@ -19,6 +19,8 @@ import {
   type InAppAgentDeliveredReceipts,
 } from "@/src/features/in-app-agent/lib/inAppAgentActivity";
 import { api } from "@/src/utils/api";
+
+const ACTIVITY_POLL_INTERVAL_MS = 4_000;
 
 const EMPTY_ACKNOWLEDGEMENTS: InAppAgentActivityAcknowledgement[] = [];
 
@@ -62,7 +64,9 @@ export function useInAppAgentActivity(params: {
     {
       enabled: pollEnabled,
       refetchInterval: (query) =>
-        getInAppAgentActivityRefetchInterval(query.state.data?.conversations),
+        hasInFlightInAppAgentActivity(query.state.data?.conversations ?? [])
+          ? ACTIVITY_POLL_INTERVAL_MS
+          : false,
       refetchIntervalInBackground: false,
       refetchOnWindowFocus: true,
     },

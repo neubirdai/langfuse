@@ -8,11 +8,7 @@ import {
   JobExecutionStatus,
 } from "@langfuse/shared/src/db";
 import { type EvalExecutionMode } from "@langfuse/shared";
-import type {
-  EvalTargetObject,
-  FilterState,
-  ObservationVariableMapping,
-} from "@langfuse/shared";
+import type { EvalTargetObject, FilterState } from "@langfuse/shared";
 
 /**
  * Re-export ObservationForEval as the canonical observation type for eval operations.
@@ -118,10 +114,5 @@ export interface ObservationEvalSchedulerDeps {
     /** Evaluator v2 identity; omitted when scheduling a legacy config. */
     evaluatorId?: string;
     evaluationRuleId?: string;
-    /**
-     * Mapping override for a ruleless batch run. Omitted to inherit the
-     * evaluator version mapping.
-     */
-    variableMapping?: ObservationVariableMapping[];
   }) => Promise<void>;
 }

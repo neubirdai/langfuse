@@ -3,7 +3,8 @@ import {
   type AnnotationQueueItem,
   AnnotationQueueObjectType,
 } from "@langfuse/shared";
-import { useEventsTraceData, useReadPath } from "@/src/features/events";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
+import { useEventsTraceData } from "@/src/features/events/hooks/useEventsTraceData";
 
 export interface ObjectDataHook<TData> {
   data: TData | undefined;
@@ -16,7 +17,7 @@ export const useAnnotationObjectData = (
   item: (AnnotationQueueItem & { parentTraceId?: string | null }) | null,
   projectId: string,
 ): ObjectDataHook<any> => {
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const traceId = item?.parentTraceId ?? item?.objectId;
 
   const isTraceOrObservation =
@@ -28,7 +29,7 @@ export const useAnnotationObjectData = (
   const traceQuery = api.traces.byIdWithObservationsAndScores.useQuery(
     { traceId: traceId as string, projectId },
     {
-      enabled: isTraceOrObservation && !isV4,
+      enabled: isTraceOrObservation && !isBetaEnabled,
       retry(failureCount, error) {
         if (
           error.data?.code === "UNAUTHORIZED" ||
@@ -43,7 +44,7 @@ export const useAnnotationObjectData = (
   const eventsData = useEventsTraceData({
     projectId,
     traceId: traceId ?? "",
-    enabled: isTraceOrObservation && isV4,
+    enabled: isTraceOrObservation && isBetaEnabled,
   });
 
   const isSession =
@@ -56,7 +57,7 @@ export const useAnnotationObjectData = (
       projectId,
     },
     {
-      enabled: isSession && !isV4,
+      enabled: isSession && !isBetaEnabled,
       retry(failureCount, error) {
         if (
           error.data?.code === "UNAUTHORIZED" ||
@@ -75,7 +76,7 @@ export const useAnnotationObjectData = (
       projectId,
     },
     {
-      enabled: isSession && isV4,
+      enabled: isSession && isBetaEnabled,
       retry(failureCount, error) {
         if (
           error.data?.code === "UNAUTHORIZED" ||
@@ -98,7 +99,7 @@ export const useAnnotationObjectData = (
   switch (item.objectType) {
     case AnnotationQueueObjectType.TRACE:
     case AnnotationQueueObjectType.OBSERVATION:
-      if (isV4) {
+      if (isBetaEnabled) {
         return {
           data: eventsData.data,
           isLoading: eventsData.isLoading,
@@ -113,7 +114,7 @@ export const useAnnotationObjectData = (
         errorCode: traceQuery.error?.data?.code,
       };
     case AnnotationQueueObjectType.SESSION:
-      if (isV4) {
+      if (isBetaEnabled) {
         return {
           data: sessionEventsQuery.data,
           isLoading: sessionEventsQuery.isLoading,

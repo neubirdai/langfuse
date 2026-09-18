@@ -39,16 +39,7 @@ function negate(node: FilterNode): ASTNode {
   return { kind: "not", child: node };
 }
 
-function scorePathOf(
-  column: string,
-  key: string,
-  registry: FieldRegistry,
-): string | null {
-  // A view can own score filters in its sidebar without exposing them in the
-  // bar. Emitting the path anyway would render text the parser rejects as an
-  // unknown field, so a score space the registry does not expose is left to the
-  // sidebar — reported as skipped, and preserved across commits.
-  //
+function scorePathOf(column: string, key: string): string | null {
   // Quote the score name iff it has grammar chars so it re-lexes as one token
   // (`scores."Rouge Score"`); resolveField unquotes it on the way back.
   if (
@@ -56,14 +47,14 @@ function scorePathOf(
     column === SCORE_COLUMNS.observation.categorical ||
     column === SCORE_COLUMNS.observation.boolean
   ) {
-    return registry.scores ? `scores.${quoteIfNeeded(key)}` : null;
+    return `scores.${quoteIfNeeded(key)}`;
   }
   if (
     column === SCORE_COLUMNS.trace.numeric ||
     column === SCORE_COLUMNS.trace.categorical ||
     column === SCORE_COLUMNS.trace.boolean
   ) {
-    return registry.traceScores ? `traceScores.${quoteIfNeeded(key)}` : null;
+    return `traceScores.${quoteIfNeeded(key)}`;
   }
   return null;
 }
@@ -82,31 +73,15 @@ function lowerSingle(
   switch (filter.type) {
     case "stringOptions":
     case "arrayOptions": {
-      let id = registry.columnIdOf(filter.column);
+      const id = registry.columnIdOf(filter.column);
       if (id === null || filter.value.length === 0) return null;
-      let values = filter.value;
-      let ref = registry.resolveField(id);
-      const displayValueByFilterValue =
-        ref?.type === "field" ? ref.field.displayValueByFilterValue : undefined;
-      if (displayValueByFilterValue !== undefined) {
-        const displayValues = filter.value.map((value) =>
-          displayValueByFilterValue.get(value),
-        );
-        if (displayValues.every((value) => value !== undefined)) {
-          values = displayValues as string[];
-        } else {
-          // A deleted option has no label mapping. Keep its canonical field and
-          // value so the filter remains visible and round-trips losslessly.
-          id = filter.column;
-          ref = registry.resolveField(id);
-        }
-      }
       // A stringOptions/arrayOptions filter is EXACT-set semantics. On a
       // `textSearch` field (id/name) the bar reads a bare single value as
       // `contains`, so a single-value any-of/none-of would silently flip
       // exact→substring on the next commit. The single-value forms therefore use
       // the explicit exact operator (`name:=abc` / `-name:=abc`); the grouped
       // multi-value forms already reparse to exact any-of/none-of.
+      const ref = registry.resolveField(id);
       const isTextSearch =
         ref?.type === "field" && ref.field.syncMode === "textSearch";
       if (filter.operator === "none of") {
@@ -115,9 +90,9 @@ function lowerSingle(
         // none-of — NOT the bare `-name:abc`, which is does-not-contain
         // (substring). The grouped/option forms use the bare `=` any-of shape.
         if (isTextSearch && filter.value.length === 1) {
-          return negate(filterNode(id, "exact", values));
+          return negate(filterNode(id, "exact", filter.value));
         }
-        return negate(filterNode(id, "=", values));
+        return negate(filterNode(id, "=", filter.value));
       }
       if (filter.operator === "all of") {
         // A single-value all-of has no distinct grammar form — `(a)` reparses
@@ -125,22 +100,18 @@ function lowerSingle(
         // the next commit. Skip it (preserved via skippedFilters) rather than
         // rewrite; multi-value all-of serializes to the `(a AND b)` group.
         if (filter.value.length < 2) return null;
-        return filterNode(id, "=", values, "and");
+        return filterNode(id, "=", filter.value, "and");
       }
       // Single-value any-of on a textSearch field: emit the explicit exact form
       // (`id:=abc`) so it round-trips to `{string,=}` (exact preserved), not the
       // bare `id:abc` that would re-lower to `contains`.
       if (isTextSearch && filter.value.length === 1) {
-        return filterNode(id, "exact", values);
+        return filterNode(id, "exact", filter.value);
       }
-      return filterNode(id, "=", values);
+      return filterNode(id, "=", filter.value);
     }
     case "string": {
-      const directRef = registry.resolveField(filter.column);
-      const id =
-        directRef?.type === "field"
-          ? directRef.field.id
-          : registry.columnIdOf(filter.column);
+      const id = registry.columnIdOf(filter.column);
       if (id === null) return null;
       if (filter.operator === "does not contain") {
         // Mirror the positive contains carve-out below: a textSearch field emits
@@ -218,19 +189,19 @@ function lowerSingle(
       return filterNode(key, op, [filter.value]);
     }
     case "numberObject": {
-      const path = scorePathOf(filter.column, filter.key, registry);
+      const path = scorePathOf(filter.column, filter.key);
       if (path === null) return null;
       const op = filter.operator === "=" ? "=" : filter.operator;
       return filterNode(path, op, [String(filter.value)]);
     }
     case "booleanObject": {
-      const path = scorePathOf(filter.column, filter.key, registry);
+      const path = scorePathOf(filter.column, filter.key);
       if (path === null) return null;
       const node = filterNode(path, "=", [String(filter.value)]);
       return filter.operator === "<>" ? negate(node) : node;
     }
     case "categoryOptions": {
-      const path = scorePathOf(filter.column, filter.key, registry);
+      const path = scorePathOf(filter.column, filter.key);
       if (path === null || filter.value.length === 0) return null;
       const node = filterNode(path, "=", filter.value);
       return filter.operator === "none of" ? negate(node) : node;

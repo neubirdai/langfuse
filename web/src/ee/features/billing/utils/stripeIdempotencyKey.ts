@@ -36,8 +36,8 @@ export const IdempotencyKind = z.enum([
   // lifetime, which is exactly the double-submit window, and drops it on
   // remount so a fresh visit gets a fresh session rather than an expired one.
   "chb.checkout.create",
-  "chb.attachedplan.scheduled.set",
-  "chb.attachedplan.scheduled.clear",
+  "chb.bundle.scheduled.set",
+  "chb.bundle.scheduled.clear",
 ]);
 
 export type IdempotencyKind = z.infer<typeof IdempotencyKind>;

@@ -13,7 +13,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/src/components/ui/form";
-import { Tabs } from "@/src/components/design-system/Tabs/Tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/src/components/ui/tabs";
 import { type templateFormSchema } from "@/src/features/evals/utils/template-form-schema";
 import {
   type CodeEvalSourceCodeLanguage,
@@ -39,11 +39,13 @@ export function EvalTemplateTypeSelector({
   form,
   codeEvalCapabilities,
   mode,
+  hasExistingTemplate,
   onChange,
 }: {
   form: EvalTemplateFormReturn;
   codeEvalCapabilities: CodeEvalCapabilities;
-  mode: Exclude<EvalTemplateTypeSelectorMode, "hidden">;
+  mode: EvalTemplateTypeSelectorMode;
+  hasExistingTemplate: boolean;
   onChange?: () => void;
 }) {
   const sourceCodeDraftsRef = useRef<CodeEvalSourceDrafts>({});
@@ -51,6 +53,11 @@ export function EvalTemplateTypeSelector({
   const sourceCodeLanguage =
     form.watch("sourceCodeLanguage") ??
     EvalTemplateSourceCodeLanguage.TYPESCRIPT;
+  const shouldShow =
+    codeEvalCapabilities.enabled && !hasExistingTemplate && mode !== "hidden";
+
+  if (!shouldShow) return null;
+
   const selectedValue =
     evalTemplateType === EvalTemplateType.CODE
       ? sourceCodeLanguage
@@ -106,32 +113,32 @@ export function EvalTemplateTypeSelector({
                 )
               }
             >
-              <Tabs.List layout="packed" gap="lg">
+              <TabsList className="grid w-fit max-w-fit grid-flow-col gap-4">
                 {mode === "all" ? (
-                  <span className="min-w-[100px]">
-                    <Tabs.Trigger
-                      value={EvalTemplateType.LLM_AS_JUDGE}
-                      label="LLM-as-judge"
-                    />
-                  </span>
+                  <TabsTrigger
+                    value={EvalTemplateType.LLM_AS_JUDGE}
+                    className="min-w-[100px]"
+                  >
+                    LLM-as-judge
+                  </TabsTrigger>
                 ) : null}
-                <span className="min-w-[100px]">
-                  <Tabs.Trigger
-                    value={EvalTemplateSourceCodeLanguage.TYPESCRIPT}
-                    label="TypeScript"
-                  />
-                </span>
+                <TabsTrigger
+                  value={EvalTemplateSourceCodeLanguage.TYPESCRIPT}
+                  className="min-w-[100px]"
+                >
+                  TypeScript
+                </TabsTrigger>
                 {codeEvalCapabilities.supportedSourceCodeLanguages.includes(
                   EvalTemplateSourceCodeLanguage.PYTHON,
                 ) ? (
-                  <span className="min-w-[100px]">
-                    <Tabs.Trigger
-                      value={EvalTemplateSourceCodeLanguage.PYTHON}
-                      label="Python"
-                    />
-                  </span>
+                  <TabsTrigger
+                    value={EvalTemplateSourceCodeLanguage.PYTHON}
+                    className="min-w-[100px]"
+                  >
+                    Python
+                  </TabsTrigger>
                 ) : null}
-              </Tabs.List>
+              </TabsList>
             </Tabs>
           </FormControl>
           <FormMessage />

@@ -1,17 +1,6 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { TableViewPresetTableName, type FilterState } from "@langfuse/shared";
-import { useEffect, useState } from "react";
-import {
-  QueryParamProvider,
-  type QueryParamAdapterComponent,
-  useQueryParam,
-} from "use-query-params";
+import { useState } from "react";
 import { useSidebarFilterState } from "./hooks/useSidebarFilterState";
 import type { FilterConfig } from "./lib/filter-config";
 import { useTableViewManager } from "../../components/table/table-view-presets/hooks/useTableViewManager";
@@ -71,9 +60,12 @@ vi.mock("use-query-params", async () => {
   const React = require("react");
   const actual = await vi.importActual("use-query-params");
 
+  const StringParam = { __type: "string" } as const;
+
   return {
     ...actual,
-    useQueryParam: vi.fn(function useMockQueryParam(key: string) {
+    StringParam,
+    useQueryParam: (key: string) => {
       const initialValue = queryParamStore.has(key)
         ? queryParamStore.get(key)
         : null;
@@ -104,7 +96,7 @@ vi.mock("use-query-params", async () => {
       );
 
       return [value, setQueryValue];
-    }),
+    },
   };
 });
 
@@ -204,7 +196,6 @@ function FilterStateHarness() {
 describe("view-state URL writes and browser history (LFE-10715)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useQueryParam).mockReset();
     sessionStorage.clear();
     queryParamStore.clear();
     urlParamWrites.length = 0;
@@ -244,76 +235,6 @@ describe("view-state URL writes and browser history (LFE-10715)", () => {
     expect(viewIdWrites.length).toBeGreaterThan(0);
     for (const write of viewIdWrites) {
       expect(write).toMatchObject({ value: null, updateType: "replaceIn" });
-    }
-  });
-
-  it("settles session preset recovery while URL updates are batched", async () => {
-    const actual = await vi.importActual<{
-      useQueryParam: typeof useQueryParam;
-    }>("use-query-params");
-    const presetId = "__langfuse_with_io__";
-    const recoverPreset = vi.fn(() => {
-      if (recoverPreset.mock.calls.length > 20) {
-        throw new Error("Session preset recovery did not settle");
-      }
-    });
-
-    const Adapter: QueryParamAdapterComponent = ({ children }) => {
-      const [location, setLocation] = useState({
-        search: `?viewId=${presetId}`,
-      });
-      return children({ location, replace: setLocation, push: setLocation });
-    };
-
-    function SessionPresetRecoveryHarness() {
-      const viewControllers = useTableViewManager({
-        tableName: TableViewPresetTableName.SessionDetail,
-        projectId: "project-1",
-        stateUpdaters: {
-          setColumnOrder: () => {},
-          setColumnVisibility: () => {},
-        },
-      });
-
-      // Session detail restores a matching frontend preset after URL stripping.
-      useEffect(() => {
-        if (viewControllers.isLoading || viewControllers.selectedViewId) return;
-        recoverPreset();
-        viewControllers.handleSetViewId(presetId, { updateType: "replaceIn" });
-      }, [viewControllers]);
-
-      return (
-        <div data-testid="recovered-view-id">
-          {viewControllers.selectedViewId ?? "null"}
-        </div>
-      );
-    }
-
-    vi.useFakeTimers();
-    try {
-      await vi
-        .mocked(useQueryParam)
-        .withImplementation(actual.useQueryParam, () => {
-          render(
-            <QueryParamProvider
-              adapter={Adapter}
-              options={{ enableBatching: true }}
-            >
-              <SessionPresetRecoveryHarness />
-            </QueryParamProvider>,
-          );
-
-          act(() => vi.runOnlyPendingTimers());
-          act(() => vi.runOnlyPendingTimers());
-
-          expect(screen.getByTestId("recovered-view-id").textContent).toBe(
-            presetId,
-          );
-          expect(recoverPreset).toHaveBeenCalled();
-        });
-    } finally {
-      act(() => vi.runOnlyPendingTimers());
-      vi.useRealTimers();
     }
   });
 

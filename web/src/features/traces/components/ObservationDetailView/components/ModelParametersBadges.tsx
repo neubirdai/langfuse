@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 /**
  * Model parameters badges for ObservationDetailView
  * Renders dynamic badges for each model parameter with truncation

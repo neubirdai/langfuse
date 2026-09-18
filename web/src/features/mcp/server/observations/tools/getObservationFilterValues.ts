@@ -8,14 +8,13 @@ import { z } from "zod";
 import {
   getEventFilterNumericRange,
   getEventFilterValuePage,
-} from "@/src/features/events/server";
+} from "@/src/features/events/server/eventsService";
 import { defineTool } from "../../../core/define-tool";
 import { runMcpTool } from "../../../core/run-mcp-tool";
 import {
   ObservationLimitSchema,
   type ObservationMcpFilterColumn,
 } from "../schema";
-import { clampToDataAccessDays } from "@/src/features/entitlements/server";
 
 const OBSERVATION_MCP_FILTER_VALUE_COLUMNS = [
   "name",
@@ -175,12 +174,8 @@ export const [
         "mcp.pagination_limit": input.limit,
       },
       fn: async () => {
-        const dataAccessWindow = clampToDataAccessDays({
-          plan: context.plan,
-          fromTimestamp: input.fromStartTime,
-        });
         const startTimeFilter = buildStartTimeFilter({
-          fromStartTime: dataAccessWindow.effectiveFromTimestamp?.toISOString(),
+          fromStartTime: input.fromStartTime,
           toStartTime: input.toStartTime,
         });
 

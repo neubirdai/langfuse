@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import {
   EvalTemplateSourceCodeLanguage,
   EvalTemplateType,

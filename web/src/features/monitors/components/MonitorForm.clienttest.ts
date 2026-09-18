@@ -17,7 +17,6 @@ const {
   monitorToDefaults,
   nameOrPlaceholder,
   resolveViewChangePatch,
-  monitorCreateAnalyticsProperties,
 } = __test;
 
 describe("createDefaults", () => {
@@ -72,28 +71,6 @@ describe("createDefaults", () => {
   it("triggerIds defaults to empty array", () => {
     const defaults = createDefaults("project-1");
     expect(defaults.triggerIds).toEqual([]);
-  });
-
-  it("uses a prefilled evaluator score window", () => {
-    expect(createDefaults("project-1", { window: "1d" }).window).toBe("1d");
-  });
-});
-
-describe("monitorCreateAnalyticsProperties", () => {
-  it("tracks the selected score window", () => {
-    expect(
-      monitorCreateAnalyticsProperties("evaluator_score", {
-        view: "scores-numeric",
-        metric: { measure: "value", aggregation: "avg" },
-        window: "1d",
-      }),
-    ).toEqual({
-      source: "evaluator_score",
-      view: "scores-numeric",
-      measure: "value",
-      aggregation: "avg",
-      window: "1d",
-    });
   });
 });
 

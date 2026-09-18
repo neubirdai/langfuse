@@ -1,8 +1,8 @@
 import { useReducer, useCallback, useMemo, useRef } from "react";
 import { api } from "@/src/utils/api";
-import { showErrorToast } from "@/src/features/notifications";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
 import type { BatchActionQuery } from "@langfuse/shared";
-import type { DatasetFormRef } from "@/src/features/datasets";
+import type { DatasetFormRef } from "@/src/features/datasets/components/DatasetForm";
 import type {
   DatasetInfo,
   DialogStep,

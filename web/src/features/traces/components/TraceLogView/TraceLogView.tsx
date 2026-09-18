@@ -170,6 +170,7 @@ export const TraceLogView = ({
         <LogViewTreeIndent
           treeLines={item.treeLines}
           isLastSibling={item.isLastSibling}
+          depth={item.node.depth}
         />
       );
     },

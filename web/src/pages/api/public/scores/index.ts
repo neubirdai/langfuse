@@ -15,12 +15,10 @@ import {
 import { ScoresApiService } from "@/src/features/public-api/server/scores-api-service";
 import { SCORES_DEPRECATION } from "@/src/features/public-api/server/deprecations";
 import { randomUUID } from "crypto";
-import { clampToDataAccessDays } from "@/src/features/entitlements/server/hasEntitlementLimit";
 
 export default withMiddlewares({
   POST: createAuthedProjectAPIRoute({
     name: "Create Score",
-    action: "scores:create",
     bodySchema: PostScoresBodyV1,
     responseSchema: PostScoresResponseV1,
     allowedAccessLevels: ["project", "scores"],
@@ -64,38 +62,12 @@ export default withMiddlewares({
   }),
   GET: createAuthedProjectAPIRoute({
     name: "/api/public/scores",
-    action: "scores:read",
     querySchema: GetScoresQueryV1,
     responseSchema: GetScoresResponseV1,
     deprecation: SCORES_DEPRECATION,
     rejectInEventsOnlyMode: true,
     fn: async ({ query, auth }) => {
       const scoresApiService = new ScoresApiService("v1");
-      const dataAccessWindow = clampToDataAccessDays({
-        plan: auth.scope.plan,
-        fromTimestamp: query.fromTimestamp ?? undefined,
-      });
-      const advancedFilters = dataAccessWindow.accessFloor
-        ? [
-            ...(query.filter ?? []),
-            {
-              column: "timestamp",
-              operator: ">=" as const,
-              value: dataAccessWindow.effectiveFromTimestamp!,
-              type: "datetime" as const,
-            },
-            ...(query.toTimestamp
-              ? [
-                  {
-                    column: "timestamp",
-                    operator: "<" as const,
-                    value: new Date(query.toTimestamp),
-                    type: "datetime" as const,
-                  },
-                ]
-              : []),
-          ]
-        : query.filter;
 
       const scoreParams = {
         projectId: auth.scope.projectId,
@@ -107,14 +79,14 @@ export default withMiddlewares({
         queueId: query.queueId ?? undefined,
         traceTags: query.traceTags ?? undefined,
         dataType: query.dataType ?? undefined,
-        fromTimestamp: dataAccessWindow.effectiveFromTimestamp?.toISOString(),
+        fromTimestamp: query.fromTimestamp ?? undefined,
         toTimestamp: query.toTimestamp ?? undefined,
         environment: query.environment ?? undefined,
         source: query.source ?? undefined,
         value: query.value ?? undefined,
         operator: query.operator ?? undefined,
         scoreIds: query.scoreIds ?? undefined,
-        advancedFilters,
+        advancedFilters: query.filter,
       };
       const [items, count] = await Promise.all([
         scoresApiService.generateScoresForPublicApi(scoreParams),

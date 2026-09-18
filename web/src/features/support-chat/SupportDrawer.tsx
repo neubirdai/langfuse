@@ -1,4 +1,4 @@
-/* eslint-disable @repo/no-style-props, @repo/no-null-render */
+/* eslint-disable @repo/no-style-props */
 import { useSupportDrawer } from "@/src/features/support-chat/SupportDrawerProvider";
 import { useState } from "react";
 import { Button } from "@/src/components/ui/button";
@@ -13,7 +13,7 @@ import {
 } from "@/src/components/ui/breadcrumb";
 import { IntroSection } from "@/src/features/support-chat/IntroSection";
 import { SuccessSection } from "@/src/features/support-chat/SuccessSection";
-import { ConnectedSupportFormSection } from "@/src/features/support-chat/ConnectedSupportFormSection";
+import { SupportFormSection } from "@/src/features/support-chat/SupportFormSection";
 import { cn } from "@/src/utils/tailwind";
 
 export const SupportDrawer = (props: {
@@ -100,7 +100,7 @@ const SupportDrawerContent = ({
                 <IntroSection onStartForm={() => setCurrentMode("form")} />
               )}
               {currentMode === "form" && (
-                <ConnectedSupportFormSection
+                <SupportFormSection
                   onSuccess={() => setCurrentMode("success")}
                   onCancel={() => setCurrentMode("intro")}
                 />

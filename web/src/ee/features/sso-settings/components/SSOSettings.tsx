@@ -1,6 +1,5 @@
 /* eslint-disable @repo/no-abstracted-overlay-trigger */
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,8 +51,10 @@ import {
   TableRow,
 } from "@/src/components/ui/table";
 import Header from "@/src/components/layouts/header";
-import { useHasEntitlement } from "@/src/features/entitlements";
-import { useHasOrganizationAccess } from "@/src/features/rbac";
+import { useHasEntitlement } from "@/src/features/entitlements/hooks";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
 import { VerifiedDomainsSettings } from "@/src/ee/features/verified-domains/components/VerifiedDomainsSettings";
 import { SsoProviderSchema } from "@/src/ee/features/multi-tenant-sso/types";
 import { api } from "@/src/utils/api";
@@ -148,12 +149,13 @@ export const SSOSettings = ({ orgId }: { orgId: string }) => {
         <VerifiedDomainsSettings orgId={orgId} />
         <div>
           {heading}
-          <Alert icon={AlertCircle}>
-            <Alert.Title>Not available</Alert.Title>
-            <Alert.Description>
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Not available</AlertTitle>
+            <AlertDescription>
               Enterprise SSO is not available on your plan. Please upgrade to
               access this feature.
-            </Alert.Description>
+            </AlertDescription>
           </Alert>
         </div>
       </div>
@@ -167,10 +169,10 @@ export const SSOSettings = ({ orgId }: { orgId: string }) => {
         <div>
           {heading}
           <Alert>
-            <Alert.Title>Access Denied</Alert.Title>
-            <Alert.Description>
+            <AlertTitle>Access Denied</AlertTitle>
+            <AlertDescription>
               You do not have permission to configure SSO for this organization.
-            </Alert.Description>
+            </AlertDescription>
           </Alert>
         </div>
       </div>

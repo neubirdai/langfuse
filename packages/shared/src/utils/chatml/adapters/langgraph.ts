@@ -6,7 +6,6 @@ import {
   isRichToolResult,
   attachToolDefinitionsToMessages,
   normalizeToolDefinitionsForChatMl,
-  schemaMatches,
 } from "../helpers";
 import { z } from "zod";
 
@@ -373,33 +372,37 @@ export const langgraphAdapter: ProviderAdapter = {
     }
 
     // STRUCTURAL: Schema-based detection on metadata
-    if (schemaMatches(LangChainMessageSchema, ctx.metadata)) return true;
-    if (schemaMatches(LangGraphMessageSchema, ctx.metadata)) return true;
+    if (LangChainMessageSchema.safeParse(ctx.metadata).success) return true;
+    if (LangGraphMessageSchema.safeParse(ctx.metadata).success) return true;
 
     // Check wrapped messages format
-    if (schemaMatches(LangGraphWrappedSchema, ctx.metadata)) {
+    if (LangGraphWrappedSchema.safeParse(ctx.metadata).success) {
       const wrapped = ctx.metadata as { messages: unknown[]; tools?: unknown };
       // reject OpenAI Chat Completions format {tools: [...], messages: [...]}
       if (Array.isArray(wrapped.tools)) {
         return false;
       }
-      if (schemaMatches(LangChainMessageSchema, wrapped.messages)) return true;
-      if (schemaMatches(LangGraphMessageSchema, wrapped.messages)) return true;
+      if (LangChainMessageSchema.safeParse(wrapped.messages).success)
+        return true;
+      if (LangGraphMessageSchema.safeParse(wrapped.messages).success)
+        return true;
     }
 
     // finally Schema-based detection on data b/c of performance
-    if (schemaMatches(LangChainMessageSchema, ctx.data)) return true;
-    if (schemaMatches(LangGraphMessageSchema, ctx.data)) return true;
+    if (LangChainMessageSchema.safeParse(ctx.data).success) return true;
+    if (LangGraphMessageSchema.safeParse(ctx.data).success) return true;
 
     // Check wrapped messages format on data
-    if (schemaMatches(LangGraphWrappedSchema, ctx.data)) {
+    if (LangGraphWrappedSchema.safeParse(ctx.data).success) {
       const wrapped = ctx.data as { messages: unknown[]; tools?: unknown };
       // reject OpenAI Chat Completions format {tools: [...], messages: [...]}
       if (Array.isArray(wrapped.tools)) {
         return false;
       }
-      if (schemaMatches(LangChainMessageSchema, wrapped.messages)) return true;
-      if (schemaMatches(LangGraphMessageSchema, wrapped.messages)) return true;
+      if (LangChainMessageSchema.safeParse(wrapped.messages).success)
+        return true;
+      if (LangGraphMessageSchema.safeParse(wrapped.messages).success)
+        return true;
     }
 
     return false;

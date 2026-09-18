@@ -8,12 +8,10 @@ import {
   GetExperimentsV1Response,
 } from "@/src/features/public-api/types/experiments";
 import { listExperimentsForPublicApi } from "@/src/features/experiments/server/public";
-import { clampToDataAccessDays } from "@/src/features/entitlements/server/hasEntitlementLimit";
 
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get Experiments",
-    action: "experiments:read",
     querySchema: GetExperimentsV1Query,
     responseSchema: GetExperimentsV1Response,
     allowInAppAgentKey: true,
@@ -24,19 +22,9 @@ export default withMiddlewares({
         );
       }
 
-      const dataAccessWindow = clampToDataAccessDays({
-        plan: auth.scope.plan,
-        fromTimestamp: query.fromStartTime,
-      });
-
       return listExperimentsForPublicApi({
         projectId: auth.scope.projectId,
-        query: {
-          ...query,
-          fromStartTime:
-            dataAccessWindow.effectiveFromTimestamp?.toISOString() ??
-            query.fromStartTime,
-        },
+        query,
       });
     },
   }),

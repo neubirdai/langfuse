@@ -1,4 +1,3 @@
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 
@@ -14,14 +13,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/src/components/ui/alert-dialog";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { Card } from "@/src/components/ui/card";
 import {
   featurePreviewFlags,
   featurePreviewLabels,
   type FeaturePreviewFlag,
 } from "@/src/features/feature-flags/available-flags";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { api } from "@/src/utils/api";
 
 type ProposedChange = {
@@ -71,8 +72,8 @@ export function OrganizationFeaturePreviewsSettings({
   if (defaultsQuery.isError) {
     return (
       <Alert variant="destructive">
-        <Alert.Title>Feature previews unavailable</Alert.Title>
-        <Alert.Description>{defaultsQuery.error.message}</Alert.Description>
+        <AlertTitle>Feature previews unavailable</AlertTitle>
+        <AlertDescription>{defaultsQuery.error.message}</AlertDescription>
       </Alert>
     );
   }
@@ -94,14 +95,12 @@ export function OrganizationFeaturePreviewsSettings({
 
       {experimentalFeaturesEnabled ? (
         <Alert>
-          <Alert.Title>
-            Experimental features enabled deployment-wide
-          </Alert.Title>
-          <Alert.Description>
+          <AlertTitle>Experimental features enabled deployment-wide</AlertTitle>
+          <AlertDescription>
             Every preview on this page is enabled by the env variable
             LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=true. Per-user opt-outs do not
             disable these previews.
-          </Alert.Description>
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -171,12 +170,12 @@ export function OrganizationFeaturePreviewsSettings({
           </AlertDialogHeader>
           {proposedChange?.enabled ? (
             <Alert>
-              <Alert.Title>Already enabled for you</Alert.Title>
-              <Alert.Description>
+              <AlertTitle>Already enabled for you</AlertTitle>
+              <AlertDescription>
                 This preview is already enabled in your personal Feature Preview
                 settings. Make sure you have tested it before enabling it for
                 the organization.
-              </Alert.Description>
+              </AlertDescription>
             </Alert>
           ) : null}
           <AlertDialogFooter>

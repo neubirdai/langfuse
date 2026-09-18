@@ -37,7 +37,7 @@ export const OBSERVATION_FIELD_GROUPS_PUBLIC_API = [
   "time", // completionStartTime, createdAt, updatedAt
   "io", // input, output
   "metadata", // metadata
-  "model", // model (from providedModelName), internalModelId, modelParameters
+  "model", // providedModelName, internalModelId, modelParameters
   "usage", // usageDetails, costDetails, totalCost, usagePricingTierName
   "prompt", // promptId, promptName, promptVersion
   "metrics", // latency, timeToFirstToken

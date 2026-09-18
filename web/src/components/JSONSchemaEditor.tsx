@@ -4,7 +4,6 @@ import { ArrowUpRight } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import { CodeMirrorEditor } from "@/src/components/editor";
 import { showErrorToast } from "@/src/features/notifications/showErrorToast";
-import { assertUnreachable } from "@langfuse/shared";
 
 type JSONSchemaEditorMode = "json"; // Future: "json" | "builder"
 
@@ -108,5 +107,5 @@ export const JSONSchemaEditor: React.FC<JSONSchemaEditorProps> = ({
   }
 
   // Future mode implementations go here
-  return assertUnreachable(mode);
+  return null;
 };

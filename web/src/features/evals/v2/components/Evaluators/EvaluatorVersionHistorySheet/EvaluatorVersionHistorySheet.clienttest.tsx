@@ -12,7 +12,7 @@ const currentVersion = {
   type: EvalTemplateTypeEnum.LLM_AS_JUDGE,
   sourceCode: null,
   sourceCodeLanguage: null,
-  promptMessages: [{ role: "user" as const, content: "Current prompt" }],
+  prompt: "Current prompt",
   provider: "openai",
   model: "gpt-4.1-mini",
   modelParams: null,
@@ -26,7 +26,7 @@ const oldVersion = {
   ...currentVersion,
   id: "version-1",
   version: 1,
-  promptMessages: [{ role: "user" as const, content: "Old prompt" }],
+  prompt: "Old prompt",
 };
 
 describe("EvaluatorVersionHistorySheet", () => {

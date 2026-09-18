@@ -20,7 +20,7 @@ Testing
 API Reference
 
 - Add to `fern` including `docs` attributes
-- Export with `pnpm run openapi:export`, then commit the changes to the API reference. CI fails if the served specs under `web/public/generated/` drift from `fern/`.
+- Export with `pnpm run openapi:export`, then commit the changes to the API reference
 
 SDKs
 

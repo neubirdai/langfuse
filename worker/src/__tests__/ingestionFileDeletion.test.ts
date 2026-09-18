@@ -8,7 +8,6 @@ import {
   removeIngestionEventsFromS3AndDeleteClickhouseRefsForProject,
   StorageService,
   StorageServiceFactory,
-  toClickhouseDateTime,
 } from "@langfuse/shared/src/server";
 import { randomUUID } from "crypto";
 import { env } from "../env";
@@ -74,8 +73,8 @@ describe("ingestion file deletion pipeline", () => {
         event_id: randomUUID(),
         bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
         bucket_path: r.bucketPath,
-        created_at: toClickhouseDateTime(),
-        updated_at: toClickhouseDateTime(),
+        created_at: new Date().getTime(),
+        updated_at: new Date().getTime(),
       })),
     });
 

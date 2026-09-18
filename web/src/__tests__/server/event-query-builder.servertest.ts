@@ -9,71 +9,9 @@ import {
   eventsTableUiColumnDefinitions,
   ExperimentsAggregationQueryBuilder,
 } from "@langfuse/shared/src/server";
-import {
-  eventsTableCachedInputCostSql,
-  eventsTableCachedInputTokensSql,
-  eventsTableCols,
-} from "@langfuse/shared";
+import { eventsTableCols } from "@langfuse/shared";
 
 describe("buildEventsFilterOptionsForColumnsQuery", () => {
-  it.each([
-    ["cachedInputTokens", eventsTableCachedInputTokensSql, "Decimal64(3)"],
-    ["cachedInputCost", eventsTableCachedInputCostSql, "Decimal64(12)"],
-  ] as const)(
-    "maps %s filters to the cached-read metric expression",
-    (column, expression, clickhouseType) => {
-      const [filter] = createFilterFromFilterState(
-        [
-          {
-            column,
-            type: "number",
-            operator: "=",
-            value: 0,
-          },
-        ],
-        eventsTableUiColumnDefinitions,
-        eventsTableCols,
-      );
-
-      expect(filter).toBeDefined();
-      if (!filter) throw new Error("expected filter");
-      const applied = filter.apply();
-      expect(applied.query).toContain(expression);
-      expect(applied.query).toContain(clickhouseType);
-      expect(Object.values(applied.params)).toContain("0");
-    },
-  );
-
-  it.each([
-    ["cachedInputTokens", eventsTableCachedInputTokensSql],
-    ["cachedInputCost", eventsTableCachedInputCostSql],
-  ] as const)(
-    "keeps missing %s distinguishable from an explicit zero",
-    (column, expression) => {
-      expect(expression).toContain("mapExists");
-      expect(
-        eventsTableCols.find((definition) => definition.id === column),
-      ).toMatchObject({ nullable: true });
-
-      const [filter] = createFilterFromFilterState(
-        [
-          {
-            column,
-            type: "null",
-            operator: "is null",
-            value: "",
-          },
-        ],
-        eventsTableUiColumnDefinitions,
-        eventsTableCols,
-      );
-
-      expect(filter).toBeDefined();
-      if (!filter) throw new Error("expected filter");
-      expect(filter.apply().query).toContain(`${expression} is null`);
-    },
-  );
-
   it("builds one events_core scan for multiple filter option columns", () => {
     const built = buildEventsFilterOptionsForColumnsQuery({
       projectId: "test-project",
@@ -241,11 +179,8 @@ describe("buildEventsFilterOptionsForColumnsQuery", () => {
       projectId: "test-project",
       filter: [
         {
-          // `contains` is truncation-unsafe (a match can sit past char 200),
-          // so it must force full-table routing — which is what this test
-          // asserts. A short `=`/`starts with` value stays on events_core.
           column: "metadata",
-          operator: "contains",
+          operator: "=",
           key: "region",
           value: "eu",
           type: "stringObject",
@@ -271,70 +206,13 @@ describe("buildEventsFilterOptionsForColumnsQuery", () => {
     expect(Object.values(built.params)).toContain("quality");
   });
 
-  it("bounds the scored traces scope by the view's both-sided window", () => {
-    const fromTime = new Date("2026-01-01T00:00:00.000Z");
-    const toTime = new Date("2026-01-01T00:30:00.000Z");
+  it("applies the scored traces scope without caller-provided raw SQL", () => {
     const built = buildEventsFilterOptionColumnQuery({
       projectId: "test-project",
       filter: [],
       column: "traceName",
       limit: 100,
-      scope: {
-        type: "scoredTraces",
-        fromTime: { operator: ">=", value: fromTime },
-        toTime: { operator: "<=", value: toTime },
-      },
-    });
-
-    expect(built).not.toBeNull();
-    if (!built) throw new Error("expected query");
-
-    expect(built.query).toContain(
-      "e.trace_id IN (SELECT DISTINCT trace_id FROM scores WHERE project_id = {projectId: String} AND timestamp >= {scoredTracesFromTime: DateTime64(3, 'UTC')} AND timestamp <= {scoredTracesToTime: DateTime64(3, 'UTC')})",
-    );
-    expect(built.query).toContain(
-      "COALESCE(nullIf(e.trace_name, ''), if((e.parent_span_id = '' OR e.is_app_root = true), nullIf(e.name, ''), NULL))",
-    );
-    expect(built.query).toContain("GROUP BY value");
-    expect(built.params).toMatchObject({
-      projectId: "test-project",
-      limit: 100,
-      scoredTracesFromTime: "2026-01-01 00:00:00.000",
-      scoredTracesToTime: "2026-01-01 00:30:00.000",
-    });
-  });
-
-  it("preserves strict scores timestamp operators", () => {
-    const built = buildEventsFilterOptionColumnQuery({
-      projectId: "test-project",
-      filter: [],
-      column: "traceName",
-      limit: 100,
-      scope: {
-        type: "scoredTraces",
-        fromTime: {
-          operator: ">",
-          value: new Date("2026-01-01T00:00:00.000Z"),
-        },
-        toTime: { operator: "<", value: new Date("2026-01-01T00:30:00.000Z") },
-      },
-    });
-
-    expect(built).not.toBeNull();
-    if (!built) throw new Error("expected query");
-
-    expect(built.query).toContain(
-      "AND timestamp > {scoredTracesFromTime: DateTime64(3, 'UTC')} AND timestamp < {scoredTracesToTime: DateTime64(3, 'UTC')}",
-    );
-  });
-
-  it("omits scores timestamp bounds the view did not supply", () => {
-    const built = buildEventsFilterOptionColumnQuery({
-      projectId: "test-project",
-      filter: [],
-      column: "traceName",
-      limit: 100,
-      scope: { type: "scoredTraces" },
+      scope: "scoredTraces",
     });
 
     expect(built).not.toBeNull();
@@ -343,8 +221,14 @@ describe("buildEventsFilterOptionsForColumnsQuery", () => {
     expect(built.query).toContain(
       "e.trace_id IN (SELECT DISTINCT trace_id FROM scores WHERE project_id = {projectId: String})",
     );
-    expect(built.query).not.toContain("scoredTracesFromTime");
-    expect(built.query).not.toContain("scoredTracesToTime");
+    expect(built.query).toContain(
+      "COALESCE(nullIf(e.trace_name, ''), if((e.parent_span_id = '' OR e.is_app_root = true), nullIf(e.name, ''), NULL))",
+    );
+    expect(built.query).toContain("GROUP BY value");
+    expect(built.params).toMatchObject({
+      projectId: "test-project",
+      limit: 100,
+    });
   });
 
   it("builds a direct grouped query for one scalar filter option column", () => {
@@ -992,18 +876,5 @@ describe("ExperimentsAggregationQueryBuilder", () => {
       projectId: "test-project",
       startTimeFrom: "2026-01-01 00:00:00.000",
     });
-  });
-
-  it("counts distinct items that carry an ERROR event", () => {
-    const { query } = new ExperimentsAggregationQueryBuilder({
-      projectId: "test-project",
-    })
-      .selectFieldSet("base")
-      .whereRaw("e.experiment_id != ''")
-      .buildWithParams();
-
-    expect(query).toContain(
-      "uniqIf(e.experiment_item_id, e.level = 'ERROR') AS error_count",
-    );
   });
 });

@@ -26,10 +26,9 @@ import {
   EncodedObservationsCursorV2,
   EncodedObservationsCursorV2String,
   encodeCursor,
-} from "@/src/features/public-api/server";
+} from "@/src/features/public-api/types/observations";
 import { defineTool } from "../../../core/define-tool";
 import { runMcpTool } from "../../../core/run-mcp-tool";
-import { clampToDataAccessDays } from "@/src/features/entitlements/server";
 import {
   ExpandMetadataKeysSchema,
   getMetadataExpansionForProjection,
@@ -383,31 +382,6 @@ export const [listObservationsTool, handleListObservations] = defineTool({
         const projectionFields = getProjectionFields(input.fields);
         const fieldGroups = getProjectionFieldGroups(projectionFields);
         assertAllowedExpensiveObservationAccess(input, projectionFields);
-        const dataAccessWindow = clampToDataAccessDays({
-          plan: context.plan,
-          fromTimestamp: input.fromStartTime,
-        });
-        const advancedFilters = dataAccessWindow.accessFloor
-          ? [
-              ...(input.filter ?? []),
-              {
-                column: "startTime",
-                operator: ">=" as const,
-                value: dataAccessWindow.effectiveFromTimestamp!,
-                type: "datetime" as const,
-              },
-              ...(input.toStartTime
-                ? [
-                    {
-                      column: "startTime",
-                      operator: "<" as const,
-                      value: new Date(input.toStartTime),
-                      type: "datetime" as const,
-                    },
-                  ]
-                : []),
-            ]
-          : input.filter;
 
         span.setAttributes({
           "mcp.projection_fields": projectionFields.join(","),
@@ -426,10 +400,10 @@ export const [listObservationsTool, handleListObservations] = defineTool({
           environment: input.environment,
           parentObservationId: input.parentObservationId,
           isRootObservation: input.isRootObservation,
-          fromStartTime: dataAccessWindow.effectiveFromTimestamp?.toISOString(),
+          fromStartTime: input.fromStartTime,
           toStartTime: input.toStartTime,
           version: input.version,
-          advancedFilters,
+          advancedFilters: input.filter,
           cursor: input.cursor
             ? EncodedObservationsCursorV2.parse(input.cursor)
             : undefined,

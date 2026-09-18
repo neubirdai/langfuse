@@ -10,7 +10,6 @@ import {
 import {
   InvalidRequestError,
   normalizeOrderByForTable,
-  promptsTableCols,
   scoresTableCols,
   tracesTableCols,
 } from "@langfuse/shared";
@@ -55,30 +54,6 @@ describe("orderByToPrisma (Convert orderBy to Prisma.sql)", () => {
         expectedTimeColumn: "createdAt",
       }),
     ).toEqual({ column: "createdAt", order: "ASC" });
-  });
-
-  test("prompts list remaps leaked startTime orderBy onto createdAt", () => {
-    expect(() =>
-      orderByToPrismaSql(
-        { column: "startTime", order: "DESC" },
-        promptsTableCols,
-      ),
-    ).toThrow(InvalidRequestError);
-
-    expect(
-      orderByToPrismaSql(
-        normalizeOrderByForTable({
-          orderBy: { column: "startTime", order: "DESC" },
-          expectedTimeColumn: "createdAt",
-        }),
-        promptsTableCols,
-      ),
-    ).toEqual(
-      orderByToPrismaSql(
-        { column: "createdAt", order: "DESC" },
-        promptsTableCols,
-      ),
-    );
   });
 
   test("orderByToClickhouseSql throws InvalidRequestError for invalid columns", () => {

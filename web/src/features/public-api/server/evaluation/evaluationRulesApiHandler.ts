@@ -16,7 +16,6 @@ import {
 export const evaluationRulesApiHandler = withStablePublicApiMiddlewares({
   GET: createStablePublicApiRoute({
     name: "List evaluation rules",
-    action: "evaluationRule:read",
     querySchema: ListEvaluationRulesQuery,
     responseSchema: ListEvaluationRulesResponse,
     fn: ({ query, auth }) =>
@@ -29,7 +28,6 @@ export const evaluationRulesApiHandler = withStablePublicApiMiddlewares({
   }),
   POST: createStablePublicApiRoute({
     name: "Create evaluation rule",
-    action: "evaluationRule:CUD",
     bodySchema: CreateEvaluationRuleBody,
     responseSchema: EvaluationRule,
     successStatusCode: 201,

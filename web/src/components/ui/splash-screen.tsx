@@ -1,16 +1,15 @@
-/* eslint-disable @repo/no-margin-on-root-elements */
 import React, { useState } from "react";
 import { cn } from "@/src/utils/tailwind";
 import Image from "next/image";
-import { InfoIcon, type LucideIcon } from "lucide-react";
+import { InfoIcon } from "lucide-react";
 import { ActionButton } from "@/src/components/ActionButton";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertTitle, AlertDescription } from "@/src/components/ui/alert";
 import { StatusBadge } from "@/src/components/ui/StatusBadge/StatusBadge";
 
 export interface ValueProposition {
   title: string;
   description: string;
-  icon?: LucideIcon;
+  icon?: React.ReactNode;
 }
 
 export interface ActionConfig {
@@ -62,28 +61,14 @@ function VideoPlayer({ videoSrc }: { videoSrc: string }) {
       <video
         src={videoSrc}
         controls
+        autoPlay
         muted
         loop
         playsInline
         controlsList="nodownload"
         className="w-full"
         onError={() => setHasError(true)}
-        onLoadedData={(event) => {
-          setIsLoaded(true);
-          // Firefox rejects play() with NotSupportedError when the codec is
-          // unavailable; hide the player. NotAllowedError is autoplay policy.
-          // Other rejections rethrow so they stay visible to error reporting.
-          return event.currentTarget.play().catch((error: unknown) => {
-            if (error instanceof DOMException) {
-              if (error.name === "NotSupportedError") {
-                setHasError(true);
-                return;
-              }
-              if (error.name === "NotAllowedError") return;
-            }
-            throw error;
-          });
-        }}
+        onLoadedData={() => setIsLoaded(true)}
       />
     </div>
   );
@@ -161,12 +146,11 @@ export function SplashScreen({
       </div>
 
       {gettingStarted && (
-        <div className="w-full max-w-3xl">
-          <Alert icon={InfoIcon}>
-            <Alert.Title>Getting Started</Alert.Title>
-            <Alert.Description>{gettingStarted}</Alert.Description>
-          </Alert>
-        </div>
+        <Alert className="w-full max-w-3xl">
+          <InfoIcon className="mr-2 h-4 w-4" />
+          <AlertTitle>Getting Started</AlertTitle>
+          <AlertDescription>{gettingStarted}</AlertDescription>
+        </Alert>
       )}
 
       {videoPosition === "top" && mediaBlock}
@@ -213,9 +197,10 @@ export function SplashScreen({
       {valuePropositions.length > 0 && (
         <div className="my-6 grid w-full max-w-3xl grid-cols-1 gap-4 md:grid-cols-2">
           {valuePropositions.map((prop, index) => (
-            <Alert key={index} icon={prop.icon}>
-              <Alert.Title>{prop.title}</Alert.Title>
-              <Alert.Description>{prop.description}</Alert.Description>
+            <Alert key={index}>
+              {prop.icon}
+              <AlertTitle>{prop.title}</AlertTitle>
+              <AlertDescription>{prop.description}</AlertDescription>
             </Alert>
           ))}
         </div>

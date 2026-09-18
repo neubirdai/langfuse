@@ -1,4 +1,3 @@
-/* eslint-disable boundaries/dependencies */
 import { Button } from "@/src/components/ui/button";
 import { copyTextToClipboard } from "@/src/utils/clipboard";
 import { Check, Copy } from "lucide-react";
@@ -11,7 +10,6 @@ interface Props {
   language: string;
   value: string;
   theme?: "light" | "dark";
-  borderless?: boolean;
   /** Hide the language caption when the surrounding UI already states it. */
   showLanguage?: boolean;
   /** Match immutable form fields instead of using the recessed code surface. */
@@ -19,14 +17,7 @@ interface Props {
 }
 
 const CodeBlock: FC<Props> = memo(
-  ({
-    language,
-    value,
-    theme,
-    borderless = false,
-    showLanguage = true,
-    variant = "default",
-  }) => {
+  ({ language, value, theme, showLanguage = true, variant = "default" }) => {
     const [isCopied, setIsCopied] = useState(false);
     const { resolvedTheme } = useTheme();
     const appliedTheme = theme ?? resolvedTheme;
@@ -60,8 +51,7 @@ const CodeBlock: FC<Props> = memo(
     return (
       <div
         className={cn(
-          "codeblock relative w-full overflow-hidden rounded font-sans",
-          !borderless && "border",
+          "codeblock relative w-full overflow-hidden rounded border font-sans",
           variant === "read-only" ? "bg-muted" : "bg-surface-code",
         )}
       >

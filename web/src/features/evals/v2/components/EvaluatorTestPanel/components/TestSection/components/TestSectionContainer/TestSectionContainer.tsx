@@ -64,12 +64,10 @@ export function TestSectionContainer({
             rawOpen={rawResultOpen}
             onRawOpenChange={onRawResultOpenChange}
             traceActions={
-              executionTraceId ? (
-                <TestResultActions
-                  executionTraceId={executionTraceId}
-                  onOpenExecutionTrace={onOpenExecutionTrace}
-                />
-              ) : undefined
+              <TestResultActions
+                executionTraceId={executionTraceId}
+                onOpenExecutionTrace={onOpenExecutionTrace}
+              />
             }
             rerunAction={
               <TestRerunAction

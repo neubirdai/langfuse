@@ -97,9 +97,9 @@ export function EvaluatorAssignmentsEditor({
             variant="ghost"
             size="sm"
             disabled={disabled}
-            className="text-foreground hover:text-foreground inline-flex h-auto items-center gap-1.5 px-0 py-0 text-xs leading-none underline-offset-4 hover:bg-transparent hover:underline"
+            className="text-foreground hover:text-foreground h-auto px-0 py-0 text-xs underline-offset-4 hover:bg-transparent hover:underline"
           >
-            <Plus className="size-3.5 shrink-0" aria-hidden="true" />
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
             Attach another evaluator
           </Button>
         )}
@@ -146,7 +146,6 @@ export function EvaluatorAssignmentsEditor({
                         defaultVariableMapping:
                           evaluator.defaultVariableMapping,
                         variableMapping: evaluator.initialVariableMapping,
-                        requiredVariables: evaluator.requiredVariables,
                       });
                       setPickerOpen(false);
                     }}

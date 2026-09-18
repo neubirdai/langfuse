@@ -58,11 +58,8 @@ export function NameStep({
           />
         </div>
         <div className="space-y-2">
-          <Label
-            htmlFor="evaluator-description"
-            className="flex items-center gap-1"
-          >
-            Description
+          <Label htmlFor="evaluator-description">
+            Description{" "}
             <span className="text-muted-foreground font-normal">
               (optional)
             </span>

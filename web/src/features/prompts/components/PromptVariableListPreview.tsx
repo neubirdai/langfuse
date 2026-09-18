@@ -5,6 +5,10 @@ export const PromptVariableListPreview = ({
 }: {
   variables: string[];
 }) => {
+  if (variables.length === 0) {
+    return null;
+  }
+
   return (
     <div>
       <p className="text-muted-foreground mb-2 text-sm">

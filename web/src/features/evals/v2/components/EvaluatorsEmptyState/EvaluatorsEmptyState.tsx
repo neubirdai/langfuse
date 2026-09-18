@@ -1,4 +1,4 @@
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import {
   useIsInAppAgentLauncherVisible,
   useInAppAiAgent,
