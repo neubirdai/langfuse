@@ -37,7 +37,7 @@ export const TokenUsageBadge = (
     usage.outputUsage === 0 &&
     usage.totalUsage === 0
   )
-    return <></>;
+    return <span />;
 
   const content = `${numberFormatter(usage.inputUsage, 0)} → ${numberFormatter(usage.outputUsage, 0)} (∑ ${numberFormatter(usage.totalUsage, 0)})`;
 

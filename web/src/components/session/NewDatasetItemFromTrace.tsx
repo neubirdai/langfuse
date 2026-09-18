@@ -27,15 +27,13 @@ export const NewDatasetItemFromTraceId = (props: {
     },
   );
 
-  if (!trace.data) return null;
-
   return (
     <NewDatasetItemFromExistingObject
       projectId={props.projectId}
       traceId={props.traceId}
-      input={trace.data.input ?? null}
-      output={trace.data.output ?? null}
-      metadata={trace.data.metadata ?? null}
+      input={trace.data?.input ?? null}
+      output={trace.data?.output ?? null}
+      metadata={trace.data?.metadata ?? null}
       buttonVariant={props.buttonVariant}
       size={props.size}
     />

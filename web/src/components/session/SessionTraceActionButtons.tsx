@@ -8,6 +8,7 @@ import { CommentDrawerController } from "@/src/features/comments/CommentDrawerCo
 import { NewDatasetItemFromTraceId } from "@/src/components/session/NewDatasetItemFromTrace";
 import { AnnotationQueueItemDropdownMenuController } from "@/src/features/annotation-queues/components/AnnotationQueueItemDropdownMenuController";
 import { AnnotationQueueItemCountBadge } from "@/src/features/annotation-queues/components/AnnotationQueueItemCountBadge";
+import { AnnotationQueueObjectType } from "@langfuse/shared";
 import { cn } from "@/src/utils/tailwind";
 import {
   ChevronDown,
@@ -55,19 +56,6 @@ export function SessionTraceActionButtons({
         <AnnotateDrawerController
           key={`annotation-drawer-${traceId}`}
           projectId={projectId}
-          scoreTarget={{
-            type: "trace",
-            traceId,
-          }}
-          scores={scores}
-          analyticsData={{
-            type: "trace",
-            source: "SessionDetail",
-          }}
-          scoreMetadata={{
-            projectId,
-            environment: environment ?? undefined,
-          }}
         >
           {({ disabled, openDrawer }) => (
             <Button
@@ -75,7 +63,23 @@ export function SessionTraceActionButtons({
               size={size}
               disabled={disabled}
               className="rounded-r-none"
-              onClick={openDrawer}
+              onClick={() =>
+                openDrawer({
+                  scoreTarget: {
+                    type: "trace",
+                    traceId,
+                  },
+                  scores,
+                  analyticsData: {
+                    type: "trace",
+                    source: "SessionDetail",
+                  },
+                  scoreMetadata: {
+                    projectId,
+                    environment: environment ?? undefined,
+                  },
+                })
+              }
             >
               {disabled ? (
                 <LockIcon className="mr-1.5 h-3 w-3" />
@@ -89,7 +93,7 @@ export function SessionTraceActionButtons({
         <AnnotationQueueItemDropdownMenuController
           projectId={projectId}
           objectId={traceId}
-          objectType="TRACE"
+          objectType={AnnotationQueueObjectType.TRACE}
         >
           {({ disabled, totalCount }) => (
             <Button
@@ -109,19 +113,20 @@ export function SessionTraceActionButtons({
           )}
         </AnnotationQueueItemDropdownMenuController>
       </div>
-      <CommentDrawerController
-        projectId={projectId}
-        objectId={traceId}
-        objectType="TRACE"
-        count={commentCount}
-      >
+      <CommentDrawerController projectId={projectId} count={commentCount}>
         {({ disabled, openDrawer }) => (
           <Button
             type="button"
             variant="outline"
             size={size}
             disabled={disabled}
-            onClick={openDrawer}
+            onClick={() =>
+              openDrawer({
+                type: "comments",
+                objectId: traceId,
+                objectType: "TRACE",
+              })
+            }
             className="gap-1"
           >
             {disabled ? (
