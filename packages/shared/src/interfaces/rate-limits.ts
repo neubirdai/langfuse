@@ -1,5 +1,5 @@
 import z from "zod";
-import { ApiAccessScopeWithOptionalApiKeyId } from "../server";
+import { ApiAccessScope } from "../server";
 
 export const RateLimitResource = z.enum([
   "ingestion",
@@ -23,7 +23,7 @@ export const RateLimitResource = z.enum([
 export type RateLimitResult = {
   resource: z.infer<typeof RateLimitResource>;
   points: number;
-  scope: ApiAccessScopeWithOptionalApiKeyId;
+  scope: ApiAccessScope;
 
   // from rate-limiter-flexible
   remainingPoints: number;

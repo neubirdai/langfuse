@@ -21,6 +21,7 @@ import {
 } from "@/src/components/ui/form";
 import { CodeMirrorEditor } from "@/src/components/editor/CodeMirrorEditor";
 import { api } from "@/src/utils/api";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import { showErrorToast } from "@/src/features/notifications/showErrorToast";
 import { getFormattedPayload } from "@/src/features/experiments/utils/format";
@@ -49,6 +50,11 @@ export const RemoteExperimentTriggerModal = ({
   };
   setShowTriggerModal: (show: boolean) => void;
 }) => {
+  const hasDatasetAccess = useHasProjectAccess({
+    projectId,
+    scope: "datasets:CUD",
+  });
+
   const dataset = api.datasets.byId.useQuery({
     projectId,
     datasetId,
@@ -105,6 +111,10 @@ export const RemoteExperimentTriggerModal = ({
       payload: data.payload,
     });
   };
+
+  if (!hasDatasetAccess) {
+    return null;
+  }
 
   return (
     <>

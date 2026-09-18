@@ -311,7 +311,7 @@ export function SearchComposer({
   freeTextReason,
   registry = EVENTS_FIELD_REGISTRY,
 }: {
-  projectId?: string;
+  projectId: string;
   /** Observed facet values for value suggestions; undefined = loading. */
   observed: ObservedOptions | undefined;
   /** Columns whose lazy fetch terminally errored — settle the value-stage
@@ -384,7 +384,7 @@ export function SearchComposer({
   // so the plan memo doesn't churn).
   const recents = React.useMemo(
     () =>
-      projectId && autocompleteOpen && draft.trim().length === 0
+      autocompleteOpen && draft.trim().length === 0
         ? getRecentSearches(projectId)
         : NO_RECENTS,
     [autocompleteOpen, draft, projectId],
@@ -1359,7 +1359,7 @@ export function SearchComposer({
       ref={containerRef}
       data-testid="search-bar"
       role="search"
-      className="ph-no-capture relative w-full"
+      className="relative w-full"
     >
       <div
         data-testid="search-bar-surface"
@@ -1515,7 +1515,7 @@ export function SearchComposer({
       </div>
 
       {showGlobalDiagnostics && (
-        <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
+        <div className="absolute top-1.5 right-2 flex items-center gap-1">
           <span
             className="text-destructive"
             title={visibleDiagnostics.map((d) => d.message).join("; ")}
@@ -1575,7 +1575,7 @@ export function SearchComposer({
                     }
               }
               className={cn(
-                "ph-no-capture pointer-events-none fixed max-w-[min(360px,calc(100vw-32px))]",
+                "pointer-events-none fixed max-w-[min(360px,calc(100vw-32px))]",
                 "bg-popover rounded-md border",
                 "px-2 py-1 font-sans text-xs leading-snug shadow-md",
                 errorTarget !== null

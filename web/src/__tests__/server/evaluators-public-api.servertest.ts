@@ -123,65 +123,36 @@ describe("stable evaluators public API", () => {
       { role: "user", content: "Classify updated: {{input}}" },
     ]);
 
-    const multiMessageEvaluator = await makeZodVerifiedAPICall(
-      Evaluator,
+    const tooManyMessages = await makeAPICall(
       "POST",
       "/api/public/v2/evaluators",
       {
-        name: "multi-message evaluator",
+        name: "too many messages",
         type: "llm_as_judge",
         prompt: [
-          { role: "system", content: "Judge carefully" },
-          { role: "user", content: "Input: {{input}}" },
-          { role: "assistant", content: "I will return a score" },
+          { role: "user", content: "First" },
+          { role: "user", content: "Second" },
         ],
         outputDefinition: { dataType: "BOOLEAN" },
       },
       auth,
-      201,
     );
-    expect(
-      LlmAsJudgeEvaluator.parse(multiMessageEvaluator.body).prompt,
-    ).toEqual([
-      { role: "system", content: "Judge carefully" },
-      { role: "user", content: "Input: {{input}}" },
-      { role: "assistant", content: "I will return a score" },
-    ]);
-    await expect(
-      prisma.evaluatorVersion.findFirstOrThrow({
-        where: { evaluatorId: multiMessageEvaluator.body.id },
-        select: { prompt: true, promptMessages: true },
-      }),
-    ).resolves.toEqual({
-      prompt: "Judge carefully\n\nInput: {{input}}\n\nI will return a score",
-      promptMessages: [
-        { role: "system", content: "Judge carefully" },
-        { role: "user", content: "Input: {{input}}" },
-        { role: "assistant", content: "I will return a score" },
-      ],
-    });
+    expect(tooManyMessages.status).toBe(400);
 
-    for (const prompt of [
-      [{ role: "developer", content: "Judge {{input}}" }],
-      [
-        { role: "user", content: "Judge {{input}}" },
-        { role: "system", content: "Too late" },
-      ],
-      [{ role: "user", content: "   " }],
-    ]) {
-      const invalidPrompt = await makeAPICall(
+    for (const role of ["assistant", "system", "developer"]) {
+      const invalidRole = await makeAPICall(
         "POST",
         "/api/public/v2/evaluators",
         {
-          name: "invalid prompt evaluator",
+          name: "invalid role evaluator",
           type: "llm_as_judge",
-          prompt,
+          prompt: [{ role, content: "Judge {{input}}" }],
           outputDefinition: { dataType: "BOOLEAN" },
         },
         auth,
       );
-      expect(invalidPrompt.status).toBe(400);
-      expect(PublicApiError.parse(invalidPrompt.body)).toMatchObject({
+      expect(invalidRole.status).toBe(400);
+      expect(PublicApiError.parse(invalidRole.body)).toMatchObject({
         code: "invalid_body",
       });
     }
@@ -247,7 +218,7 @@ describe("stable evaluators public API", () => {
         description: null,
         definition: {
           type: EvalTemplateType.LLM_AS_JUDGE,
-          promptMessages: [{ role: "user", content: "Judge {{input}}" }],
+          prompt: "Judge {{input}}",
           vars: ["input"],
           provider: null,
           model: null,
@@ -484,7 +455,7 @@ describe("stable evaluators public API", () => {
         description: null,
         definition: {
           type: EvalTemplateType.LLM_AS_JUDGE,
-          promptMessages: [{ role: "user", content: "Judge {{input}}" }],
+          prompt: "Judge {{input}}",
           vars: ["input"],
           provider: "openai",
           model: "gpt-4.1-mini",

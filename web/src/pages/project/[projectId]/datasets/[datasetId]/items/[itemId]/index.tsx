@@ -1,3 +1,4 @@
+import { useRouter } from "next/router";
 import { DATASET_ITEM_TABS } from "@/src/features/navigation/utils/dataset-item-tabs";
 import { DatasetItemDetailPage } from "@/src/features/datasets/components/DatasetItemDetailPage";
 import { DatasetItemViewModeContent } from "@/src/features/datasets/components/DatasetItemViewModeContent";
@@ -13,32 +14,13 @@ import { Button } from "@/src/components/ui/button";
 import useSessionStorage from "@/src/components/useSessionStorage";
 import { History, PanelRightOpen } from "lucide-react";
 import { useState } from "react";
-import {
-  RouteParamsPendingFallback,
-  useReadyRouteParams,
-} from "@/src/hooks/useReadyRouteParams";
 
-export default function DatasetItemPage() {
-  const route = useReadyRouteParams(["projectId", "datasetId", "itemId"]);
-  if (!route.ready) return <RouteParamsPendingFallback />;
-  return (
-    <DatasetItemContent
-      projectId={route.params.projectId}
-      datasetId={route.params.datasetId}
-      itemId={route.params.itemId}
-    />
-  );
-}
+function DatasetItemContent() {
+  const router = useRouter();
+  const projectId = router.query.projectId as string;
+  const datasetId = router.query.datasetId as string;
+  const itemId = router.query.itemId as string;
 
-function DatasetItemContent({
-  projectId,
-  datasetId,
-  itemId,
-}: {
-  projectId: string;
-  datasetId: string;
-  itemId: string;
-}) {
   const { selectedVersion, resetToLatest } = useDatasetVersion();
   const isViewingOldVersion = selectedVersion !== null;
 
@@ -49,9 +31,6 @@ function DatasetItemContent({
   const [isVersionPanelOpen, setIsVersionPanelOpen] =
     useState(!!selectedVersion);
 
-  const routeReady =
-    Boolean(projectId) && Boolean(datasetId) && Boolean(itemId);
-
   // Fetch current item
   const item = api.datasets.itemByIdAtVersion.useQuery(
     {
@@ -60,7 +39,6 @@ function DatasetItemContent({
       datasetItemId: itemId,
     },
     {
-      enabled: routeReady,
       refetchOnWindowFocus: false,
     },
   );
@@ -74,28 +52,22 @@ function DatasetItemContent({
       version: selectedVersion!,
     },
     {
-      enabled: routeReady && selectedVersion !== null,
+      enabled: selectedVersion !== null,
     },
   );
 
   // Fetch dataset
-  const dataset = api.datasets.byId.useQuery(
-    {
-      datasetId,
-      projectId,
-    },
-    { enabled: routeReady },
-  );
+  const dataset = api.datasets.byId.useQuery({
+    datasetId,
+    projectId,
+  });
 
   // Fetch item version history for sidebar indicators
-  const itemVersionHistory = api.datasets.itemVersionHistory.useQuery(
-    {
-      projectId,
-      datasetId,
-      itemId,
-    },
-    { enabled: routeReady },
-  );
+  const itemVersionHistory = api.datasets.itemVersionHistory.useQuery({
+    projectId,
+    datasetId,
+    itemId,
+  });
 
   // Check if item was changed at selected version (enables diff toggle)
   // Use 1 second tolerance to account for potential timestamp precision issues
@@ -211,3 +183,5 @@ function DatasetItemContent({
     </DatasetItemDetailPage>
   );
 }
+
+export default DatasetItemContent;

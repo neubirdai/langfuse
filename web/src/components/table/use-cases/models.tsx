@@ -1,12 +1,12 @@
 import { DataTable } from "@/src/components/table/data-table";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
 import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
 import { api } from "@/src/utils/api";
 import { safeExtract } from "@/src/utils/map-utils";
 import { type Prisma } from "@langfuse/shared/src/db";
 import { useQueryParams, withDefault, StringParam } from "use-query-params";
 import { usePaginationState } from "@/src/hooks/usePaginationState";
+import { IOTableCell } from "../../ui/IOTableCell";
 import { useRowHeightLocalStorage } from "@/src/components/table/data-table-row-height-switch";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
 import useColumnOrder from "@/src/features/column-visibility/hooks/useColumnOrder";
@@ -21,7 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
-import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
+import { Skeleton } from "@/src/components/ui/skeleton";
 import { LangfuseIcon } from "@/src/components/design-system/LangfuseIcon/LangfuseIcon";
 import { useRouter } from "next/router";
 import { PriceUnitSelector } from "@/src/features/models/components/PriceUnitSelector";
@@ -187,8 +187,6 @@ export default function ModelTable({ projectId }: { projectId: string }) {
         const prices: Record<string, number> | undefined =
           row.getValue("prices");
 
-        if (!prices) return;
-
         return (
           <PriceBreakdownTooltip
             modelName={row.original.modelName}
@@ -200,28 +198,35 @@ export default function ModelTable({ projectId }: { projectId: string }) {
       },
       enableHiding: true,
     },
-    createTextTableColumn<ModelTableRow>({
+    {
       accessorKey: "tokenizerId",
+      id: "tokenizerId",
       header: "Tokenizer",
       headerTooltip: {
         description: modelConfigDescriptions.tokenizerId,
       },
       enableHiding: true,
       size: 120,
-    }),
-    createIOTableColumn<ModelTableRow>({
+    },
+    {
       accessorKey: "config",
+      id: "config",
       header: "Tokenizer Configuration",
       headerTooltip: {
         description: modelConfigDescriptions.config,
       },
       enableHiding: true,
       size: 120,
-      getCell: (value) => value || undefined,
-      singleLine: rowHeight === "s",
-    }),
-    createTextTableColumn<ModelTableRow>({
-      accessorFn: () => undefined,
+      cell: ({ row }) => {
+        const value: Prisma.JsonValue | undefined = row.getValue("config");
+
+        return value ? (
+          <IOTableCell data={value} singleLine={rowHeight === "s"} />
+        ) : null;
+      },
+    },
+    {
+      accessorKey: "lastUsed",
       id: "lastUsed",
       header: "Last used",
       headerTooltip: {
@@ -229,11 +234,12 @@ export default function ModelTable({ projectId }: { projectId: string }) {
       },
       enableHiding: true,
       size: 120,
-      mapValue: (_, { row }) => {
-        if (!lastUsed.data) return { type: "loading" };
-        return lastUsed.data[row.original.modelId]?.toLocaleString() ?? "";
+      cell: ({ row }) => {
+        if (!lastUsed.data) return <Skeleton className="h-4 w-20" />;
+        const value = lastUsed.data[row.original.modelId];
+        return value?.toLocaleString() ?? "";
       },
-    }),
+    },
     {
       accessorKey: "actions",
       header: "Actions",
@@ -293,7 +299,6 @@ export default function ModelTable({ projectId }: { projectId: string }) {
   return (
     <>
       <DataTableToolbar
-        tableName="models"
         columns={columns}
         columnVisibility={columnVisibility}
         setColumnVisibility={setColumnVisibility}

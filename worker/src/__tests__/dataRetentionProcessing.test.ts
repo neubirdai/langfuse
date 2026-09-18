@@ -15,7 +15,6 @@ import {
   getTraceById,
   StorageService,
   StorageServiceFactory,
-  toClickhouseDateTime,
 } from "@langfuse/shared/src/server";
 import { prisma } from "@langfuse/shared/src/db";
 import { handleDataRetentionProcessingJob } from "../ee/dataRetention/handleDataRetentionProcessingJob";
@@ -83,12 +82,8 @@ describe("DataRetentionProcessingJob", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: fileName,
-          created_at: toClickhouseDateTime(
-            Date.now() - 1000 * 60 * 60 * 24 * 3,
-          ), // 3 days in the past
-          updated_at: toClickhouseDateTime(
-            Date.now() - 1000 * 60 * 60 * 24 * 3,
-          ), // 3 days in the past
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).getTime(), // 3 days in the past
+          updated_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).getTime(), // 3 days in the past
         },
       ],
     });
@@ -146,12 +141,8 @@ describe("DataRetentionProcessingJob", () => {
           event_id: randomUUID(),
           bucket_name: env.LANGFUSE_S3_EVENT_UPLOAD_BUCKET,
           bucket_path: fileName,
-          created_at: toClickhouseDateTime(
-            Date.now() - 1000 * 60 * 60 * 24 * 30,
-          ), // 30 days in the past
-          updated_at: toClickhouseDateTime(
-            Date.now() - 1000 * 60 * 60 * 24 * 30,
-          ), // 30 days in the past
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).getTime(), // 30 days in the past
+          updated_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).getTime(), // 30 days in the past
         },
       ],
     });

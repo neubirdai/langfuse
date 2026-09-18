@@ -8,8 +8,6 @@ import { createTextTableColumn } from "./createTextTableColumn";
 
 type Row = {
   name: string | null;
-  count: number | null;
-  isCountLoading?: boolean;
 };
 
 const columns = [
@@ -17,14 +15,6 @@ const columns = [
     id: "name",
     accessorFn: (row) => row.name,
     header: "Text",
-  }),
-  createTextTableColumn<Row, number>({
-    accessorKey: "count",
-    header: "Mapped text",
-    mapValue: (value, { row }) =>
-      row.original.isCountLoading
-        ? { type: "loading" }
-        : value?.toLocaleString(),
   }),
 ];
 
@@ -52,7 +42,7 @@ export const Default = meta.story({
     data: {
       isLoading: false,
       isError: false,
-      data: [{ name: "Production generation", count: 1200 }],
+      data: [{ name: "Production generation" }],
     },
   },
 });
@@ -63,20 +53,7 @@ export const EmptyValue = meta.story({
     data: {
       isLoading: false,
       isError: false,
-      data: [{ name: null, count: null }],
-    },
-  },
-});
-
-export const MappedValueLoading = meta.story({
-  name: "Mapped Value Loading",
-  args: {
-    data: {
-      isLoading: false,
-      isError: false,
-      data: [
-        { name: "Production generation", count: null, isCountLoading: true },
-      ],
+      data: [{ name: null }],
     },
   },
 });

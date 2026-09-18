@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import { api } from "@/src/utils/api";
-import { formatLocalIsoDate } from "@/src/utils/dates";
+import { formatLocalIsoDate } from "@/src/components/LocalIsoDate";
 import { BillingCurrentPlanLabel } from "./BillingCurrentPlanLabel";
 
 export const BillingPlanPeriodView = () => {

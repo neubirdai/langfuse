@@ -76,10 +76,6 @@ import { env } from "../../env";
 import { assertExportSourceWritable } from "../exportWriteModeGuard";
 import { recordExportVolume } from "../../services/exportVolumeMetric";
 import {
-  recordExportFreshnessLag,
-  windowClassFromBlobFrequency,
-} from "../../services/exportFreshnessLagMetric";
-import {
   buildBlobExportManifest,
   buildBlobExportManifestKey,
   formatBlobExportTimestamp,
@@ -89,7 +85,6 @@ import {
   buildBlobExportDeprecationNotice,
   buildBlobExportDeprecationNoticeKey,
 } from "./deprecationNotice";
-import { resolveFirstExportStart } from "./firstExportStart";
 
 const BlobExportFormat = {
   JSON_RAW: "json-raw",
@@ -207,15 +202,13 @@ const getMinTimestampForExport = async (
     return lastSyncAt;
   }
 
-  // For a first FULL_HISTORY export, probe ClickHouse for the actual minimum
-  // timestamp across every source table. This is the real data minimum, not
-  // project createdAt: projects legitimately backfill data that predates the
-  // project, and a full-history export must include it.
-  let historicalMinTimestampMs: number | null = null;
-  if (exportMode === BlobStorageExportMode.FULL_HISTORY) {
-    try {
-      const result = await queryClickhouse<{ min_timestamp: number | null }>({
-        query: `
+  // For first export, use the export mode to determine start date
+  switch (exportMode) {
+    case BlobStorageExportMode.FULL_HISTORY:
+      // Query ClickHouse for the actual minimum timestamp from traces, observations, and scores tables
+      try {
+        const result = await queryClickhouse<{ min_timestamp: number | null }>({
+          query: `
               SELECT min(toUnixTimestamp(ts)) * 1000 as min_timestamp
               FROM (
                 SELECT min(timestamp) as ts
@@ -233,40 +226,46 @@ const getMinTimestampForExport = async (
                 SELECT min(timestamp) as ts
                 FROM scores
                 WHERE project_id = {projectId: String}
-
-                UNION ALL
-
-                SELECT min(start_time) as ts
-                FROM events_core
-                WHERE project_id = {projectId: String}
-                AND is_deleted = 0 -- match the events export query's visibility
               )
               WHERE ts > 0 -- Ignore 0 results (usually empty tables)
             `,
-        params: { projectId },
-      });
+          params: { projectId },
+        });
 
-      const minTimestampValue = Number(result[0]?.min_timestamp);
-      if (minTimestampValue && minTimestampValue > 0) {
-        historicalMinTimestampMs = minTimestampValue;
+        // Extract the minimum timestamp
+        logger.info(
+          `[BLOB INTEGRATION] ClickHouse min_timestamp for project ${projectId}: ${result[0]?.min_timestamp}, type: ${typeof result[0]?.min_timestamp}`,
+        );
+        const minTimestampValue = Number(result[0]?.min_timestamp);
+
+        if (minTimestampValue && minTimestampValue > 0) {
+          const date = new Date(minTimestampValue);
+          logger.info(
+            `[BLOB INTEGRATION] Created Date from min_timestamp for project ${projectId}: ${date}, isValid: ${!isNaN(date.getTime())}, getTime: ${date.getTime()}`,
+          );
+          return date;
+        }
+
+        // If no data exists, use current time as a fallback
+        logger.info(
+          `[BLOB INTEGRATION] No historical data found for project ${projectId}, using current time`,
+        );
+        return new Date(0);
+      } catch (error) {
+        logger.error(
+          `[BLOB INTEGRATION] Error querying ClickHouse for minimum timestamp for project ${projectId}`,
+          error,
+        );
+        throw new Error(`Failed to fetch minimum timestamp: ${error}`);
       }
-      logger.info(
-        `[BLOB INTEGRATION] ClickHouse min_timestamp for project ${projectId}: ${historicalMinTimestampMs}`,
-      );
-    } catch (error) {
-      logger.error(
-        `[BLOB INTEGRATION] Error querying ClickHouse for minimum timestamp for project ${projectId}`,
-        error,
-      );
-      throw new Error(`Failed to fetch minimum timestamp: ${error}`);
-    }
+    case BlobStorageExportMode.FROM_TODAY:
+    case BlobStorageExportMode.FROM_CUSTOM_DATE:
+      return exportStartDate || new Date(); // Use export start date or current time as fallback
+    default:
+      // eslint-disable-next-line no-case-declarations
+      const _exhaustiveCheck: never = exportMode;
+      throw new Error(`Invalid export mode: ${exportMode}`);
   }
-
-  return resolveFirstExportStart({
-    exportMode,
-    exportStartDate,
-    historicalMinTimestampMs,
-  });
 };
 
 /**
@@ -1217,10 +1216,9 @@ export const handleBlobStorageIntegrationProjectJob = async (
     return;
   }
 
-  const runStartTime = new Date();
   const { count: claimed } = await prisma.blobStorageIntegration.updateMany({
     where: { projectId },
-    data: { runStartedAt: runStartTime },
+    data: { runStartedAt: new Date() },
   });
   if (claimed === 0) {
     logger.info(
@@ -1277,15 +1275,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
         lastErrorAt: null,
       },
     });
-    recordExportFreshnessLag({
-      integration: "blob_storage",
-      window: windowClassFromBlobFrequency(
-        blobStorageIntegration.exportFrequency,
-      ),
-      status: "success",
-      runStartTime,
-      maxExportedTimestamp: blobStorageIntegration.lastSyncAt,
-    });
     return;
   }
 
@@ -1293,7 +1282,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
   // self-hosted), so the deprecation notice below is Cloud-only too.
   const isCloud = Boolean(env.NEXT_PUBLIC_LANGFUSE_CLOUD_REGION);
 
-  let watermarkAdvanced = false;
   try {
     // The catch persists lastError and notifies admins.
     assertExportSourceWritable(
@@ -1522,20 +1510,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
       return;
     }
 
-    // The export watermark is committed. Catch-up enqueue below can still
-    // fail (Redis); that must not be recorded as an export-freshness failure
-    // against the pre-run lastSyncAt.
-    recordExportFreshnessLag({
-      integration: "blob_storage",
-      window: windowClassFromBlobFrequency(
-        blobStorageIntegration.exportFrequency,
-      ),
-      status: "success",
-      runStartTime,
-      maxExportedTimestamp: maxTimestamp,
-    });
-    watermarkAdvanced = true;
-
     // If still catching up, immediately queue the next chunk job
     if (!caughtUp) {
       const queue = BlobStorageIntegrationProcessingQueue.getInstance();
@@ -1576,18 +1550,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
 
     if (outcome.kind === "integration-deleted") {
       return; // obsolete job: complete it rather than fail it
-    }
-
-    if (!watermarkAdvanced) {
-      recordExportFreshnessLag({
-        integration: "blob_storage",
-        window: windowClassFromBlobFrequency(
-          blobStorageIntegration.exportFrequency,
-        ),
-        status: "failure",
-        runStartTime,
-        maxExportedTimestamp: blobStorageIntegration.lastSyncAt,
-      });
     }
 
     switch (outcome.kind) {

@@ -1,7 +1,6 @@
 import type {
   EvalTemplateSourceCodeLanguage,
   EvalTemplateType,
-  EvaluatorPromptMessage,
   ModelConfig,
 } from "@langfuse/shared";
 
@@ -12,7 +11,7 @@ export type EvaluatorVersion = {
   type: EvalTemplateType;
   sourceCode: string | null;
   sourceCodeLanguage: EvalTemplateSourceCodeLanguage | null;
-  promptMessages: EvaluatorPromptMessage[] | null;
+  prompt: string | null;
   provider: string | null;
   model: string | null;
   modelParams: ModelConfig | null;

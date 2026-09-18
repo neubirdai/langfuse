@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 /**
  * useLocalStorage is a hook for managing data with the localStorage API.
@@ -76,29 +76,10 @@ function useLocalStorage<T>(
     setValue(initialValue);
   };
 
-  // Whether the current value came from this instance's own setter, and so is
-  // the one the other instances in this tab still have to be told about. A
-  // value that arrived FROM one of them is never re-announced.
-  const isOwnWriteRef = useRef(false);
-
-  // Sync to localStorage whenever value changes, and — for a value this
-  // instance set itself — notify the other instances in this tab.
-  //
-  // Both are side effects, so they run here and never inside the state
-  // updater. React invokes an updater during the render phase (and twice in
-  // StrictMode), so dispatching from there calls setState on every other
-  // subscriber to this key while a component is rendering: React's "Cannot
-  // update a component while rendering a different component".
+  // Sync to localStorage whenever value changes
+  // This ensures localStorage always has the latest value
   useEffect(() => {
-    const stringified = safeLocalStorage.set(value);
-    if (!isOwnWriteRef.current) return;
-    isOwnWriteRef.current = false;
-    if (stringified === null) return;
-    window.dispatchEvent(
-      new CustomEvent("localStorageChange", {
-        detail: { key: localStorageKey, newValue: stringified },
-      }),
-    );
+    safeLocalStorage.set(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localStorageKey, value]);
 
@@ -110,7 +91,6 @@ function useLocalStorage<T>(
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === localStorageKey) {
         try {
-          isOwnWriteRef.current = false;
           setValue(e.newValue ? (JSON.parse(e.newValue) as T) : initialValue);
         } catch (error) {
           console.warn("Error parsing storage change", error);
@@ -124,7 +104,6 @@ function useLocalStorage<T>(
     ) => {
       if (e.detail.key === localStorageKey) {
         try {
-          isOwnWriteRef.current = false;
           setValue(
             e.detail.newValue
               ? (JSON.parse(e.detail.newValue) as T)
@@ -153,14 +132,30 @@ function useLocalStorage<T>(
     };
   }, [localStorageKey, initialValue]);
 
-  // Enhanced setValue that also persists and notifies the other instances in
-  // this tab — from the effect above, so this stays a plain state update and
-  // the updater React runs stays pure. Updater functions pass straight through.
+  // Enhanced setValue function that also notifies other tabs
   const setValueAndNotify: React.Dispatch<React.SetStateAction<T>> =
-    useCallback((newValue) => {
-      isOwnWriteRef.current = true;
-      setValue(newValue);
-    }, []);
+    useCallback(
+      (newValue) => {
+        setValue((prev) => {
+          // Handle both direct values and updater functions
+          const resolvedValue =
+            newValue instanceof Function ? newValue(prev) : newValue;
+          const stringified = safeLocalStorage.set(resolvedValue);
+
+          // Dispatch custom event to notify other instances in the same tab
+          if (stringified) {
+            window.dispatchEvent(
+              new CustomEvent("localStorageChange", {
+                detail: { key: localStorageKey, newValue: stringified },
+              }),
+            );
+          }
+
+          return resolvedValue;
+        });
+      },
+      [localStorageKey, safeLocalStorage],
+    );
 
   return [value, setValueAndNotify, clearValue] as const;
 }

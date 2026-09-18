@@ -120,24 +120,24 @@ Splitting a file and directory renames are not part of the surface
 
 ## Rule → mechanism
 
-| Rule   | What                                                                                                                                                                        | Counted by                                                               |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 1–4    | component/hook/fn/store/context file shape + naming; a `fns/` module folder groups one engine                                                                               | census (TS parse)                                                        |
-| 5      | kind folders closed list (+ `constants`, `types`; `docs` anywhere)                                                                                                          | census (dir walk)                                                        |
-| 6      | single-feature files live in the feature; **pages drive features** — a page route under `/sessions` owns `features/sessions`, even if another feature also imports the file | graph (used-in inversion + page slug)                                    |
-| 7      | no importing another component's internals                                                                                                                                  | graph + `.dependency-cruiser.js`                                         |
-| 8      | cross-feature imports via a feature surface (`index.ts`, `server/index.ts`)                                                                                                 | graph + `.dependency-cruiser.js`                                         |
-| 9      | `index.ts` at a feature root and its `server/` root                                                                                                                         | census                                                                   |
-| 10     | no client → `server/` (types excepted)                                                                                                                                      | graph + `.dependency-cruiser.js`                                         |
-| 11     | no runtime import cycles                                                                                                                                                    | graph + `.dependency-cruiser.js`                                         |
-| 12     | `src/pages` files import only a Page component                                                                                                                              | graph + `.dependency-cruiser.js`                                         |
-| 13     | `components/ui` frozen                                                                                                                                                      | census (file count, baseline ratchets adds)                              |
-| 14, 15 | design-system purity; git-mv moves                                                                                                                                          | review / process — not counted                                           |
-| 16     | ESLint ignores at file level only                                                                                                                                           | census (line-level disables)                                             |
-| 17     | baseline only shrinks                                                                                                                                                       | this baseline + `--diff`                                                 |
-| 18     | fn/hook tests colocated flat                                                                                                                                                | census                                                                   |
-| 19     | only tests import `__tests__`                                                                                                                                               | graph + `.dependency-cruiser.js`                                         |
-| 20     | no unused exports                                                                                                                                                           | graph (file-level orphans; symbol-level needs a knip config — follow-up) |
+| Rule   | What                                                                                          | Counted by                                                               |
+| ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 1–4    | component/hook/fn/store/context file shape + naming; a `fns/` module folder groups one engine | census (TS parse)                                                        |
+| 5      | kind folders closed list (+ `constants`, `types`; `docs` anywhere)                            | census (dir walk)                                                        |
+| 6      | single-feature files live in the feature                                                      | graph (used-in inversion)                                                |
+| 7      | no importing another component's internals                                                    | graph + `.dependency-cruiser.js`                                         |
+| 8      | cross-feature imports via a feature surface (`index.ts`, `server/index.ts`)                   | graph + `.dependency-cruiser.js`                                         |
+| 9      | `index.ts` at a feature root and its `server/` root                                           | census                                                                   |
+| 10     | no client → `server/` (types excepted)                                                        | graph + `.dependency-cruiser.js`                                         |
+| 11     | no runtime import cycles                                                                      | graph + `.dependency-cruiser.js`                                         |
+| 12     | `src/pages` files import only a Page component                                                | graph + `.dependency-cruiser.js`                                         |
+| 13     | `components/ui` frozen                                                                        | census (file count, baseline ratchets adds)                              |
+| 14, 15 | design-system purity; git-mv moves                                                            | review / process — not counted                                           |
+| 16     | ESLint ignores at file level only                                                             | census (line-level disables)                                             |
+| 17     | baseline only shrinks                                                                         | this baseline + `--diff`                                                 |
+| 18     | fn/hook tests colocated flat                                                                  | census                                                                   |
+| 19     | only tests import `__tests__`                                                                 | graph + `.dependency-cruiser.js`                                         |
+| 20     | no unused exports                                                                             | graph (file-level orphans; symbol-level needs a knip config — follow-up) |
 
 `.dependency-cruiser.js` carries the import rules as CI-ready warnings; the
 detectors here are the exact reference implementation (the config's regex
@@ -149,12 +149,6 @@ Found by migrating `features/traces` and approved in-flight; the Linear RFC is
 the source of truth and carries the prose (handed over via the LFE-14804
 mailbox).
 
-- **Pages drive features (rule 6).** When placing a shared folder, the Next.js
-  page route that mounts it owns the destination feature — e.g. files used by
-  `pages/.../sessions/[sessionId]` belong in `features/sessions`, even if
-  `annotation-queues` also imports them. Do not filter pages out of the
-  consumer set and treat the remaining feature as the sole owner (that is how
-  ModernSession briefly lived under annotation-queues).
 - **`constants/` and `types/` are kind folders.** A constant is not a function,
   so it does not belong in `fns/`, and a per-feature `config/` or `shared/`
   folder is how predictability dies. `types/` holds one type per file, named

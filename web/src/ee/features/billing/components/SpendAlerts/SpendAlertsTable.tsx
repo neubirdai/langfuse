@@ -1,17 +1,22 @@
 import { useMemo, useState } from "react";
-import { DropdownMenuItem } from "@/src/components/ui/dropdown-menu";
-import { Edit, Trash2 } from "lucide-react";
+import { Button } from "@/src/components/ui/button";
+import { Badge } from "@/src/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/src/components/ui/dropdown-menu";
+import { MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { api } from "@/src/utils/api";
-import { useHasOrganizationAccess } from "@/src/features/rbac";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
 import { formatDistanceToNow } from "date-fns";
 import { SpendAlertDialog } from "./SpendAlertDialog";
 import { DeleteSpendAlertDialog } from "./DeleteSpendAlertDialog";
 import { DataTable } from "@/src/components/table/data-table";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
-import { createDropdownTableColumn } from "@/src/components/design-system/table/columns/createDropdownTableColumn";
 import { createNumberTableColumn } from "@/src/components/design-system/table/columns/createNumberTableColumn";
-import { createStatusTableColumn } from "@/src/components/design-system/table/columns/createStatusTableColumn";
 import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
 import { costFormatter } from "@/src/utils/numbers";
 
@@ -80,14 +85,17 @@ export function SpendAlertsTable({ orgId }: SpendAlertsTableProps) {
       size: 140,
       formatter: costFormatter,
     }),
-    createStatusTableColumn<AlertRow, Date>({
+    {
+      accessorKey: "status",
       id: "status",
-      accessorFn: (row) => row.triggeredAt,
       header: "Status",
       size: 110,
-      isLive: false,
-      getStatus: (triggeredAt) => (triggeredAt ? "triggered" : "active"),
-    }),
+      cell: ({ row }) => (
+        <Badge variant={row.original.triggeredAt ? "destructive" : "secondary"}>
+          {row.original.triggeredAt ? "Triggered" : "Active"}
+        </Badge>
+      ),
+    },
     {
       accessorKey: "lastTriggered",
       id: "lastTriggered",
@@ -100,35 +108,41 @@ export function SpendAlertsTable({ orgId }: SpendAlertsTableProps) {
             })
           : "Never",
     },
-    createDropdownTableColumn<AlertRow, string>({
+    {
+      accessorKey: "actions",
       id: "actions",
-      accessorFn: (row) => row.id,
       header: "Actions",
       size: 120,
-      renderMenu: (id) =>
-        id ? (
-          <>
-            <DropdownMenuItem onClick={() => setEditingAlert(id)}>
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setEditingAlert(row.original.id)}>
               <Edit className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setDeletingAlert(id)}
+              onClick={() => setDeletingAlert(row.original.id)}
               className="text-destructive"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
-          </>
-        ) : null,
-    }),
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
   ];
 
   const editingAlertData = spendAlerts?.find((a) => a.id === editingAlert);
 
   return (
     <>
-      <DataTableToolbar columns={columns} tableName="spend-alerts" />
+      <DataTableToolbar columns={columns} />
       <DataTable tableName="spend-alerts" columns={columns} data={data} />
 
       {editingAlert && editingAlertData && (

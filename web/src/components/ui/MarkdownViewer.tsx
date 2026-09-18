@@ -31,7 +31,6 @@ import {
   isOpenAITextContentPart,
   isOpenAIImageContentPart,
   isMediaReferencePart,
-  isAiSdkFileContentPart,
 } from "@langfuse/shared";
 import { type z } from "zod";
 import { ResizableImage } from "@/src/components/ui/resizable-image";
@@ -315,19 +314,21 @@ const markdownComponents: NonNullable<Options["components"]> = {
   ul({ children }) {
     if (isChecklist(children)) return <ul className="list-none">{children}</ul>;
 
-    // Nested items contain a block list after the label. list-outside
-    // plus left padding keeps the marker in the gutter beside that line.
-    return <ul className="list-outside list-disc pl-6">{children}</ul>;
+    return <ul className="list-inside list-disc">{children}</ul>;
   },
   ol({ children, start }) {
     return (
-      <ol start={start} className="list-outside list-decimal pl-6">
+      <ol start={start} className="list-inside list-decimal">
         {children}
       </ol>
     );
   },
   li({ children }) {
-    return <li className="mt-1">{transformListItemChildren(children)}</li>;
+    return (
+      <li className="mt-1 [&>ol]:pl-4 [&>ul]:pl-4">
+        {transformListItemChildren(children)}
+      </li>
+    );
   },
   pre({ children }) {
     return <pre className="rounded p-2">{children}</pre>;
@@ -561,7 +562,7 @@ export function MarkdownView({
     <Button
       variant="ghost"
       size="xs"
-      onClick={() => toggleCollapsed("inline")}
+      onClick={toggleCollapsed}
       className="w-fit text-xs underline"
     >
       {isCollapsed ? "Expand system prompt" : "Collapse system prompt"}
@@ -578,14 +579,6 @@ export function MarkdownView({
             handleOnValueChange={handleOnValueChange}
             handleOnCopy={handleOnCopy}
             controlButtons={controlButtons}
-            collapseControl={
-              shouldBeCollapsible
-                ? {
-                    isCollapsed,
-                    onToggle: () => toggleCollapsed("header"),
-                  }
-                : undefined
-            }
           />
           <div className="border-t" />
         </>
@@ -676,12 +669,6 @@ export function MarkdownView({
     // A bare reference string is a whole part (LFE-9577).
     if (isMediaReferencePart(content)) {
       return <LangfuseMediaView key={index} mediaReferenceString={content} />;
-    }
-
-    if (isAiSdkFileContentPart(content)) {
-      return (
-        <LangfuseMediaView key={index} mediaReferenceString={content.data} />
-      );
     }
 
     if (isOpenAITextContentPart(content)) {

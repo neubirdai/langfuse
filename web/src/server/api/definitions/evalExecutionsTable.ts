@@ -1,16 +1,4 @@
-import {
-  type ColumnDefinition,
-  type JobExecutionStatus,
-} from "@langfuse/shared";
-
-// Client-safe mirror of the Prisma enum — see evalConfigsTable.ts.
-const JOB_EXECUTION_STATUSES = [
-  "COMPLETED",
-  "ERROR",
-  "PENDING",
-  "CANCELLED",
-  "DELAYED",
-] as const satisfies readonly JobExecutionStatus[];
+import { type ColumnDefinition, JobExecutionStatus } from "@langfuse/shared";
 
 export const evalExecutionsFilterCols: ColumnDefinition[] = [
   {
@@ -18,9 +6,9 @@ export const evalExecutionsFilterCols: ColumnDefinition[] = [
     id: "status",
     type: "stringOptions",
     internal: 'je."status"::text',
-    options: JOB_EXECUTION_STATUSES.filter(
-      (value) => value !== "CANCELLED",
-    ).map((value) => ({ value })),
+    options: Object.values(JobExecutionStatus)
+      .filter((value) => value !== JobExecutionStatus.CANCELLED)
+      .map((value) => ({ value })),
   },
   {
     name: "Trace ID",

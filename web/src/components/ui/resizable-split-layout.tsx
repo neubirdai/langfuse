@@ -7,7 +7,6 @@ import {
   useDefaultLayout,
   usePanelRef,
 } from "@/src/components/ui/resizable";
-import { withMountedPanel } from "@/src/components/ui/resizable-panel-imperative";
 import { cn } from "@/src/utils/tailwind";
 
 interface ResizableSplitLayoutProps {
@@ -98,30 +97,24 @@ export function ResizableSplitLayout({
   useLayoutEffect(() => {
     if (!keepSecondaryMounted) return;
 
-    // The panel ref outlives the group's registry entry. After a desktop↔mobile
-    // swap or unmount, isCollapsed / expand / collapse / resize throw
-    // "Group … not found" — treat that as already-unmounted, not an app error.
-    withMountedPanel(
-      secondaryPanelRef.current,
-      (panel) => {
-        if (open) {
-          // v4 react-resizable-panel `expand()` depends on internal collapsed bookkeeping.
-          // Fallback to default size if the panel remains effectively closed: still
-          // collapsed (a no-op expand in rail mode, where the collapsed rail is
-          // wider than any fixed percentage threshold) or near-zero width (the
-          // "0%"-collapse mode).
-          if (panel.isCollapsed()) {
-            panel.expand();
-          }
-          if (panel.isCollapsed() || panel.getSize().asPercentage < 2) {
-            panel.resize(`${defaultSecondarySize}%`);
-          }
-        } else if (!panel.isCollapsed()) {
-          panel.collapse();
-        }
-      },
-      undefined,
-    );
+    const panel = secondaryPanelRef.current;
+    if (!panel) return;
+
+    if (open) {
+      // v4 react-resizable-panel `expand()` depends on internal collapsed bookkeeping.
+      // Fallback to default size if the panel remains effectively closed: still
+      // collapsed (a no-op expand in rail mode, where the collapsed rail is
+      // wider than any fixed percentage threshold) or near-zero width (the
+      // "0%"-collapse mode).
+      if (panel.isCollapsed()) {
+        panel.expand();
+      }
+      if (panel.isCollapsed() || panel.getSize().asPercentage < 2) {
+        panel.resize(`${defaultSecondarySize}%`);
+      }
+    } else if (!panel.isCollapsed()) {
+      panel.collapse();
+    }
   }, [keepSecondaryMounted, open, secondaryPanelRef, defaultSecondarySize]);
 
   // Rail mode: a drag can snap the panel to its collapsed rail (or pull it back
@@ -130,7 +123,7 @@ export function ResizableSplitLayout({
   const handleSecondaryResizeCallback = useCallback(() => {
     const panel = secondaryPanelRef.current;
     if (!panel || !onOpenChange) return;
-    const panelOpen = withMountedPanel(panel, (p) => !p.isCollapsed(), open);
+    const panelOpen = !panel.isCollapsed();
     if (panelOpen !== open) onOpenChange(panelOpen);
   }, [secondaryPanelRef, onOpenChange, open]);
   const handleSecondaryResize =

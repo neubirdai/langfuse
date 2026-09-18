@@ -21,7 +21,7 @@ import {
   invalidateCachedOrgApiKeys,
   startOfDayUTC,
 } from "@langfuse/shared/src/server";
-import { auditLog } from "@/src/features/audit-logs/server";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { type StripeSubscriptionMetadata } from "@/src/ee/features/billing/utils/stripeSubscriptionMetadata";
 import { mapStripeProductIdToPlan } from "@/src/ee/features/billing/utils/stripeCatalogue";
 import { syncOrgPlanChangeToSfdc } from "@/src/ee/features/sfdc-sync/server";

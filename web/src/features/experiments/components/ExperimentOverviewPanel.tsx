@@ -1,4 +1,4 @@
-import { buildLocalIsoDatePresentation } from "@/src/utils/dates";
+import { LocalIsoDate } from "@/src/components/LocalIsoDate";
 import { useState } from "react";
 import { Button } from "@/src/components/ui/button";
 import Link from "next/link";
@@ -40,9 +40,6 @@ export function ExperimentOverviewPanel({
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const metadata = experiment?.metadata ?? {};
-  const preparedStartTime = buildLocalIsoDatePresentation({
-    date: experiment?.startTime,
-  });
   const provider = metadata.provider;
   const model = metadata.model;
   const pullRequestUrl = metadata["langfuse.pr_url"];
@@ -60,7 +57,6 @@ export function ExperimentOverviewPanel({
   }
   if (safePullRequestUrl) delete additionalMetadata["langfuse.pr_url"];
   if (safeGithubJobUrl) delete additionalMetadata["langfuse.github_job_url"];
-  const hasAdditionalMetadata = Object.keys(additionalMetadata).length > 0;
 
   // Get the first prompt name and version from the prompts array
   const [promptName, promptVersion] =
@@ -145,11 +141,7 @@ export function ExperimentOverviewPanel({
               )}
 
               <ExperimentOverviewField label="Start Time">
-                {preparedStartTime ? (
-                  <span title={preparedStartTime.title}>
-                    {preparedStartTime.display}
-                  </span>
-                ) : null}
+                <LocalIsoDate date={experiment.startTime} />
               </ExperimentOverviewField>
 
               {safePullRequestUrl && (
@@ -180,9 +172,7 @@ export function ExperimentOverviewPanel({
             </div>
           </div>
 
-          {hasAdditionalMetadata && (
-            <ExperimentMetadataSection metadata={additionalMetadata} />
-          )}
+          <ExperimentMetadataSection metadata={additionalMetadata} />
         </>
       ) : (
         <p className="text-muted-foreground text-sm">

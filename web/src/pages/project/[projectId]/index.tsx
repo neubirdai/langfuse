@@ -19,6 +19,7 @@ import {
 } from "@/src/utils/date-range-utils";
 import { useDashboardDateRange } from "@/src/hooks/useDashboardDateRange";
 import { useDebounce } from "@/src/hooks/useDebounce";
+import SetupTracingButton from "@/src/features/setup/components/SetupTracingButton";
 import { useEntitlementLimit } from "@/src/features/entitlements/hooks";
 import Page from "@/src/components/layouts/page";
 import { MultiSelect } from "@/src/features/filters/components/multi-select";
@@ -26,10 +27,7 @@ import {
   convertSelectedEnvironmentsToFilter,
   useEnvironmentFilter,
 } from "@/src/hooks/useEnvironmentFilter";
-import {
-  useReadPath,
-  type ResolvedReadPath,
-} from "@/src/features/events/hooks/useReadPath";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import { type ViewVersion } from "@langfuse/shared/query";
 import { useEnvironmentFilterOptionsCache } from "@/src/hooks/use-environment-filter-options-cache";
 import { NoDataOrLoading } from "@/src/components/NoDataOrLoading";
@@ -37,64 +35,24 @@ import {
   DashboardQuerySchedulerProvider,
   getDashboardQuerySchedulerMaxConcurrent,
   useDashboardQueryScheduler,
-} from "@/src/features/dashboard/hooks/useDashboardQueryScheduler";
+} from "@/src/hooks/useDashboardQueryScheduler";
 import Link from "next/link";
-import { LockIcon, PencilIcon } from "lucide-react";
+import { PencilIcon } from "lucide-react";
 import { showErrorToast } from "@/src/features/notifications/showErrorToast";
 import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { Button } from "@/src/components/ui/button";
 import { DashboardGrid } from "@/src/features/widgets/components/DashboardGrid";
 import { HomeDashboardSelect } from "@/src/features/dashboard/components/HomeDashboardSelect";
-import { useQueryProjectOrOrganization } from "@/src/features/projects/hooks";
-import { setupTracingRoute } from "@/src/features/setup/setupRoutes";
 
-// Controller: no widget query may fire before the session resolves the v3/v4
-// read path — an unresolved session used to read as v3, fire a full wave of
-// legacy-table queries, then re-run the whole dashboard on v4 once the
-// session landed (via the scheduler reset key below).
 export default function Dashboard() {
-  const { readPath } = useReadPath();
-  if (readPath === "unknown") {
-    return (
-      <Page withPadding scrollable headerProps={{ title: "Home" }}>
-        <NoDataOrLoading isLoading />
-      </Page>
-    );
-  }
-  return <HomeDashboard readPath={readPath} />;
-}
-
-function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
   const router = useRouter();
   const utils = api.useUtils();
   const capture = usePostHogClientCapture();
   const projectId = router.query.projectId as string;
-  const { project } = useQueryProjectOrOrganization();
-  const { data: hasTracingConfigured, isLoading: isTracingCheckLoading } =
-    api.traces.hasTracingConfigured.useQuery(
-      { projectId },
-      {
-        enabled: Boolean(projectId),
-        trpc: {
-          context: {
-            skipBatch: true,
-          },
-        },
-      },
-    );
-  const tracingCheckCaptured = useRef(false);
-  useEffect(() => {
-    if (hasTracingConfigured !== undefined && !tracingCheckCaptured.current) {
-      capture("onboarding:tracing_check_active", {
-        active: hasTracingConfigured,
-      });
-      tracingCheckCaptured.current = true;
-    }
-  }, [hasTracingConfigured, capture]);
   const { timeRange, setTimeRange } = useDashboardDateRange();
-  const isV4 = readPath === "v4";
-  const metricsVersion: ViewVersion = isV4 ? "v2" : "v1";
+  const { isBetaEnabled } = useV4Beta();
+  const metricsVersion: ViewVersion = isBetaEnabled ? "v2" : "v1";
 
   const absoluteTimeRange = useMemo(
     () => toAbsoluteTimeRange(timeRange) ?? undefined,
@@ -111,7 +69,7 @@ function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
 
   const { nameOptions, tagsOptions } = useDashboardFilterOptions({
     projectId,
-    isV4,
+    isBetaEnabled,
     timeRange,
   });
 
@@ -221,10 +179,6 @@ function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
     projectId,
     scope: "dashboards:CUD",
   });
-  const hasSetupTracingAccess = useHasProjectAccess({
-    projectId: project?.id,
-    scope: "apiKeys:CUD",
-  });
 
   // Silent on success: the "Set default" button disappearing is the feedback.
   const setHomeDashboard = api.dashboard.setHomeDashboard.useMutation({
@@ -298,14 +252,14 @@ function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
     userFilterState,
   ]);
 
-  const schedulerStore = useDashboardQueryScheduler({
+  const scheduler = useDashboardQueryScheduler({
     maxConcurrent: getDashboardQuerySchedulerMaxConcurrent(timeRange),
     resetKey: schedulerResetKey,
   });
 
   return (
     <DashboardQuerySchedulerProvider
-      store={schedulerStore}
+      scheduler={scheduler}
       shouldBucketQueriesByTimeRange={!("from" in timeRange)}
     >
       <Page
@@ -394,22 +348,7 @@ function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
                   </span>
                 </Link>
               </Button>
-              {!isTracingCheckLoading &&
-                !hasTracingConfigured &&
-                project &&
-                (hasSetupTracingAccess ? (
-                  <Link href={setupTracingRoute(project.id)}>
-                    <Button>Configure Tracing</Button>
-                  </Link>
-                ) : (
-                  <Button disabled>
-                    <LockIcon
-                      className="mr-2 -ml-0.5 h-4 w-4"
-                      aria-hidden="true"
-                    />
-                    Configure Tracing
-                  </Button>
-                ))}
+              <SetupTracingButton />
             </>
           ),
         }}
@@ -442,7 +381,6 @@ function HomeDashboard({ readPath }: { readPath: ResolvedReadPath }) {
             canEdit={false}
             dashboardId={dashboardId}
             projectId={projectId}
-            readPath={readPath}
             dateRange={absoluteTimeRange}
             filterState={gridFilterState}
             onDeleteWidget={() => undefined}

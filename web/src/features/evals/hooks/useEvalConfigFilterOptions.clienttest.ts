@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useEvalConfigFilterOptions } from "./useEvalConfigFilterOptions";
 
 const mocks = vi.hoisted(() => ({
-  datasetsData: [] as Array<{ id: string; name: string }>,
   eventsData: {} as Record<string, unknown>,
   eventsInput: undefined as unknown,
   eventsOptions: undefined as unknown,
@@ -20,7 +19,7 @@ vi.mock("@/src/utils/api", () => ({
   api: {
     datasets: {
       allDatasetMeta: {
-        useQuery: () => ({ data: mocks.datasetsData }),
+        useQuery: () => ({ data: [] }),
       },
     },
     events: {
@@ -58,7 +57,6 @@ vi.mock("@/src/utils/api", () => ({
 
 describe("useEvalConfigFilterOptions", () => {
   beforeEach(() => {
-    mocks.datasetsData = [];
     mocks.eventsData = {};
     mocks.eventsInput = undefined;
     mocks.eventsOptions = undefined;
@@ -136,27 +134,6 @@ describe("useEvalConfigFilterOptions", () => {
       tags: [{ value: "legacy-tag" }],
       name: [{ value: "legacy-observation" }],
       calledToolNames: [{ value: "legacy-tool" }],
-    });
-  });
-
-  it("shows dataset names while keeping IDs in legacy evaluator filters", () => {
-    mocks.datasetsData = [{ id: "dataset-id", name: "Filter QA Dataset" }];
-
-    const { result } = renderHook(() =>
-      useEvalConfigFilterOptions({
-        projectId: "project-id",
-        useEventsTable: false,
-        includeLegacyTraceOptions: false,
-      }),
-    );
-
-    expect(result.current.experimentEvalFilterOptions).toEqual({
-      experimentDatasetId: [
-        {
-          value: "dataset-id",
-          displayValue: "Filter QA Dataset",
-        },
-      ],
     });
   });
 });

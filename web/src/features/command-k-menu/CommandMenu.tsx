@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import {
   CommandDialog,
   CommandEmpty,
@@ -12,16 +11,16 @@ import { useRouter } from "next/router";
 import { useEffect, memo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { env } from "@/src/env.mjs";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { useDebounce } from "@/src/hooks/useDebounce";
 import { useCommandMenu } from "@/src/features/command-k-menu/CommandMenuProvider";
-import { useProjectSettingsPages } from "@/src/features/projects";
+import { useProjectSettingsPages } from "@/src/pages/project/[projectId]/settings";
 import { useOrganizationSettingsPages } from "@/src/pages/organization/[organizationId]/settings";
 import { useAccountSettingsPages } from "@/src/pages/account/settings";
 import { useQueryProjectOrOrganization } from "@/src/features/projects/hooks";
 import { api } from "@/src/utils/api";
 import { type NavigationItem } from "@/src/components/layouts/utilities/routes";
-import { useReadPath } from "@/src/features/events";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 
 type IdNavigationItem = {
   type: "trace_id" | "observation_id";
@@ -339,9 +338,13 @@ function CommandMenuComponent({
   const capture = usePostHogClientCapture();
   const router = useRouter();
   const { project } = useQueryProjectOrOrganization();
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const [search, setSearch] = useState("");
-  const idNavigationItem = getIdNavigationItem(search, project?.id, isV4);
+  const idNavigationItem = getIdNavigationItem(
+    search,
+    project?.id,
+    isBetaEnabled,
+  );
 
   const debouncedSearchChange = useDebounce(
     (value: string) => {

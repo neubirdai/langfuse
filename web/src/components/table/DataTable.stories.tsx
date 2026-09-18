@@ -24,19 +24,12 @@ import { createFolderKeyTableColumn } from "@/src/components/design-system/table
 import { createIdTableColumn } from "@/src/components/design-system/table/columns/createIdTableColumn";
 import { createNumberTableColumn } from "@/src/components/design-system/table/columns/createNumberTableColumn";
 import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
-import { createDropdownTableColumn } from "@/src/components/design-system/table/columns/createDropdownTableColumn";
-import { createTokenUsageTableColumn } from "@/src/components/design-system/table/columns/createTokenUsageTableColumn";
 import { Skeleton } from "@/src/components/ui/skeleton";
 import { TextLink } from "@/src/components/design-system/TextLink/TextLink";
-import { IdTableCell } from "@/src/components/design-system/table/components/IdTableCell/IdTableCell";
-import {
-  buildLocalIsoDatePresentation,
-  formatIntervalSeconds,
-} from "@/src/utils/dates";
-import { IOTableCell } from "@/src/components/design-system/table/components/IOTableCell/IOTableCell";
-import { MediaTag } from "@/src/components/MediaTag/MediaTag";
-import { type MediaDescriptor } from "@/src/components/ui/media/mediaUtils";
+import TableIdOrName from "@/src/components/table/table-id";
+import { LocalIsoDate } from "@/src/components/LocalIsoDate";
+import { MemoizedIOTableCell } from "@/src/components/ui/IOTableCell";
+import { TokenUsageBadge } from "@/src/components/token-usage-badge";
 import {
   LevelCountsDisplay,
   type LevelCount,
@@ -44,20 +37,27 @@ import {
 import { formatAsLabel, LevelSymbols } from "@/src/components/level-colors";
 import TagList from "@/src/features/tag/components/TagList";
 import { BreakdownTooltip } from "@/src/features/traces/components/BreakdownTooltip";
-import { DropdownMenuItem } from "@/src/components/ui/dropdown-menu";
+import {
+  TableBadgeLoadingCell,
+  TableTextLoadingCell,
+} from "@/src/components/table/loading-cells";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/src/components/ui/dropdown-menu";
+import { formatIntervalSeconds } from "@/src/utils/dates";
 import { numberFormatter, usdFormatter } from "@/src/utils/numbers";
 import {
   Copy,
   Folder,
   InfoIcon,
   ListTree,
+  MoreVertical,
   PlusCircle,
   Trash,
 } from "lucide-react";
-
-const renderMediaReference = (descriptor: MediaDescriptor) => (
-  <MediaTag contentType={descriptor.contentType} status="idle" />
-);
 
 // =============================================================================
 // FIDELITY GOAL
@@ -83,10 +83,10 @@ const renderMediaReference = (descriptor: MediaDescriptor) => (
 // the standalone visual part with identical DOM/classes:
 //   - tags:      real TagList in the real `flex gap-x-2 gap-y-1` wrapper,
 //                instead of TagPromptPopover/TagManager (same visible children).
-//   - actions:   createDropdownTableColumn (ghost MoreVertical trigger), with a
-//                plain menu item instead of the tRPC-bound DeleteTraceButton.
-// Everything else (TextLink, Badge, IOTableCell, LocalIsoDate, IdTableCell,
-// createTokenUsageTableColumn, LevelCountsDisplay, folder links, Skeleton, the
+//   - actions:   real DropdownMenu + ghost MoreVertical, with a plain menu item
+//                instead of the tRPC-bound DeleteTraceButton / DeletePrompt.
+// Everything else (TextLink, Badge, IOTableCell, LocalIsoDate, TableIdOrName,
+// TokenUsageBadge, LevelCountsDisplay, folder links, Skeleton, the
 // loading cells) is the actual production component.
 //
 // The IOTableCell relies on MarkdownContext; that is provided globally in
@@ -230,7 +230,7 @@ function loadedTraceData(count = 20): AsyncTableData<TraceRow[]> {
 // -----------------------------------------------------------------------------
 // Mirrors the visible-by-default Traces columns. The action/selection
 // cells use the standalone visual components (see FIDELITY GOAL note). The IO
-// cells use the same IOTableCell variants + the
+// cells use the same MemoizedIOTableCell with the same bg classes + the
 // `singleLine = rowHeight === "s"` rule the real table applies.
 
 function buildTraceColumns(
@@ -284,37 +284,51 @@ function buildTraceColumns(
       header: "Input",
       id: "input",
       size: 400,
-      cellBackground: "gray",
       loadingCell: () => (
-        <IOTableCell
+        <MemoizedIOTableCell
           isLoading
+          data={undefined}
+          className="bg-muted/50"
           singleLine={singleLine}
-          renderMediaReference={renderMediaReference}
         />
       ),
       cell: ({ row }) => (
-        <IOTableCell
+        <MemoizedIOTableCell
           data={row.original.input}
+          className="bg-muted/50"
           singleLine={singleLine}
           enableExpandOnHover={singleLine}
-          renderMediaReference={renderMediaReference}
         />
       ),
     },
-    createIOTableColumn<TraceRow>({
+    {
       accessorKey: "output",
       header: "Output",
+      id: "output",
       size: 400,
-      singleLine,
-      enableExpandOnHover: singleLine,
-      variant: "output",
-    }),
+      loadingCell: () => (
+        <MemoizedIOTableCell
+          isLoading
+          data={undefined}
+          className="bg-accent-light-green"
+          singleLine={singleLine}
+        />
+      ),
+      cell: ({ row }) => (
+        <MemoizedIOTableCell
+          data={row.original.output}
+          className="bg-accent-light-green"
+          singleLine={singleLine}
+          enableExpandOnHover={singleLine}
+        />
+      ),
+    },
     {
       accessorKey: "levelCounts",
       id: "levelCounts",
       header: "Observation Levels",
       size: 150,
-      loadingCell: <Skeleton className="h-4 w-1/2" />,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         const value = row.original.levelCounts;
         const counts: LevelCount[] = Object.entries(value).map(
@@ -333,7 +347,7 @@ function buildTraceColumns(
       header: "Latency",
       size: 100,
       enableSorting: true,
-      loadingCell: <Skeleton className="h-4 w-1/2" />,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         const value = row.original.latency;
         return value !== undefined ? (
@@ -341,32 +355,39 @@ function buildTraceColumns(
         ) : undefined;
       },
     },
-    createTokenUsageTableColumn<TraceRow, TraceRow["usage"]>({
-      id: "tokens",
-      accessorFn: (row) => row.usage,
+    {
+      accessorKey: "tokens",
       header: "Tokens",
+      id: "tokens",
       size: 180,
-      enableSorting: true,
-      getCell: (value, { row }) => {
-        if (!value?.inputUsage && !value?.outputUsage && !value?.totalUsage) {
-          return undefined;
+      loadingCell: <TableTextLoadingCell />,
+      cell: ({ row }) => {
+        const value = row.original.usage;
+        if (!value.inputUsage && !value.outputUsage && !value.totalUsage) {
+          return null;
         }
-
-        return {
-          type: "usage",
-          inputUsage: Number(value.inputUsage),
-          outputUsage: Number(value.outputUsage),
-          totalUsage: Number(value.totalUsage),
-          details: row.original.tokenDetails,
-        };
+        return (
+          <BreakdownTooltip details={row.original.tokenDetails}>
+            <div className="flex items-center gap-1">
+              <TokenUsageBadge
+                inputUsage={Number(value.inputUsage)}
+                outputUsage={Number(value.outputUsage)}
+                totalUsage={Number(value.totalUsage)}
+                inline
+              />
+              <InfoIcon className="h-3 w-3" />
+            </div>
+          </BreakdownTooltip>
+        );
       },
-    }),
+      enableSorting: true,
+    },
     {
       accessorKey: "totalCost",
       id: "totalCost",
       header: "Total Cost",
       size: 130,
-      loadingCell: <Skeleton className="h-4 w-1/2" />,
+      loadingCell: <TableTextLoadingCell />,
       cell: ({ row }) => {
         const cost = row.original.totalCost;
         return cost != null ? (
@@ -389,7 +410,7 @@ function buildTraceColumns(
       header: "Environment",
       id: "environment",
       size: 150,
-      loadingCell: <Skeleton className="h-5 w-16 shrink-0 rounded-sm" />,
+      loadingCell: <TableBadgeLoadingCell />,
       cell: ({ row }) => {
         const value = row.original.environment;
         return value ? (
@@ -412,21 +433,39 @@ function buildTraceColumns(
       },
       shouldWrap: rowHeight !== "s",
     }),
-    createIOTableColumn<TraceRow>({
+    {
       accessorKey: "metadata",
       header: "Metadata",
+      id: "metadata",
       size: 400,
-      singleLine,
-      enableExpandOnHover: singleLine,
-    }),
-    createIdTableColumn<TraceRow>({
+      loadingCell: () => (
+        <MemoizedIOTableCell
+          isLoading
+          data={undefined}
+          singleLine={singleLine}
+        />
+      ),
+      cell: ({ row }) => (
+        <MemoizedIOTableCell
+          data={row.original.metadata}
+          singleLine={singleLine}
+          enableExpandOnHover={singleLine}
+        />
+      ),
+    },
+    {
       accessorKey: "userId",
       header: "User",
+      id: "userId",
       size: 150,
       // Default-hidden in the real table; seeds the Columns drawer unchecked.
       defaultHidden: true,
+      cell: ({ row }) => {
+        const value = row.original.userId;
+        return value ? <TableIdOrName value={value} /> : undefined;
+      },
       enableSorting: true,
-    }),
+    },
     createIdTableColumn<TraceRow>({
       accessorKey: "id",
       header: "Trace ID",
@@ -434,19 +473,31 @@ function buildTraceColumns(
       defaultHidden: true,
       enableSorting: true,
     }),
-    createDropdownTableColumn<TraceRow, string>({
-      id: "action",
-      accessorFn: (row) => row.id,
+    {
+      accessorKey: "action",
       header: "Action",
+      id: "action",
       size: 70,
       isFixedPosition: true,
-      renderMenu: () => (
-        <DropdownMenuItem className="text-destructive">
-          <Trash className="mr-2 h-4 w-4" />
-          Delete trace
-        </DropdownMenuItem>
+      // Real action menu: ghost MoreVertical trigger + dropdown. The destructive
+      // item is a plain menu item (the real one renders DeleteTraceButton, which
+      // needs tRPC) but the trigger DOM/spacing is identical.
+      cell: () => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem className="text-destructive">
+              <Trash className="mr-2 h-4 w-4" />
+              Delete trace
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       ),
-    }),
+    },
   ];
 }
 
@@ -1024,7 +1075,7 @@ function buildGroupedColumns(
         accessorFn: (row) => row.totalCost.toNumber(),
         header: "Cost (USD)",
         size: 110,
-        formatter: (value) => usdFormatter(value),
+        formatter: usdFormatter,
       }),
       createNumberTableColumn<TraceRow>({
         id: "totalTokensGrouped",
@@ -1208,13 +1259,8 @@ const promptColumns: LangfuseColumnDef<PromptRow>[] = [
     size: 200,
     cell: ({ row }) => {
       if (row.original.type === "folder") return null;
-      const preparedDate = buildLocalIsoDatePresentation({
-        date: row.original.createdAt,
-      });
-
-      return preparedDate ? (
-        <span title={preparedDate.title}>{preparedDate.display}</span>
-      ) : null;
+      const createdAt = row.original.createdAt;
+      return createdAt ? <LocalIsoDate date={createdAt} /> : null;
     },
   },
   {
@@ -1328,8 +1374,8 @@ export const WithFolderRows = meta.story({
 // "Provided Model Name" create-affordance, ListTree source links, folder rows).
 // They must NOT shift the text baseline relative to plain rows. This story puts
 // every variant in one column so any vertical-alignment regression is obvious:
-//   - plain IdTableCell (no icon)
-//   - IdTableCell + trailing PlusCircle — mirrors features/models
+//   - plain TableIdOrName (no icon)
+//   - TableIdOrName + trailing PlusCircle — mirrors features/models
 //     ProvidedModelNameCell: the name is wrapped in `inline-flex items-center`
 //     with the icon as a `shrink-0` adornment, so it lands on the same baseline
 //     as the no-icon rows.
@@ -1379,14 +1425,14 @@ const iconCellColumns: LangfuseColumnDef<IconCellRow>[] = [
       const { name, kind } = row.original;
       switch (kind) {
         case "createModel":
-          // Faithful to ProvidedModelNameCell: same IdTableCell + trailing
+          // Faithful to ProvidedModelNameCell: same TableIdOrName + trailing
           // icon, in a native <button> trigger (keyboard-activatable).
           return (
             <button
               type="button"
-              className="inline-flex max-w-full min-w-0 cursor-pointer items-center gap-1 text-left"
+              className="inline-flex max-w-full cursor-pointer items-center gap-1 text-left"
             >
-              <IdTableCell value={name} />
+              <TableIdOrName value={name} className="min-w-0" />
               <PlusCircle className="h-3.5 w-3.5 shrink-0" />
             </button>
           );
@@ -1407,8 +1453,8 @@ const iconCellColumns: LangfuseColumnDef<IconCellRow>[] = [
         case "plain":
         default:
           return (
-            <span className="inline-flex max-w-full min-w-0 items-center">
-              <IdTableCell value={name} />
+            <span className="inline-flex max-w-full items-center">
+              <TableIdOrName value={name} className="min-w-0" />
             </span>
           );
       }
@@ -1470,30 +1516,5 @@ export const PaginationControlsStayGrouped = meta.story({
     expect(
       canvas.queryByRole("button", { name: "Go to last page" }),
     ).toBeNull();
-  },
-});
-
-export const TestManualIOCellBackground = meta.story({
-  name: "(Test) Manual IO Cell Background",
-  render: () => (
-    <TracesTable
-      tableName="story-manual-io-background"
-      rowHeight="s"
-      cellPadding="compact"
-    />
-  ),
-  play: async ({ canvasElement }) => {
-    const headers = Array.from(canvasElement.querySelectorAll("thead th"));
-    const inputIndex = headers.findIndex(
-      (header) => header.textContent?.trim() === "Input",
-    );
-    const outputIndex = headers.findIndex(
-      (header) => header.textContent?.trim() === "Output",
-    );
-    const row = canvasElement.querySelector<HTMLTableRowElement>("tbody tr");
-    if (!row) throw new globalThis.Error("Row not found");
-
-    await expect(row.cells[inputIndex]).toHaveClass("bg-muted/50");
-    await expect(row.cells[outputIndex]).toHaveClass("bg-accent-light-green");
   },
 });

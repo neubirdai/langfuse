@@ -3,8 +3,8 @@ import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
 import { FilteredRunPills } from "@/src/components/table/filtered-run-pills";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
 import { createLinkTableColumn } from "@/src/components/design-system/table/columns/createLinkTableColumn";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
-import { useColumnVisibility } from "@/src/features/column-visibility";
+import { IOTableCell } from "@/src/components/ui/IOTableCell";
+import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
 import { getDatasetRunAggregateColumnProps } from "@/src/features/datasets/components/DatasetRunAggregateColumnHelpers";
 import { useDatasetRunAggregateColumns } from "@/src/features/datasets/hooks/useDatasetRunAggregateColumns";
 import { useState, useEffect, useMemo } from "react";
@@ -24,7 +24,7 @@ import {
   DatasetCompareFieldsProvider,
   useDatasetCompareFields,
 } from "@/src/features/datasets/contexts/DatasetCompareFieldsContext";
-import { useColumnFilterState } from "@/src/features/filters";
+import { useColumnFilterState } from "@/src/features/filters/hooks/useColumnFilterState";
 import { type Prisma } from "@langfuse/shared";
 import { type EnrichedDatasetRunItem } from "@langfuse/shared/src/server";
 import { usePeekNavigation } from "@/src/components/table/peek/hooks/usePeekNavigation";
@@ -157,26 +157,57 @@ function DatasetCompareRunsTableInternal(props: {
         };
       },
     }),
-    createIOTableColumn<DatasetCompareRunRowData>({
+    {
       accessorKey: "input",
       header: "Input",
+      id: "input",
       size: 200,
       enableHiding: true,
-    }),
-    createIOTableColumn<DatasetCompareRunRowData>({
+      cell: ({ row }) => {
+        const input = row.getValue(
+          "input",
+        ) as DatasetCompareRunRowData["input"];
+        return input !== null ? (
+          <div className="h-full w-full">
+            <IOTableCell data={input} />
+          </div>
+        ) : null;
+      },
+    },
+    {
       accessorKey: "expectedOutput",
       header: "Expected Output",
+      id: "expectedOutput",
       size: 200,
       enableHiding: true,
-      variant: "output",
-    }),
-    createIOTableColumn<DatasetCompareRunRowData>({
+      cell: ({ row }) => {
+        const expectedOutput = row.getValue(
+          "expectedOutput",
+        ) as DatasetCompareRunRowData["expectedOutput"];
+        return expectedOutput !== null ? (
+          <div className="h-full w-full">
+            <IOTableCell
+              data={expectedOutput}
+              className="bg-accent-light-green"
+            />
+          </div>
+        ) : null;
+      },
+    },
+    {
       accessorKey: "metadata",
       header: "Metadata",
+      id: "metadata",
       size: 200,
       enableHiding: true,
       defaultHidden: true,
-    }),
+      cell: ({ row }) => {
+        const metadata = row.getValue(
+          "metadata",
+        ) as DatasetCompareRunRowData["metadata"];
+        return metadata !== null ? <IOTableCell data={metadata} /> : null;
+      },
+    },
     {
       ...getDatasetRunAggregateColumnProps(cellsLoading),
       columns: runAggregateColumns,
@@ -198,7 +229,6 @@ function DatasetCompareRunsTableInternal(props: {
   return (
     <>
       <DataTableToolbar
-        tableName="dataset-compare-runs"
         columns={columns}
         columnVisibility={columnVisibility}
         setColumnVisibility={setColumnVisibility}

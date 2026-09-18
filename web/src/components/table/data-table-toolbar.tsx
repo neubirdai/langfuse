@@ -5,7 +5,6 @@ import {
   DataTableColumnVisibilityFilter,
   type ColumnGroupTogglePayload,
 } from "@/src/components/table/data-table-column-visibility-filter";
-import { DataTableSettingsPopover } from "@/src/components/table/data-table-settings-popover";
 import { FilterToggleButton } from "@/src/components/table/FilterToggleButton";
 import { PopoverFilterBuilder } from "@/src/features/filters/components/filter-builder";
 import {
@@ -145,18 +144,15 @@ interface DataTableToolbarProps<TData, TValue> {
   };
   orderByState?: OrderByState;
   viewConfig?: TableViewConfig;
-  /** Analytics table identity, for `filters:applied`/`filters:cleared`,
-   * `table:search_submit`, `table:row_height_switch_select` and
-   * `table:column_visibility_changed`.
-   * Tables with a `viewConfig` supply it via `viewConfig.tableName`; every table
-   * WITHOUT one must pass this — the `ToolbarTableIdentity` union below makes
-   * that a type error rather than an "unknown" bucket in PostHog. */
+  /** Analytics table identity (LFE-10781) for the popover filter builder's
+   * `filters:applied`/`filters:cleared` events. Tables with a `viewConfig`
+   * already supply it via `viewConfig.tableName`; tables WITHOUT one (users,
+   * dataset runs/items) must pass this so the event isn't labeled "unknown". */
   tableName?: string;
-  /** Whether this table reads the v4 (fast-mode) data path, at the moment of the
-   * action. The headline segmentation dimension: filtering, columns and search
-   * behave very differently across v3 and v4. Forward it from the owning table —
-   * the fallback is the v4 events view, not a safe default. */
+  /** Surface dimension for table:* events. Forward from the owning table —
+   * do not rely on the default. v4 events / experiments = true; v3 traces = false. */
   isV4?: boolean;
+  onColumnGroupToggle?: (payload: ColumnGroupTogglePayload) => void;
   filterWithAI?: boolean;
   className?: string;
   rowClassName?: string;
@@ -165,31 +161,7 @@ interface DataTableToolbarProps<TData, TValue> {
    *  the filter toggle — e.g. the v4 events category-preset chips, so they
    *  share the row with the right-aligned Columns/Export controls. */
   leadingControls?: React.ReactNode;
-  /** Opt in to one "Table settings" popover for Columns + row height instead of
-   *  a button per control. Off everywhere else while the merged
-   *  shape is validated on the experiments list; needs both controls, so a
-   *  table that passes only one keeps its single button. */
-  mergeSettingsIntoPopover?: boolean;
-  /** This surface's own presentation settings, rendered inside the merged
-   *  "Table settings" popover under Columns and row height. Ignored unless
-   *  `mergeSettingsIntoPopover` is on and both shared controls are present. */
-  settingsSections?: React.ReactNode;
-  /** Notified when a whole column group is shown or hidden at once, for surfaces
-   *  that report their own event for it (the experiments score families). */
-  onColumnGroupToggle?: (payload: ColumnGroupTogglePayload) => void;
 }
-
-/**
- * Every toolbar must be able to name its own table, because four analytics
- * events fire from inside it. One of the two sources has to be present:
- * a `viewConfig` (whose `tableName` is the saved-view table) or an explicit
- * `tableName`. Enforced in the type so no surface can silently report
- * `tableName: "unknown"` — the failure mode the first version of these events
- * shipped and had to fix.
- */
-type ToolbarTableIdentity =
-  | { tableName: string }
-  | { viewConfig: TableViewConfig };
 
 // Helper function to get the description for DocPopup
 function getSearchDescription(
@@ -255,24 +227,16 @@ export function DataTableToolbar<TData, TValue>({
   viewConfig,
   tableName,
   isV4,
+  onColumnGroupToggle,
   filterWithAI = false,
   viewModeToggle,
   leadingControls,
-  mergeSettingsIntoPopover = false,
-  settingsSections,
-  onColumnGroupToggle,
-}: DataTableToolbarProps<TData, TValue> & ToolbarTableIdentity) {
+}: DataTableToolbarProps<TData, TValue>) {
   const [searchString, setSearchString] = useState(
     searchConfig?.currentQuery ?? "",
   );
 
   const capture = usePostHogClientCapture();
-  // One definition of the two analytics dimensions for everything the toolbar
-  // emits: an explicit `tableName` wins over the view's, and `isV4`
-  // falls back to the one surface that is v4 without saying so — the v4 events
-  // table, which filters through the grammar bar rather than this toolbar.
-  // The "unknown" fallback is unreachable — `ToolbarTableIdentity` requires one
-  // of the two sources.
   const analyticsTableName = tableName ?? viewConfig?.tableName ?? "unknown";
   const analyticsIsV4 =
     isV4 ??
@@ -312,12 +276,6 @@ export function DataTableToolbar<TData, TValue>({
 
   // Only show the toggle button when we're using the new sidebar
   const hasNewSidebar = !filterColumnDefinition && filterState !== undefined;
-  const showMergedSettings =
-    mergeSettingsIntoPopover &&
-    !!columnVisibility &&
-    !!setColumnVisibility &&
-    !!rowHeight &&
-    !!setRowHeight;
   return (
     <div className={cn("grid h-fit w-full gap-0 px-2", className)}>
       <div
@@ -499,51 +457,37 @@ export function DataTableToolbar<TData, TValue>({
             columnsWithCustomSelect={columnsWithCustomSelect}
             filterWithAI={filterWithAI}
             // Analytics (LFE-10781): the table's own identity, so popover
-            // filters:applied/cleared events aren't mislabeled "unknown". Shares
-            // the toolbar's single definition of both dimensions.
+            // filters:applied/cleared events aren't mislabeled "unknown". Prefer
+            // an explicit `tableName` (tables without a viewConfig — users,
+            // dataset runs/items), else the view's table. The v4 events table
+            // filters via the grammar bar (it omits filterColumnDefinition here,
+            // so this popover is a v3/legacy surface); derive isV4 from the
+            // ObservationsEvents view for consistency + future-proofing.
             tableName={analyticsTableName}
             isV4={analyticsIsV4}
           />
         )}
 
         <div className="flex flex-row flex-wrap gap-2 pr-0.5 @3xl:ml-auto">
-          {showMergedSettings ? (
-            <DataTableSettingsPopover
+          {!!columnVisibility && !!setColumnVisibility && (
+            <DataTableColumnVisibilityFilter
               columns={columns}
               columnVisibility={columnVisibility}
               setColumnVisibility={setColumnVisibility}
               columnOrder={columnOrder}
               setColumnOrder={setColumnOrder}
+              tableName={analyticsTableName}
+              isV4={analyticsIsV4}
+              onColumnGroupToggle={onColumnGroupToggle}
+            />
+          )}
+          {!!rowHeight && !!setRowHeight && (
+            <DataTableRowHeightSwitch
               rowHeight={rowHeight}
               setRowHeight={setRowHeight}
               tableName={analyticsTableName}
               isV4={analyticsIsV4}
-              onColumnGroupToggle={onColumnGroupToggle}
-              extraSections={settingsSections}
             />
-          ) : (
-            <>
-              {!!columnVisibility && !!setColumnVisibility && (
-                <DataTableColumnVisibilityFilter
-                  columns={columns}
-                  columnVisibility={columnVisibility}
-                  setColumnVisibility={setColumnVisibility}
-                  columnOrder={columnOrder}
-                  setColumnOrder={setColumnOrder}
-                  tableName={analyticsTableName}
-                  isV4={analyticsIsV4}
-                  onColumnGroupToggle={onColumnGroupToggle}
-                />
-              )}
-              {!!rowHeight && !!setRowHeight && (
-                <DataTableRowHeightSwitch
-                  rowHeight={rowHeight}
-                  setRowHeight={setRowHeight}
-                  tableName={analyticsTableName}
-                  isV4={analyticsIsV4}
-                />
-              )}
-            </>
           )}
           {actionButtons}
         </div>

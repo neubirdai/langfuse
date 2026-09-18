@@ -140,13 +140,12 @@ describe("aggregateScores", () => {
     });
   });
 
-  it("should render Boolean scores as true/false", () => {
+  it("should correctly aggregate multiple Categorical scores with the same key", () => {
     const scores = [
       {
         name: "test",
         source: "API",
         dataType: "BOOLEAN",
-        value: 1,
         stringValue: "True",
         comment: "test comment",
       },
@@ -154,7 +153,6 @@ describe("aggregateScores", () => {
         name: "test",
         source: "API",
         dataType: "BOOLEAN",
-        value: 0,
         stringValue: "False",
         comment: "another comment",
       },
@@ -162,28 +160,14 @@ describe("aggregateScores", () => {
     expect(aggregateScores(scores)).toEqual({
       "test-API-BOOLEAN": {
         type: "CATEGORICAL",
-        values: ["false", "true"],
+        values: ["True", "False"],
         valueCounts: [
-          { value: "false", count: 1 },
-          { value: "true", count: 1 },
+          { value: "True", count: 1 },
+          { value: "False", count: 1 },
         ],
         comment: undefined,
       },
     });
-  });
-
-  it("should order a cell's values the same way regardless of input order", () => {
-    const asScores = (stringValues: string[]) =>
-      stringValues.map((stringValue) => ({
-        name: "verdict",
-        source: "API",
-        dataType: "CATEGORICAL",
-        stringValue,
-      })) as ScoreToAggregate[];
-
-    expect(aggregateScores(asScores(["pass", "fail", "pass"]))).toEqual(
-      aggregateScores(asScores(["fail", "pass", "pass"])),
-    );
   });
 
   it("should correctly aggregate scores with mixed types and the same name", () => {
@@ -229,10 +213,10 @@ describe("aggregateScores", () => {
       },
       "test-ANNOTATION-CATEGORICAL": {
         type: "CATEGORICAL",
-        values: ["bad", "good", "good"],
+        values: ["good", "bad", "good"],
         valueCounts: [
-          { value: "bad", count: 1 },
           { value: "good", count: 2 },
+          { value: "bad", count: 1 },
         ],
         comment: undefined,
       },

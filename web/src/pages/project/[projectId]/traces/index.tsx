@@ -7,7 +7,7 @@ import {
   getTracingTabs,
   TRACING_TABS,
 } from "@/src/features/navigation/utils/tracing-tabs";
-import { useReadPath } from "@/src/features/events/hooks/useReadPath";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import ObservationsEventsTable from "@/src/features/events/components/EventsTable";
 import { useQueryProject } from "@/src/features/projects/hooks";
 import { V4MigrationDelayBadge } from "@/src/features/v4-migration/V4MigrationDelayBadge";
@@ -15,7 +15,7 @@ import { V4MigrationDelayBadge } from "@/src/features/v4-migration/V4MigrationDe
 export default function Traces() {
   const router = useRouter();
   const projectId = router.query.projectId as string;
-  const { isV4, isResolved } = useReadPath();
+  const { isBetaEnabled, isInitializing } = useV4Beta();
   const { project } = useQueryProject();
 
   // Check if the user has tracing configured
@@ -81,7 +81,7 @@ export default function Traces() {
           href: "https://langfuse.com/docs/observability/data-model",
         },
         tabsProps:
-          isV4 || !isResolved
+          isBetaEnabled || isInitializing
             ? undefined
             : {
                 tabs: getTracingTabs(projectId),
@@ -89,14 +89,14 @@ export default function Traces() {
               },
       }}
     >
-      {!isResolved ? (
+      {isInitializing ? (
         <>
           {/* Wait for the beta flag before mounting either table. Otherwise the
               legacy table can briefly mount, restore a v3 saved view, and
               promote its viewId into the URL before the correct mode
               resolves. */}
         </>
-      ) : isV4 ? (
+      ) : isBetaEnabled ? (
         <ObservationsEventsTable
           projectId={projectId}
           showControlsInPageHeader

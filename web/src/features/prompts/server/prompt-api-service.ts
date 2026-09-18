@@ -12,7 +12,7 @@ import {
 } from "@langfuse/shared";
 import type { z } from "zod";
 
-import { auditLog } from "@/src/features/audit-logs/server";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { createPrompt } from "./actions/createPrompt";
 import { getPromptByName } from "./actions/getPromptByName";
 import { getPromptsMeta } from "./actions/getPromptsMeta";

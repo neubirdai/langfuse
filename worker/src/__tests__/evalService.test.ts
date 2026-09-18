@@ -3450,9 +3450,7 @@ Respond with JSON: {"score": <number>, "reasoning": "<explanation>"}`;
         params: any,
       ) => {
         capturedTraceSinkParams = params.trace;
-        return {
-          output: { score: 0.8, scoreExplanation: "Good response" },
-        };
+        return { output: { score: 0.8, reasoning: "Good response" } };
       }) as any);
 
       await evaluate({
@@ -3490,7 +3488,7 @@ Respond with JSON: {"score": <number>, "reasoning": "<explanation>"}`;
       vi.mocked(generateLLMText).mockResolvedValueOnce({
         output: {
           score: 0,
-          scoreExplanation: "The response is safe and not toxic.",
+          reasoning: "The response is safe and not toxic.",
         },
       } as any);
 

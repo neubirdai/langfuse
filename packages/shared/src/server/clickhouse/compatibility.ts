@@ -25,8 +25,7 @@ export type ClickHouseVersionBand = {
 
 type ClickHouseCompatibilityEnvKey =
   | "CLICKHOUSE_DISABLE_LAZY_MATERIALIZATION"
-  | "CLICKHOUSE_DISABLE_TOP_K_THROUGH_JOIN"
-  | "CLICKHOUSE_ENABLE_SKIP_INDEXES_ON_DATA_READ";
+  | "CLICKHOUSE_DISABLE_TOP_K_THROUGH_JOIN";
 
 type ClickHouseCompatibilityEnvValue = "auto" | "true" | "false";
 
@@ -87,15 +86,6 @@ const CLICKHOUSE_COMPATIBILITY_RULES: ClickHouseCompatibilityRule[] = [
       { minInclusive: "26.7.2.0", maxExclusive: "26.7.2.11" },
     ],
     overrideEnvKey: "CLICKHOUSE_DISABLE_TOP_K_THROUGH_JOIN",
-  },
-  {
-    id: "enable-skip-indexes-on-data-read",
-    setting: "use_skip_indexes_on_data_read",
-    value: 1,
-    reason:
-      "Evaluate skip indexes at granule read time to cut query startup latency. Held back below 26.2, where reading a column patched by a lightweight update fails with `Not found column _part_offset in block`.",
-    versionBands: [{ minInclusive: "26.2.0.0" }],
-    overrideEnvKey: "CLICKHOUSE_ENABLE_SKIP_INDEXES_ON_DATA_READ",
   },
 ];
 

@@ -3,7 +3,6 @@ import {
   createTRPCRouter,
   protectedProjectProcedure,
   protectedGetEventsTraceProcedure,
-  protectedGetSessionProcedure,
 } from "@/src/server/api/trpc";
 import {
   type OrderByState,
@@ -115,9 +114,6 @@ const BatchIOInput = zodSchema.object({
   includeToolCalls: zodSchema.boolean().optional(), // Defaults to false; tool-call arrays can be large
   // Opts into trace-level auth (public traces) in protectedGetEventsTraceProcedure
   traceId: zodSchema.string().optional(),
-});
-const SessionBatchIOInput = BatchIOInput.omit({ traceId: true }).extend({
-  sessionId: zodSchema.string().min(1),
 });
 
 type BatchIOInput = z.infer<typeof BatchIOInput>;
@@ -290,31 +286,6 @@ export const eventsRouter = createTRPCRouter({
           const batchIO = await getEventBatchIO({
             projectId: input.projectId,
             observations,
-            minStartTime: input.minStartTime,
-            maxStartTime: input.maxStartTime,
-            truncated: input.truncated,
-            ioCharLimit: input.ioCharLimit,
-            includeToolCallFields: input.includeToolCalls,
-          });
-
-          return batchIO.map(toDomainWithStringifiedMetadata);
-        },
-      );
-    }),
-  sessionBatchIO: protectedGetSessionProcedure
-    .input(SessionBatchIOInput)
-    .query(async ({ input }) => {
-      return instrumentAsync(
-        { name: "get-event-session-batch-io-trpc" },
-        async (span) => {
-          span.setAttribute("project_id", input.projectId);
-          span.setAttribute("session_id", input.sessionId);
-          span.setAttribute("observation_count", input.observations.length);
-
-          const batchIO = await getEventBatchIO({
-            projectId: input.projectId,
-            sessionId: input.sessionId,
-            observations: input.observations,
             minStartTime: input.minStartTime,
             maxStartTime: input.maxStartTime,
             truncated: input.truncated,

@@ -97,10 +97,12 @@ export const DashboardTable = ({
               </table>
             </div>
           </div>
-          {collapse && rows.length > (collapsedCount ?? collapse.collapsed) ? (
+          {collapse ? (
             <ExpandListButton
               isExpanded={isExpanded}
               setExpanded={setExpanded}
+              totalLength={rows.length}
+              maxLength={collapsedCount ?? collapse.collapsed}
               expandText={
                 rows.length > collapse.expanded
                   ? `Show top ${collapse.expanded}`

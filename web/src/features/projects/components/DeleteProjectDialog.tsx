@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ExternalLink } from "lucide-react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -24,62 +23,20 @@ type DeleteProjectForm = {
   name: string;
 };
 
-export type DeleteProjectDialogProps =
-  | {
-      blocked: true;
-      onOpenGatewaySettings: () => void;
-    }
-  | {
-      blocked?: false;
-      confirmMessage: string;
-      isPending: boolean;
-      onSubmit: () => void;
-    };
-
-export function DeleteProjectDialog(props: DeleteProjectDialogProps) {
-  return props.blocked ? (
-    <BlockedDeleteProjectDialog
-      onOpenGatewaySettings={props.onOpenGatewaySettings}
-    />
-  ) : (
-    <DeleteProjectConfirmationDialog {...props} />
-  );
-}
-
-function BlockedDeleteProjectDialog({
-  onOpenGatewaySettings,
-}: {
-  onOpenGatewaySettings: () => void;
-}) {
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle className="text-lg font-bold">
-          Project cannot be deleted
-        </DialogTitle>
-        <DialogDescription>
-          This project is used as the AI Gateway ingestion project. Select
-          another ingestion project before deleting it.
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter>
-        <Button className="w-full" onClick={onOpenGatewaySettings}>
-          Open AI Gateway settings
-          <ExternalLink className="relative -top-px ml-1.5 size-3.5 shrink-0" />
-        </Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-function DeleteProjectConfirmationDialog(props: {
+export type DeleteProjectDialogProps = {
   confirmMessage: string;
   isPending: boolean;
   onSubmit: () => void;
-}) {
+};
+
+export function DeleteProjectDialog({
+  confirmMessage,
+  isPending,
+  onSubmit,
+}: DeleteProjectDialogProps) {
   const formSchema = z.object({
-    name: z.string().includes(props.confirmMessage, {
-      message: `Please confirm with "${props.confirmMessage}"`,
+    name: z.string().includes(confirmMessage, {
+      message: `Please confirm with "${confirmMessage}"`,
     }),
   });
 
@@ -95,11 +52,11 @@ function DeleteProjectConfirmationDialog(props: {
       <DialogHeader>
         <DialogTitle className="text-lg font-bold">Delete Project</DialogTitle>
         <DialogDescription>
-          {`To confirm, type "${props.confirmMessage}" in the input box`}
+          {`To confirm, type "${confirmMessage}" in the input box`}
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(props.onSubmit)}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
           <DialogBody>
             <FormField
               control={form.control}
@@ -107,7 +64,7 @@ function DeleteProjectConfirmationDialog(props: {
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <Input placeholder={props.confirmMessage} {...field} />
+                    <Input placeholder={confirmMessage} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -118,7 +75,7 @@ function DeleteProjectConfirmationDialog(props: {
             <Button
               type="submit"
               variant="destructive"
-              loading={props.isPending}
+              loading={isPending}
               className="w-full"
             >
               Delete project

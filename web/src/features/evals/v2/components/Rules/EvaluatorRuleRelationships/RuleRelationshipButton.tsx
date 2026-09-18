@@ -20,16 +20,7 @@ export function RuleRelationshipButton({
   onClick: () => void;
 }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      title={
-        shouldCallAttention
-          ? "Attach this evaluator to a rule"
-          : "View attached rules"
-      }
-      onClick={onClick}
-    >
+    <Button type="button" variant="outline" onClick={onClick}>
       <ListTree className="mr-2 h-4 w-4" />
       Rules
       {shouldCallAttention ? (

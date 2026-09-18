@@ -4,11 +4,7 @@ export { isOpenAICompatibleEndpoint };
 
 const RESPONSES_CALL = {
   apiMode: "responses" as const,
-  // Stateless: reasoning round-trips as encrypted content instead of by item
-  // id, so nothing is stored at OpenAI and Zero Data Retention orgs work.
-  providerOptions: {
-    openai: { reasoningSummary: "auto" as const, store: false },
-  },
+  providerOptions: { openai: { reasoningSummary: "auto" as const } },
 };
 
 const CHAT_COMPLETIONS_CALL = {

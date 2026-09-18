@@ -1,55 +1,40 @@
 /* eslint-disable @repo/no-style-props */
 import { useCallback, useMemo, useState, type UIEvent } from "react";
-import {
-  Database,
-  FlaskConical,
-  ListTree,
-  Sparkles,
-  Wrench,
-} from "lucide-react";
+import { EyeOff, FlaskConical, ListTree, Sparkles, Wrench } from "lucide-react";
 import {
   type FilterState,
   type TimeFilter,
   type TracingSearchType,
 } from "@langfuse/shared";
 import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
-import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
 import { DataTable } from "@/src/components/table/data-table";
 import { DataTableColumnVisibilityFilter } from "@/src/components/table/data-table-column-visibility-filter";
 import { useRowHeightLocalStorage } from "@/src/components/table/data-table-row-height-switch";
 import type { LangfuseColumnDef } from "@/src/components/table/types";
 import { Button } from "@/src/components/ui/button";
-import { Skeleton } from "@/src/components/ui/skeleton";
-import useLocalStorage from "@/src/components/useLocalStorage";
+import { MemoizedIOTableCell } from "@/src/components/ui/IOTableCell";
+import { useEventsFilterOptions } from "@/src/features/events/hooks/useEventsFilterOptions";
+import { EventsSearchBarRow } from "@/src/features/search-bar/components/EventsSearchBarRow";
+import { useEventsSearchBar } from "@/src/features/search-bar/hooks/useEventsSearchBar";
+import { buildAiContext } from "@/src/features/search-bar/lib/ai-context";
 import {
-  buildAiContext,
-  EVENTS_FIELD_REGISTRY,
-  EventsSearchBarRow,
   type FieldRegistry,
-  observedScoreNamesFromOptions,
-  useEventsSearchBar,
-} from "@/src/features/search-bar";
+  EVENTS_FIELD_REGISTRY,
+} from "@/src/features/search-bar/lib/fields";
 import {
-  useColumnOrder,
-  useColumnVisibility,
-} from "@/src/features/column-visibility";
+  observedScoreNamesFromOptions,
+  toObservedOptions,
+} from "@/src/features/search-bar/lib/observed-options";
+import useColumnOrder from "@/src/features/column-visibility/hooks/useColumnOrder";
+import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
 import { api, sendAsPostOption, type RouterOutputs } from "@/src/utils/api";
 import type { AbsoluteTimeRange } from "@/src/utils/date-range-utils";
 import { SectionHeader } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SectionHeader/SectionHeader";
-import { EVALUATOR_FILTER_EXPERIENCE_STORAGE_KEY } from "@/src/features/evals/v2/constants/evaluatorFilterExperience";
-import { FilterModeToggle } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/components/FilterModeToggle";
-import { ObservationFilterBuilder } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/components/ObservationFilterBuilder/ObservationFilterBuilder";
-import { buildSampleQueryFilters } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/fns/buildSampleQueryFilters";
+import { EXPERIMENTS_AND_EVALS_EXCLUSION_FILTERS } from "@/src/features/evals/v2/constants/experimentAndEvalFilters";
 import { dedupeObservationPages } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/fns/dedupeObservations";
 import { toggleExampleFilters } from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/fns/toggleExampleFilters";
-import {
-  type MapSampleObservedOptions,
-  useSampleObservationFilterOptions,
-} from "@/src/features/evals/v2/components/Evaluators/Testing/components/SampleObservationSelectorBase/hooks/useSampleObservationFilterOptions";
 import { useReusableRuleFilterPresets } from "@/src/features/evals/v2/hooks/useReusableRuleFilterPresets";
-import type { EvaluatorFilterExperience } from "@/src/features/evals/v2/types/evaluatorFilterExperience";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 
 export type SampleObservation =
   RouterOutputs["events"]["all"]["observations"][number];
@@ -105,6 +90,11 @@ const EXAMPLES = [
       },
     ] satisfies FilterState,
   },
+  {
+    label: "Exclude experiments & evals",
+    icon: EyeOff,
+    filters: EXPERIMENTS_AND_EVALS_EXCLUSION_FILTERS,
+  },
 ] as const;
 
 function timeFilters(range: AbsoluteTimeRange | null): FilterState {
@@ -151,7 +141,9 @@ export type SampleObservationSelectorBaseProps = {
   matchingDescription: string;
   matchingTooltip: string;
   formatCount: (count: number) => string;
-  mapObservedOptions: MapSampleObservedOptions;
+  mapObservedOptions: (
+    observed: ReturnType<typeof toObservedOptions>,
+  ) => ReturnType<typeof toObservedOptions>;
 };
 
 export function SampleObservationSelectorBase(
@@ -179,41 +171,27 @@ export function SampleObservationSelectorBase(
     mapObservedOptions,
   } = props;
   const activeRegistry = registry ?? EVENTS_FIELD_REGISTRY;
-  const [filterMode, setFilterMode] =
-    useLocalStorage<EvaluatorFilterExperience>(
-      EVALUATOR_FILTER_EXPERIENCE_STORAGE_KEY,
-      "query",
-    );
-  const datasets = api.datasets.allDatasetMeta.useQuery(
-    { projectId },
-    {
-      refetchOnMount: false,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      staleTime: Infinity,
-    },
+  const reusableRuleFilters = useReusableRuleFilterPresets(
+    projectId,
+    activeRegistry,
   );
-  const datasetOptions = useMemo(() => datasets.data ?? [], [datasets.data]);
-  const examples = useMemo(() => {
-    const firstDataset = datasetOptions[0];
-    return firstDataset
-      ? [
-          ...EXAMPLES,
-          {
-            label: "Datasets",
-            icon: Database,
-            filters: [
-              {
-                column: "experimentDatasetId",
-                type: "stringOptions",
-                operator: "any of",
-                value: [firstDataset.id],
-              },
-            ] satisfies FilterState,
-          },
-        ]
-      : EXAMPLES;
-  }, [datasetOptions]);
+  const capture = usePostHogClientCapture();
+  const onQueryPresetPick = useCallback(
+    (presetId: string) => {
+      const preset = reusableRuleFilters.presets.find(
+        (candidate) => candidate.id === presetId,
+      );
+      if (!preset) return;
+      capture("evaluation_rules:filter_reused", {
+        tableName,
+        evaluatorCount: preset.evaluatorCount,
+        filterCount: preset.filterCount,
+        replacedFilterCount: filterState.length,
+        isV4: true,
+      });
+    },
+    [capture, filterState.length, reusableRuleFilters.presets, tableName],
+  );
   const setFilters = (
     next: FilterState | ((current: FilterState) => FilterState),
   ) => {
@@ -234,49 +212,30 @@ export function SampleObservationSelectorBase(
     [timeRange],
   );
   const effectiveFilters = useMemo(
-    () => buildSampleQueryFilters(previewFilters, timeFilters(timeRange)),
+    () => [...previewFilters, ...timeFilters(timeRange)],
     [previewFilters, timeRange],
   );
-  const refiningFilter = useMemo(
-    () => buildSampleQueryFilters(previewFilters),
-    [previewFilters],
-  );
-  const options = useSampleObservationFilterOptions({
+  const options = useEventsFilterOptions({
     projectId,
     startTimeFilter,
-    refiningFilter,
-    filterMode,
-    activeRegistry,
-    datasetOptions,
-    mapObservedOptions,
+    refiningFilter: previewFilters,
+    includeApproxCount: true,
+    lazy: true,
   });
-  const { searchRegistry, observed, builderColumns, queryOnlyColumnIds } =
-    options;
-  const reusableRuleFilters = useReusableRuleFilterPresets(
-    projectId,
-    searchRegistry,
-  );
-  const capture = usePostHogClientCapture();
-  const onQueryPresetPick = useCallback(
-    (presetId: string) => {
-      const preset = reusableRuleFilters.presets.find(
-        (candidate) => candidate.id === presetId,
-      );
-      if (!preset) return;
-      capture("evaluation_rules:filter_reused", {
-        tableName,
-        evaluatorCount: preset.evaluatorCount,
-        filterCount: preset.filterCount,
-        replacedFilterCount: filterState.length,
-        isV4: true,
-      });
-    },
-    [capture, filterState.length, reusableRuleFilters.presets, tableName],
+  const observed = useMemo(
+    () =>
+      mapObservedOptions(
+        toObservedOptions(
+          options.filterOptions,
+          options.isFilterOptionsPending,
+        ),
+      ),
+    [mapObservedOptions, options.filterOptions, options.isFilterOptionsPending],
   );
   const search = useEventsSearchBar({
     projectId,
     tableName,
-    enabled: !datasets.isPending,
+    enabled: true,
     filterState,
     searchQuery,
     searchType,
@@ -290,7 +249,7 @@ export function SampleObservationSelectorBase(
     setSearchType: (next) => {
       setSearchType(next);
     },
-    registry: searchRegistry,
+    ...(registry ? { registry } : {}),
   });
   // listCursor always reads in the events table's stable start_time DESC tuple
   // order, so it takes no orderBy.
@@ -370,10 +329,10 @@ export function SampleObservationSelectorBase(
         resultCount: observationQuery.isSuccess
           ? matchingObservations.length
           : null,
-        registry: searchRegistry,
+        registry: activeRegistry,
       }),
     [
-      searchRegistry,
+      activeRegistry,
       matchingObservations,
       observationQuery.isSuccess,
       observed,
@@ -381,10 +340,10 @@ export function SampleObservationSelectorBase(
   );
   const aiScoreNames = useMemo(
     () =>
-      searchRegistry.scores
+      activeRegistry.scores
         ? observedScoreNamesFromOptions(observed)
         : undefined,
-    [searchRegistry, observed],
+    [activeRegistry, observed],
   );
   const selectionToReconcile = observationQuery.isSuccess
     ? resolveSelection(matchingObservations, selectedObservationId)
@@ -399,75 +358,94 @@ export function SampleObservationSelectorBase(
         size: 170,
         enableHiding: true,
       }),
-      createTextTableColumn<SampleObservation>({
+      {
         accessorKey: "type",
+        id: "type",
         header: "Type",
         size: 110,
         enableHiding: true,
-      }),
-      createTextTableColumn<SampleObservation>({
+      },
+      {
         accessorKey: "name",
+        id: "name",
         header: "Name",
         size: 200,
         enableHiding: true,
-        mapValue: (value) => value ?? "—",
-      }),
-      createTextTableColumn<SampleObservation>({
+        cell: ({ row }) => row.original.name ?? "—",
+      },
+      {
         accessorKey: "traceName",
+        id: "traceName",
         header: "Trace name",
         size: 180,
         enableHiding: true,
         defaultHidden: true,
-        mapValue: (value) => value ?? "—",
-      }),
-      createIOTableColumn<SampleObservation>({
+        cell: ({ row }) => row.original.traceName ?? "—",
+      },
+      {
         accessorKey: "input",
+        id: "input",
         header: "Input",
         size: 300,
         enableHiding: true,
-        getCell: (_value, { row }) => {
+        cell: ({ row }) => {
           const io = observationIOById.get(row.original.id);
-          if (!io && observationIOPending) return { type: "loading" };
-          return io?.input;
+          return (
+            <MemoizedIOTableCell
+              isLoading={!io && observationIOPending}
+              data={io?.input}
+              className="bg-muted/50"
+              singleLine={rowHeight === "s"}
+              enableExpandOnHover={rowHeight === "s"}
+            />
+          );
         },
-        singleLine: rowHeight === "s",
-        enableExpandOnHover: rowHeight === "s",
-        variant: "input",
-      }),
-      createIOTableColumn<SampleObservation>({
+      },
+      {
         accessorKey: "output",
+        id: "output",
         header: "Output",
         size: 300,
         enableHiding: true,
-        getCell: (_value, { row }) => {
+        cell: ({ row }) => {
           const io = observationIOById.get(row.original.id);
-          if (!io && observationIOPending) return { type: "loading" };
-          return io?.output;
+          return (
+            <MemoizedIOTableCell
+              isLoading={!io && observationIOPending}
+              data={io?.output}
+              className="bg-accent-light-green"
+              singleLine={rowHeight === "s"}
+              enableExpandOnHover={rowHeight === "s"}
+            />
+          );
         },
-        singleLine: rowHeight === "s",
-        enableExpandOnHover: rowHeight === "s",
-        variant: "output",
-      }),
-      createIOTableColumn<SampleObservation>({
+      },
+      {
         accessorKey: "metadata",
+        id: "metadata",
         header: "Metadata",
         size: 300,
         enableHiding: true,
-        getCell: (_value, { row }) => {
+        cell: ({ row }) => {
           const io = observationIOById.get(row.original.id);
-          if (!io && observationIOPending) return { type: "loading" };
-          return io?.metadata;
+          return (
+            <MemoizedIOTableCell
+              isLoading={!io && observationIOPending}
+              data={io?.metadata}
+              singleLine={rowHeight === "s"}
+              enableExpandOnHover={rowHeight === "s"}
+            />
+          );
         },
-        singleLine: rowHeight === "s",
-        enableExpandOnHover: rowHeight === "s",
-      }),
-      createTextTableColumn<SampleObservation>({
+      },
+      {
         accessorKey: "environment",
+        id: "environment",
         header: "Environment",
         size: 130,
         enableHiding: true,
         defaultHidden: true,
-      }),
+      },
     ],
     [observationIOById, observationIOPending, leadingColumns, rowHeight],
   );
@@ -500,66 +478,43 @@ export function SampleObservationSelectorBase(
           meta={null}
           description={filterDescription}
           tooltip={filterTooltip}
-          trailing={
-            <FilterModeToggle
-              mode={filterMode}
-              onChange={(mode) => {
-                if (mode === "builder" && searchQuery !== null) {
-                  search.applyFilters(filterState);
-                }
-                setFilterMode(mode);
-              }}
-            />
-          }
+          trailing={null}
         />
-        {datasets.isPending ? (
-          <Skeleton className="h-10 w-full" />
-        ) : filterMode === "query" ? (
-          <EventsSearchBarRow
-            projectId={projectId}
-            tableName={tableName}
-            store={search.store}
-            commit={search.commit}
-            observed={observed}
-            erroredColumns={options.erroredColumns}
-            registry={searchRegistry}
-            onApplyFilters={search.applyFilters}
-            onRequestColumns={options.requestColumns}
-            presetSections={reusableRuleFilters.sections}
-            onQueryPresetPick={onQueryPresetPick}
-            aiDataContext={aiDataContext}
-            aiScoreNames={aiScoreNames}
-            className="p-0"
-          />
-        ) : (
-          <ObservationFilterBuilder
-            columns={builderColumns}
-            filterState={filterState}
-            onChange={setFilters}
-            queryOnlyColumnIds={queryOnlyColumnIds}
-          />
-        )}
-        {filterMode === "query" ? (
-          <div className="flex flex-wrap gap-2">
-            {examples.map((example) => (
-              <Button
-                key={example.label}
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex h-8 items-center gap-2 text-sm"
-                onClick={() => {
-                  setFilters((current) =>
-                    toggleExampleFilters(current, [...example.filters]),
-                  );
-                }}
-              >
-                <example.icon className="h-4 w-4" />
-                <span>{example.label}</span>
-              </Button>
-            ))}
-          </div>
-        ) : null}
+        <EventsSearchBarRow
+          projectId={projectId}
+          tableName={tableName}
+          store={search.store}
+          commit={search.commit}
+          observed={observed}
+          erroredColumns={options.erroredColumns}
+          {...(registry ? { registry } : {})}
+          onApplyFilters={search.applyFilters}
+          onRequestColumns={options.requestColumns}
+          presetSections={reusableRuleFilters.sections}
+          onQueryPresetPick={onQueryPresetPick}
+          aiDataContext={aiDataContext}
+          aiScoreNames={aiScoreNames}
+          className="p-0"
+        />
+        <div className="flex flex-wrap gap-2">
+          {EXAMPLES.map((example) => (
+            <Button
+              key={example.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="flex h-8 items-center gap-2 text-sm"
+              onClick={() => {
+                setFilters((current) =>
+                  toggleExampleFilters(current, [...example.filters]),
+                );
+              }}
+            >
+              <example.icon className="h-4 w-4" />
+              <span>{example.label}</span>
+            </Button>
+          ))}
+        </div>
       </section>
 
       <section className="flex min-h-0 flex-col gap-2">
@@ -576,8 +531,6 @@ export function SampleObservationSelectorBase(
           tooltip={matchingTooltip}
           trailing={
             <DataTableColumnVisibilityFilter
-              tableName="evaluator-sample-observations"
-              isV4
               columns={columns}
               columnVisibility={columnVisibility}
               setColumnVisibility={setColumnVisibility}

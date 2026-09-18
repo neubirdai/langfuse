@@ -10,7 +10,7 @@ import {
   parsePastedWidget,
   type WidgetExportSource,
   type WidgetImport,
-} from "@/src/features/widgets";
+} from "@/src/features/widgets/utils/import-export-utils";
 
 /**
  * Dashboard JSON file-format version. `$langfuseDashboard: true` marks a JSON
@@ -100,7 +100,7 @@ export function parsePastedPreset(text: string): PastedPresetParseResult {
  */
 export function isPasteablePlacementPayload(
   text: string,
-  params: { isV4: boolean },
+  params: { isBetaEnabled: boolean },
 ): boolean {
   if (parsePastedWidget(text, params).status === "widget") return true;
   return parsePastedPreset(text).status === "preset";
@@ -237,7 +237,7 @@ export type DashboardImportParseResult =
  */
 export function parseDashboardImport(
   text: string,
-  params: { isV4: boolean },
+  params: { isBetaEnabled: boolean },
 ): DashboardImportParseResult {
   let parsedJson: unknown;
   try {
@@ -301,7 +301,7 @@ export function parseDashboardImport(
     try {
       const result = parseImportedWidgetJson({
         parsedJson: placement.widget,
-        isV4: params.isV4,
+        isBetaEnabled: params.isBetaEnabled,
       });
       removedFilters = removedFilters || result.removedFilters;
       placements.push({ type: "widget", widget: result.widget, ...position });

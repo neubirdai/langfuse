@@ -1,4 +1,3 @@
-import { useHasProjectAccess } from "@/src/features/rbac";
 import { ScoreDataTypeEnum } from "@langfuse/shared";
 import { type ReactNode, useState } from "react";
 
@@ -7,7 +6,8 @@ import {
   DialogContent,
   DialogTrigger,
 } from "@/src/components/ui/dialog";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { UpsertScoreConfigDialogContent } from "@/src/features/score-configs/components/UpsertScoreConfigDialogContent";
 import {
   type CreateConfig,

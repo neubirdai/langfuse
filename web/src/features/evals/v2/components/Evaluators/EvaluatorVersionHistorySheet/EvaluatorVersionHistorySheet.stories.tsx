@@ -12,7 +12,7 @@ const version = {
   type: EvalTemplateTypeEnum.LLM_AS_JUDGE,
   sourceCode: null,
   sourceCodeLanguage: null,
-  promptMessages: [{ role: "user" as const, content: "Judge this response." }],
+  prompt: "Judge this response.",
   provider: "openai",
   model: "gpt-4.1-mini",
   modelParams: null,

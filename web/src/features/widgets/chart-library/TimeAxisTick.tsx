@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-null-render */
 import type { ReactNode } from "react";
 import type { XAxisTickContentProps } from "recharts";
 

@@ -11,7 +11,6 @@ type Row = {
   isNumberLoading?: boolean;
   outputTokens: number;
   latency: number | null;
-  suffix?: string;
 };
 
 function NumberTableColumnStory({
@@ -30,8 +29,8 @@ function NumberTableColumnStory({
         row.latency ? row.outputTokens / row.latency : null,
       header: "Number",
       emptyValue,
-      formatter: (value, { row }) =>
-        `${numberFormatter(value, fractionDigits, fractionDigits)}${row.original.suffix ?? ""}`,
+      formatter: (value) =>
+        numberFormatter(value, fractionDigits, fractionDigits),
       getValue: (value, { row }) => {
         if (row.original.isNumberLoading) return { type: "loading" };
         if (value === null || value === undefined) return undefined;
@@ -77,18 +76,6 @@ export const Integer = meta.story({
       isLoading: false,
       isError: false,
       data: [{ outputTokens: 2468, latency: 2 }],
-    },
-  },
-});
-
-export const ContextualFormatting = meta.story({
-  name: "Contextual Formatting",
-  args: {
-    fractionDigits: 0,
-    data: {
-      isLoading: false,
-      isError: false,
-      data: [{ outputTokens: 2468, latency: 2, suffix: " tokens/s" }],
     },
   },
 });

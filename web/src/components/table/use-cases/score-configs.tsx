@@ -3,7 +3,6 @@ import { useRowHeightLocalStorage } from "@/src/components/table/data-table-row-
 import useColumnVisibility from "@/src/features/column-visibility/hooks/useColumnVisibility";
 import { api } from "@/src/utils/api";
 import { type LangfuseColumnDef } from "@/src/components/table/types";
-import { createIOTableColumn } from "@/src/components/design-system/table/columns/createIOTableColumn";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
 import { DataTable } from "@/src/components/table/data-table";
 import {
@@ -11,6 +10,7 @@ import {
   type Prisma,
   type ScoreConfigCategoryDomain,
 } from "@langfuse/shared";
+import { IOTableCell } from "../../ui/IOTableCell";
 import { usePaginationState } from "@/src/hooks/usePaginationState";
 import {
   isBooleanDataType,
@@ -21,9 +21,6 @@ import { Archive, Edit, MoreVertical, PlusIcon } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import useColumnOrder from "@/src/features/column-visibility/hooks/useColumnOrder";
 import { SettingsTableCard } from "@/src/components/layouts/settings-table-card";
-import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
-import { createIdTableColumn } from "@/src/components/design-system/table/columns/createIdTableColumn";
-import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
 import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   DropdownMenu,
@@ -38,8 +35,8 @@ type ScoreConfigTableRow = {
   id: string;
   name: string;
   dataType: ScoreConfigDataType;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
   range: {
     maxValue?: number | null;
     minValue?: number | null;
@@ -102,52 +99,71 @@ export function ScoreConfigsTable({ projectId }: { projectId: string }) {
   const totalCount = configs.data?.totalCount ?? null;
 
   const columns: LangfuseColumnDef<ScoreConfigTableRow>[] = [
-    createTextTableColumn<ScoreConfigTableRow>({
+    {
       accessorKey: "name",
+      id: "name",
       header: "Name",
       enableHiding: true,
-    }),
-    createTextTableColumn<ScoreConfigTableRow>({
+    },
+    {
       accessorKey: "dataType",
+      id: "dataType",
       header: "Data Type",
       size: 80,
       enableHiding: true,
-    }),
-    createIOTableColumn<ScoreConfigTableRow, Prisma.JsonValue>({
+    },
+    {
+      accessorKey: "range",
       id: "range",
-      accessorFn: getConfigRange,
       header: "Range",
       enableHiding: true,
       size: 300,
-      getCell: (value) => value || undefined,
-      singleLine: rowHeight === "s",
-    }),
-    createIOTableColumn<ScoreConfigTableRow>({
+      cell: ({ row }) => {
+        const range = getConfigRange(row.original);
+
+        return !!range ? (
+          <IOTableCell data={range} singleLine={rowHeight === "s"} />
+        ) : null;
+      },
+    },
+    {
       accessorKey: "description",
+      id: "description",
       header: "Description",
       enableHiding: true,
-      getCell: (value) => value || undefined,
-      singleLine: rowHeight === "s",
-    }),
-    createIdTableColumn<ScoreConfigTableRow>({
+      cell: ({ row }) => {
+        const value = row.original.description;
+
+        return !!value ? (
+          <IOTableCell data={value} singleLine={rowHeight === "s"} />
+        ) : null;
+      },
+    },
+    {
       accessorKey: "id",
+      id: "id",
       header: "Config ID",
       enableHiding: true,
       defaultHidden: true,
-    }),
-    createDateTableColumn<ScoreConfigTableRow>({
+    },
+    {
       accessorKey: "createdAt",
+      id: "createdAt",
       header: "Created At",
       enableHiding: true,
       defaultHidden: true,
-    }),
-    createTextTableColumn<ScoreConfigTableRow, boolean>({
+    },
+    {
       accessorKey: "isArchived",
+      id: "isArchived",
       header: "Status",
       size: 80,
       enableHiding: true,
-      mapValue: (isArchived) => (isArchived ? "Archived" : "Active"),
-    }),
+      cell: ({ row }) => {
+        const { isArchived } = row.original;
+        return isArchived ? "Archived" : "Active";
+      },
+    },
     {
       accessorKey: "action",
       header: "Action",
@@ -235,7 +251,6 @@ export function ScoreConfigsTable({ projectId }: { projectId: string }) {
   return (
     <>
       <DataTableToolbar
-        tableName="score-configs"
         columns={columns}
         columnVisibility={columnVisibility}
         setColumnVisibility={setColumnVisibility}
@@ -290,8 +305,8 @@ export function ScoreConfigsTable({ projectId }: { projectId: string }) {
                       name: config.name,
                       dataType: config.dataType,
                       description: config.description,
-                      createdAt: config.createdAt,
-                      updatedAt: config.updatedAt,
+                      createdAt: config.createdAt.toLocaleString(),
+                      updatedAt: config.updatedAt.toLocaleString(),
                       range: {
                         maxValue: config.maxValue,
                         minValue: config.minValue,

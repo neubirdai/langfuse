@@ -1,6 +1,5 @@
-/* eslint-disable @repo/no-null-render */
 import { Button } from "@/src/components/ui/button";
-import { useHasOrganizationAccess } from "@/src/features/rbac";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
 import { api } from "@/src/utils/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";

@@ -108,9 +108,7 @@ function SandboxToolCallDetails({
   return (
     <div className="flex flex-col gap-2">
       {children}
-      {tool.error !== undefined && (
-        <InAppAgentToolResultPayload status={tool.status} value={tool.error} />
-      )}
+      <InAppAgentToolResultPayload tool={{ ...tool, result: undefined }} />
     </div>
   );
 }
@@ -274,24 +272,14 @@ function SandboxFooter({ children }: { children: React.ReactNode }) {
 }
 
 function DefaultToolCallDetails({ tool }: { tool: InAppAgentToolCallContent }) {
-  const result = tool.error ?? tool.result;
-
   return (
     <div className="flex flex-col gap-2">
       <InAppAgentToolPayload
-        toolName={tool.name}
-        kind="arguments"
         label="Arguments"
         value={tool.args}
         variant="default"
       />
-      {result !== undefined && (
-        <InAppAgentToolResultPayload
-          toolName={tool.name}
-          status={tool.status}
-          value={result}
-        />
-      )}
+      <InAppAgentToolResultPayload tool={tool} />
     </div>
   );
 }

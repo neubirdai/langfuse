@@ -17,7 +17,6 @@ import {
 export const evaluatorApiHandler = withStablePublicApiMiddlewares({
   GET: createStablePublicApiRoute({
     name: "Get evaluator",
-    action: "evaluator:read",
     querySchema: EvaluatorIdQuery,
     responseSchema: Evaluator,
     fn: ({ query, auth }) =>
@@ -29,7 +28,6 @@ export const evaluatorApiHandler = withStablePublicApiMiddlewares({
   }),
   PATCH: createStablePublicApiRoute({
     name: "Update evaluator",
-    action: "evaluator:CUD",
     querySchema: EvaluatorIdQuery,
     bodySchema: UpdateEvaluatorBody,
     responseSchema: Evaluator,
@@ -43,7 +41,6 @@ export const evaluatorApiHandler = withStablePublicApiMiddlewares({
   }),
   DELETE: createStablePublicApiRoute({
     name: "Delete evaluator",
-    action: "evaluator:CUD",
     querySchema: EvaluatorIdQuery,
     responseSchema: DeleteEvaluatorResponse,
     fn: ({ query, auth }) =>

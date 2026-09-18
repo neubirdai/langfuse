@@ -37,7 +37,6 @@ export const PostCommentsV1Body = z
   })
   .extend({
     authorUserId: z.string().nullish(),
-    objectStartTime: z.coerce.date().nullish(),
   })
   .strict();
 export const PostCommentsV1Response = z.object({ id: z.string() }).strict();

@@ -44,23 +44,6 @@ vi.mock("@langfuse/shared/src/server", async (importOriginal) => {
 
 import { executeCodeBasedEvaluation } from "./executeCodeBasedEvaluation";
 
-const evaluationContext = {
-  evaluatorId: "evaluator-1",
-  evaluationRuleId: "config-1",
-  evaluatorExecutionIsTest: false,
-};
-
-const executeCodeBasedEvaluationWithContext = (
-  params: Omit<
-    Parameters<typeof executeCodeBasedEvaluation>[0],
-    "evaluationContext"
-  >,
-) =>
-  executeCodeBasedEvaluation({
-    ...params,
-    evaluationContext,
-  });
-
 describe("executeCodeBasedEvaluation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,7 +63,7 @@ describe("executeCodeBasedEvaluation", () => {
       ],
     });
 
-    const result = await executeCodeBasedEvaluationWithContext({
+    const result = await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       evaluatorId: "evaluator-1",
@@ -194,7 +177,7 @@ describe("executeCodeBasedEvaluation", () => {
       ],
     });
 
-    const result = await executeCodeBasedEvaluationWithContext({
+    const result = await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -245,7 +228,7 @@ describe("executeCodeBasedEvaluation", () => {
       scores: [{ name: "score", value: 1, dataType: "BOOLEAN" }],
     });
 
-    await executeCodeBasedEvaluationWithContext({
+    await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -293,7 +276,7 @@ describe("executeCodeBasedEvaluation", () => {
       scores: [{ name: "score", value: 1, dataType: "BOOLEAN" }],
     });
 
-    await executeCodeBasedEvaluationWithContext({
+    await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -337,7 +320,7 @@ describe("executeCodeBasedEvaluation", () => {
       scores: [{ name: "score", value: 1, dataType: "BOOLEAN" }],
     });
 
-    await executeCodeBasedEvaluationWithContext({
+    await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -389,7 +372,7 @@ describe("executeCodeBasedEvaluation", () => {
       scores: [{ name: "score", value: 1, dataType: "BOOLEAN" }],
     });
 
-    await executeCodeBasedEvaluationWithContext({
+    await executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -444,7 +427,7 @@ describe("executeCodeBasedEvaluation", () => {
     mocks.writeInternalTrace.mockRejectedValue(new Error("trace write failed"));
 
     await expect(
-      executeCodeBasedEvaluationWithContext({
+      executeCodeBasedEvaluation({
         projectId: "project-1",
         organizationId: "org-1",
         job: {
@@ -481,7 +464,7 @@ describe("executeCodeBasedEvaluation", () => {
     });
     mocks.dispatcher.dispatch.mockRejectedValue(error);
 
-    const promise = executeCodeBasedEvaluationWithContext({
+    const promise = executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -555,7 +538,7 @@ describe("executeCodeBasedEvaluation", () => {
       parseDispatchResult({ score: 1 }),
     );
 
-    const promise = executeCodeBasedEvaluationWithContext({
+    const promise = executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {
@@ -613,59 +596,8 @@ describe("executeCodeBasedEvaluation", () => {
       "Function.TimedOut: Task timed out after 2 seconds";
     const error = new CodeEvalDispatcherError(rawTimeoutMessage, {
       code: CodeEvalDispatcherErrorCodes.TIMEOUT,
-      retryable: false,
+      retryable: true,
     });
-    mocks.dispatcher.dispatch.mockRejectedValue(error);
-
-    const promise = executeCodeBasedEvaluationWithContext({
-      projectId: "project-1",
-      organizationId: "org-1",
-      job: {
-        id: "job-1",
-        jobConfigurationId: "config-1",
-        jobInputTraceId: "trace-1",
-        jobInputObservationId: "obs-1",
-        jobInputDatasetItemId: null,
-      } as any,
-      config: { id: "config-1", scoreName: "default-score" } as any,
-      template: {
-        id: "template-1",
-        name: "Code evaluator",
-        type: EvalTemplateType.CODE,
-        version: 1,
-        sourceCode: "function evaluate() {}",
-        sourceCodeLanguage: EvalTemplateSourceCodeLanguage.TYPESCRIPT,
-        prompt: null,
-        outputDefinition: null,
-      } as any,
-      extractedVariables: [{ var: "input", value: "prompt" }],
-      executionMetadata: { job_execution_id: "job-1" },
-    });
-
-    await expect(promise).rejects.toThrow(CodeEvalExecutionError);
-    await expect(promise).rejects.toMatchObject({
-      code: CodeEvalDispatcherErrorCodes.TIMEOUT,
-      retryable: false,
-    });
-    await expect(promise).rejects.toThrow("Evaluator timed out.");
-
-    expect(mocks.writeInternalTrace).toHaveBeenCalledTimes(1);
-    const trace = JSON.stringify(mocks.writeInternalTrace.mock.calls[0]?.[0]);
-    expect(trace).toContain("Evaluator timed out.");
-    expect(trace).toContain(
-      "Long executions can be caused by network calls, which are forbidden and may never complete.",
-    );
-    expect(trace).not.toContain(rawTimeoutMessage);
-  });
-
-  it("shows a user-visible error when evaluator code exceeds available memory", async () => {
-    const error = new CodeEvalDispatcherError(
-      "Runtime.OutOfMemory: Runtime exited with error: signal: killed",
-      {
-        code: CodeEvalDispatcherErrorCodes.OUT_OF_MEMORY,
-        retryable: false,
-      },
-    );
     mocks.dispatcher.dispatch.mockRejectedValue(error);
 
     const promise = executeCodeBasedEvaluation({
@@ -693,19 +625,20 @@ describe("executeCodeBasedEvaluation", () => {
       executionMetadata: { job_execution_id: "job-1" },
     });
 
+    await expect(promise).rejects.toThrow(CodeEvalExecutionError);
     await expect(promise).rejects.toMatchObject({
-      code: "OUT_OF_MEMORY",
-      retryable: false,
+      code: CodeEvalDispatcherErrorCodes.TIMEOUT,
+      retryable: true,
     });
-    await expect(promise).rejects.toThrow(
-      "Evaluator exceeded the available memory limit. Reduce memory usage in your evaluator code to stay within the limit, then try again.",
-    );
+    await expect(promise).rejects.toThrow("Evaluator timed out.");
 
+    expect(mocks.writeInternalTrace).toHaveBeenCalledTimes(1);
     const trace = JSON.stringify(mocks.writeInternalTrace.mock.calls[0]?.[0]);
+    expect(trace).toContain("Evaluator timed out.");
     expect(trace).toContain(
-      "Evaluator exceeded the available memory limit. Reduce memory usage in your evaluator code to stay within the limit, then try again.",
+      "Long executions can be caused by network calls, which are forbidden and may never complete.",
     );
-    expect(trace).not.toContain("Runtime.OutOfMemory");
+    expect(trace).not.toContain(rawTimeoutMessage);
   });
 
   it("masks internal dispatcher errors in the internal trace", async () => {
@@ -718,7 +651,7 @@ describe("executeCodeBasedEvaluation", () => {
     );
     mocks.dispatcher.dispatch.mockRejectedValue(error);
 
-    const promise = executeCodeBasedEvaluationWithContext({
+    const promise = executeCodeBasedEvaluation({
       projectId: "project-1",
       organizationId: "org-1",
       job: {

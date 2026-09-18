@@ -1,12 +1,14 @@
 import type { NextApiResponse } from "next";
 import { createHash } from "node:crypto";
 import { v4 } from "uuid";
-import { auditLog } from "@/src/features/audit-logs/server";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { addDatasetRunItemsToEvalQueue } from "@/src/features/evals/server/addDatasetRunItemsToEvalQueue";
+import { createOrFetchDatasetRun } from "@/src/features/public-api/server/dataset-runs";
 import {
-  createOrFetchDatasetRun,
   generateDatasetRunItemsForPublicApi,
   getDatasetRunItemsCountForPublicApi,
+} from "@/src/features/public-api/server/dataset-run-items";
+import {
   type APIDatasetRunItem,
   type GetDatasetsV1Query,
   type GetDatasetV1Query,
@@ -23,7 +25,7 @@ import {
   transformDbDatasetItemDomainToAPIDatasetItem,
   transformDbDatasetRunToAPIDatasetRun,
   transformDbDatasetToAPIDataset,
-} from "@/src/features/public-api/server";
+} from "@/src/features/public-api/types/datasets";
 import {
   ApiError,
   type JSONValue,

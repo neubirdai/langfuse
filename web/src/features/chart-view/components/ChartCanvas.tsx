@@ -1,11 +1,9 @@
 import React, { useMemo } from "react";
 import { BarChart3 } from "lucide-react";
 import { type DashboardWidgetChartType } from "@langfuse/shared/src/db";
-import {
-  Chart,
-  type DataPoint,
-  getWidgetMissingBucketValue,
-} from "@/src/features/widgets";
+import { Chart } from "@/src/features/widgets/chart-library/Chart";
+import { type DataPoint } from "@/src/features/widgets/chart-library/chart-props";
+import { getWidgetMissingBucketValue } from "@/src/features/widgets/utils";
 import { type ChartConfig } from "@/src/components/ui/chart";
 import { type AggregationFn } from "../types";
 import { isTimeSeriesChartType } from "../vocab";

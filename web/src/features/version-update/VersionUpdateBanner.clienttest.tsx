@@ -1,13 +1,7 @@
-import {
-  act,
-  render,
-  renderHook,
-  screen,
-  fireEvent,
-} from "@testing-library/react";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VersionUpdateBanner } from "./VersionUpdateBanner";
-import { useVersionUpdatePrompt } from "./useVersionUpdatePrompt";
+import { VersionUpdateBannerView } from "./VersionUpdateBannerView";
 import {
   createVersionUpdateStore,
   VERSION_UPDATE_MIN_STALENESS_MS,
@@ -93,10 +87,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("VersionUpdateBanner renders both controls and invokes their callbacks", () => {
+it("VersionUpdateBannerView renders both controls and invokes their callbacks", () => {
   const onReload = vi.fn();
   const onDismiss = vi.fn();
-  render(<VersionUpdateBanner onReload={onReload} onDismiss={onDismiss} />);
+  render(<VersionUpdateBannerView onReload={onReload} onDismiss={onDismiss} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Reload" }));
   expect(onReload).toHaveBeenCalledTimes(1);
@@ -104,9 +98,9 @@ it("VersionUpdateBanner renders both controls and invokes their callbacks", () =
   expect(onDismiss).toHaveBeenCalledTimes(1);
 });
 
-it("VersionUpdateBanner opts out of outside-interaction dismissal", () => {
+it("VersionUpdateBannerView opts out of outside-interaction dismissal", () => {
   render(
-    <VersionUpdateBanner
+    <VersionUpdateBannerView
       onReload={() => undefined}
       onDismiss={() => undefined}
     />,
@@ -117,11 +111,10 @@ it("VersionUpdateBanner opts out of outside-interaction dismissal", () => {
   );
 });
 
-describe("useVersionUpdatePrompt", () => {
-  it("becomes visible and reports banner_shown exactly once when available and settled", () => {
-    const { result } = renderHook(() => useVersionUpdatePrompt());
-
-    expect(result.current.isVisible).toBe(true);
+describe("VersionUpdateBanner (connected)", () => {
+  it("shows and reports banner_shown exactly once when available and settled", () => {
+    render(<VersionUpdateBanner />);
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
     expect(
       h.capture.mock.calls.filter(
         (c) => c[0] === "version_update:banner_shown",
@@ -129,31 +122,33 @@ describe("useVersionUpdatePrompt", () => {
     ).toHaveLength(1);
   });
 
-  it("stays hidden and captures nothing while unsettled or without an update", () => {
+  it("renders nothing (and captures nothing) while unsettled or without an update", () => {
     h.settled = false;
-    const unsettled = renderHook(() => useVersionUpdatePrompt());
-    expect(unsettled.result.current.isVisible).toBe(false);
+    const unsettled = render(<VersionUpdateBanner />);
+    expect(
+      screen.queryByRole("button", { name: "Reload" }),
+    ).not.toBeInTheDocument();
     unsettled.unmount();
 
     h.settled = true;
     h.available = false;
-    const unavailable = renderHook(() => useVersionUpdatePrompt());
-    expect(unavailable.result.current.isVisible).toBe(false);
+    render(<VersionUpdateBanner />);
+    expect(
+      screen.queryByRole("button", { name: "Reload" }),
+    ).not.toBeInTheDocument();
     expect(h.capture).not.toHaveBeenCalled();
   });
 
   it("captures reload_clicked and reloads on Reload", () => {
-    const { result } = renderHook(() => useVersionUpdatePrompt());
-
-    act(() => result.current.reload());
-
+    render(<VersionUpdateBanner />);
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
     expect(h.capture).toHaveBeenCalledWith("version_update:reload_clicked");
     expect(window.location.reload).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("useVersionUpdatePrompt (integration: real store + fake storage)", () => {
-  it("stays hidden and fires no banner_shown until the frontend is 48 h stale", () => {
+describe("VersionUpdateBanner (integration: real store + fake storage)", () => {
+  it("renders nothing and fires no banner_shown until the frontend is 48 h stale", () => {
     const storage = createFakeStorage();
     let now = 0;
     const store = createVersionUpdateStore(() => "running", {
@@ -163,11 +158,13 @@ describe("useVersionUpdatePrompt (integration: real store + fake storage)", () =
     });
     h.store = store;
 
-    const { result } = renderHook(() => useVersionUpdatePrompt());
+    render(<VersionUpdateBanner />);
     act(() => {
       store.reportObservedBuildId("deployed");
     });
-    expect(result.current.isVisible).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: "Reload" }),
+    ).not.toBeInTheDocument();
     expect(h.capture).not.toHaveBeenCalled();
 
     // 48 h later the next response surfaces it; banner_shown fires once.
@@ -175,7 +172,7 @@ describe("useVersionUpdatePrompt (integration: real store + fake storage)", () =
       now = VERSION_UPDATE_MIN_STALENESS_MS;
       store.reportObservedBuildId("deployed");
     });
-    expect(result.current.isVisible).toBe(true);
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
     expect(
       h.capture.mock.calls.filter(
         (c) => c[0] === "version_update:banner_shown",
@@ -194,15 +191,17 @@ describe("useVersionUpdatePrompt (integration: real store + fake storage)", () =
     });
     h.store = store;
 
-    const { result } = renderHook(() => useVersionUpdatePrompt());
+    render(<VersionUpdateBanner />);
     act(() => {
       store.reportObservedBuildId("deployed");
     });
-    expect(result.current.isVisible).toBe(true);
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
 
-    act(() => result.current.dismiss());
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(h.capture).toHaveBeenCalledWith("version_update:dismissed");
-    expect(result.current.isVisible).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: "Reload" }),
+    ).not.toBeInTheDocument();
     expect(storage.getItem(VERSION_UPDATE_SUPPRESSED_UNTIL_KEY)).toBe(
       String(1_000 + VERSION_UPDATE_DISMISS_SUPPRESSION_MS),
     );
@@ -211,6 +210,8 @@ describe("useVersionUpdatePrompt (integration: real store + fake storage)", () =
       now = 2_000;
       store.reportObservedBuildId("deployed-2"); // genuinely new — still quiet
     });
-    expect(result.current.isVisible).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: "Reload" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -27,7 +27,6 @@ export type GetMetricsFilterColumnsParams = {
   releaseOptions: SingleValueOption[];
   scoreNameOptions: SingleValueOption[];
   experimentIdOptions: SingleValueOption[];
-  evaluatorOptions: SingleValueOption[];
   metadataKeyOptions: string[];
 };
 
@@ -56,7 +55,6 @@ const getMetricsFilterColumnSpecs = ({
   releaseOptions,
   scoreNameOptions,
   experimentIdOptions,
-  evaluatorOptions,
   metadataKeyOptions,
 }: GetMetricsFilterColumnsParams): MetricsFilterColumnSpec[] => {
   // Value suggestions come from the v2 events filter-options; v1 keeps manual
@@ -160,36 +158,16 @@ const getMetricsFilterColumnSpecs = ({
     // "Observation Name" on the observations view filters observations.name
     // (mapped through dashboardUiTableToViewMapping). "Score Name" is omitted
     // here because observations:scores is 1:n -- see LFE-9773.
-    filterColumns.push(
-      {
-        column: {
-          name: "Observation Name",
-          id: "observationName",
-          type: "stringOptions",
-          options: observationNameOptions,
-          internal: "internalValue",
-        },
-        customSelect: true,
+    filterColumns.push({
+      column: {
+        name: "Observation Name",
+        id: "observationName",
+        type: "stringOptions",
+        options: observationNameOptions,
+        internal: "internalValue",
       },
-      {
-        column: {
-          name: "Evaluator",
-          id: "evaluatorId",
-          type: "string",
-          internal: "internalValue",
-          options: evaluatorOptions,
-        },
-        customSelect: true,
-      },
-      {
-        column: {
-          name: "Evaluator test run",
-          id: "isEvaluatorTest",
-          type: "boolean",
-          internal: "internalValue",
-        },
-      },
-    );
+      customSelect: true,
+    });
   }
 
   if (
@@ -208,24 +186,6 @@ const getMetricsFilterColumnSpecs = ({
           internal: "internalValue",
         },
         customSelect: true,
-      },
-      {
-        column: {
-          name: "Evaluator",
-          id: "evaluatorId",
-          type: "string",
-          internal: "internalValue",
-          options: evaluatorOptions,
-        },
-        customSelect: true,
-      },
-      {
-        column: {
-          name: "Evaluator test run",
-          id: "isEvaluatorTest",
-          type: "boolean",
-          internal: "internalValue",
-        },
       },
     );
   }

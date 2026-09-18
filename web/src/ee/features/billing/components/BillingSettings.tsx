@@ -1,11 +1,10 @@
-/* eslint-disable @repo/no-null-render */
 // Langfuse Cloud only
 
-import { useHasOrganizationAccess } from "@/src/features/rbac";
 import Header from "@/src/components/layouts/header";
-import { useHasEntitlement } from "@/src/features/entitlements";
+import { useHasEntitlement } from "@/src/features/entitlements/hooks";
 import { useRouter } from "next/router";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 
 import { BillingUsageChart } from "./BillingUsageChart";
 import { BillingActionButtons } from "./BillingActionButtons";
@@ -28,12 +27,7 @@ export const BillingSettings = () => {
   const isCloudBillingAvailable = useIsCloudBillingAvailable();
   const isCloudBillingEntitled = useHasEntitlement("cloud-billing");
   const isSpendAlertEntitled = useHasEntitlement("cloud-spend-alerts");
-  const { organization, billingProvider, hasActiveSubscription } =
-    useBillingInformation();
-  const showBillingDiscount = Boolean(
-    organization?.cloudConfig?.stripe?.activeSubscriptionId &&
-    billingProvider !== "clickhouse",
-  );
+  const { hasActiveSubscription } = useBillingInformation();
 
   // Don't render billing settings if cloud billing is not available
   if (!isCloudBillingAvailable) {
@@ -48,11 +42,11 @@ export const BillingSettings = () => {
   if (!hasAccess) {
     return (
       <Alert>
-        <Alert.Title>Access Denied</Alert.Title>
-        <Alert.Description>
+        <AlertTitle>Access Denied</AlertTitle>
+        <AlertDescription>
           You do not have permission to view the billing settings of this
           organization.
-        </Alert.Description>
+        </AlertDescription>
       </Alert>
     );
   }
@@ -65,14 +59,7 @@ export const BillingSettings = () => {
       <div className="space-y-6">
         <BillingUsageChart />
         <BillingPlanPeriodView />
-        {showBillingDiscount && organization && (
-          <BillingDiscountView
-            orgId={organization.id}
-            hasStripeCustomer={Boolean(
-              organization.cloudConfig?.stripe?.customerId,
-            )}
-          />
-        )}
+        <BillingDiscountView />
         <BillingActionButtons />
         <BillingInvoiceTable />
         {isSpendAlertEntitled && orgId && hasActiveSubscription && (

@@ -37,10 +37,9 @@ jobs:
 ### pnpm
 
 ```yaml
-- uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
+- uses: pnpm/action-setup@v3
   with:
-    install: false
-    cache: false
+    version: 9
 
 - uses: actions/setup-node@v4
   with:
@@ -140,10 +139,9 @@ jobs:
         with:
           fetch-depth: 2
 
-      - uses: pnpm/setup@703c52620218391530e48b9e8870d5c0082e1b9b # v2.1.0
+      - uses: pnpm/action-setup@v3
         with:
-          install: false
-          cache: false
+          version: 9
 
       - uses: actions/setup-node@v4
         with:

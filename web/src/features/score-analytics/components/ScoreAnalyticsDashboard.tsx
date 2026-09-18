@@ -4,54 +4,8 @@ import { DistributionNumericCard } from "./cards/DistributionNumericCard";
 import { DistributionCategoricalCard } from "./cards/DistributionCategoricalCard";
 import { DistributionBooleanCard } from "./cards/DistributionBooleanCard";
 import { HeatmapCard } from "./cards/HeatmapCard";
-import {
-  useScoreAnalytics,
-  type ScoreAnalyticsContextValue,
-} from "./ScoreAnalyticsProvider";
+import { useScoreAnalytics } from "./ScoreAnalyticsProvider";
 import { ScoreAnalyticsNoticeBanner } from "./ScoreAnalyticsNoticeBanner";
-import { useEffect, useState } from "react";
-
-type ScoreAnalyticsNotice =
-  | {
-      status: "loading";
-      estimate: ScoreAnalyticsContextValue["estimate"];
-    }
-  | {
-      status: "sampled";
-      data: NonNullable<ScoreAnalyticsContextValue["data"]>;
-    };
-
-function useScoreAnalyticsNotice(): ScoreAnalyticsNotice | undefined {
-  const { data, estimate, isEstimating, isLoading } = useScoreAnalytics();
-  const [showLoadingBanner, setShowLoadingBanner] = useState(false);
-
-  useEffect(() => {
-    if (isEstimating || (estimate && isLoading)) {
-      const timer = setTimeout(() => {
-        setShowLoadingBanner(true);
-      }, 1500);
-
-      return () => clearTimeout(timer);
-    }
-
-    setShowLoadingBanner(false);
-  }, [isEstimating, estimate, isLoading]);
-
-  const isLoadingAnalytics = isEstimating || Boolean(estimate && isLoading);
-  const showLargeDataset = Boolean(
-    estimate && estimate.estimatedMatchedCount > 100_000,
-  );
-
-  if (isLoadingAnalytics && (showLoadingBanner || showLargeDataset)) {
-    return { status: "loading", estimate };
-  }
-
-  if (!isLoadingAnalytics && estimate && data?.samplingMetadata.isSampled) {
-    return { status: "sampled", data };
-  }
-
-  return undefined;
-}
 
 /**
  * ScoreAnalyticsDashboard - Layout component for score analytics
@@ -76,7 +30,6 @@ function useScoreAnalyticsNotice(): ScoreAnalyticsNotice | undefined {
  */
 export function ScoreAnalyticsDashboard() {
   const { data } = useScoreAnalytics();
-  const notice = useScoreAnalyticsNotice();
 
   // Route to appropriate distribution card based on data type
   const renderDistributionCard = () => {
@@ -102,14 +55,8 @@ export function ScoreAnalyticsDashboard() {
 
   return (
     <>
-      {notice?.status === "loading" ? (
-        <ScoreAnalyticsNoticeBanner
-          variant="loading"
-          estimate={notice.estimate}
-        />
-      ) : notice?.status === "sampled" ? (
-        <ScoreAnalyticsNoticeBanner variant="sampled" data={notice.data} />
-      ) : null}
+      {/* Unified notice banner (transitions: loading → sampling notice) */}
+      <ScoreAnalyticsNoticeBanner />
 
       {/* Main grid */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

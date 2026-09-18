@@ -1,8 +1,5 @@
-import {
-  SessionEventsPage,
-  SessionPage,
-} from "@/src/features/sessions/SessionPages";
-import { useReadPath } from "@/src/features/events/hooks/useReadPath";
+import { SessionEventsPage, SessionPage } from "@/src/components/session";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import {
   RouteParamsPendingFallback,
   useReadyRouteParams,
@@ -10,13 +7,13 @@ import {
 
 export default function Session() {
   const route = useReadyRouteParams(["projectId", "sessionId"]);
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
 
   if (!route.ready) return <RouteParamsPendingFallback />;
 
   const { projectId, sessionId } = route.params;
 
-  return isV4 ? (
+  return isBetaEnabled ? (
     <SessionEventsPage sessionId={sessionId} projectId={projectId} />
   ) : (
     <SessionPage sessionId={sessionId} projectId={projectId} />

@@ -4,17 +4,17 @@ import SessionsTable from "@/src/components/table/use-cases/sessions";
 import Page from "@/src/components/layouts/page";
 import { SessionsOnboarding } from "@/src/components/onboarding/SessionsOnboarding";
 import { api } from "@/src/utils/api";
-import { useReadPath } from "@/src/features/events/hooks/useReadPath";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 
 export default function Sessions() {
   const router = useRouter();
   const projectId = router.query.projectId as string;
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
 
   const { data: hasAnySession, isLoading } = api.sessions.hasAny.useQuery(
     { projectId },
     {
-      enabled: !!projectId && !isV4,
+      enabled: !!projectId && !isBetaEnabled,
       trpc: {
         context: {
           skipBatch: true,
@@ -28,7 +28,7 @@ export default function Sessions() {
     api.sessions.hasAnyFromEvents.useQuery(
       { projectId },
       {
-        enabled: !!projectId && isV4,
+        enabled: !!projectId && isBetaEnabled,
         trpc: {
           context: {
             skipBatch: true,
@@ -38,8 +38,8 @@ export default function Sessions() {
       },
     );
 
-  const hasSessions = isV4 ? hasAnySessionFromEvents : hasAnySession;
-  const isLoadingSessions = isV4 ? isLoadingFromEvents : isLoading;
+  const hasSessions = isBetaEnabled ? hasAnySessionFromEvents : hasAnySession;
+  const isLoadingSessions = isBetaEnabled ? isLoadingFromEvents : isLoading;
   const showOnboarding = !isLoadingSessions && !hasSessions;
 
   return (
@@ -75,7 +75,7 @@ export default function Sessions() {
       ) : (
         <SessionsTable
           projectId={projectId}
-          isV4={isV4}
+          isBetaEnabled={isBetaEnabled}
           showControlsInPageHeader
         />
       )}

@@ -14,7 +14,6 @@ import {
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get Dataset Item",
-    action: "datasets:read",
     querySchema: GetDatasetItemV1Query,
     responseSchema: GetDatasetItemV1Response,
     rateLimitResource: "datasets",
@@ -26,7 +25,6 @@ export default withMiddlewares({
   }),
   DELETE: createAuthedProjectAPIRoute({
     name: "Delete Dataset Item",
-    action: "datasets:CUD",
     querySchema: DeleteDatasetItemV1Query,
     responseSchema: DeleteDatasetItemV1Response,
     rateLimitResource: "datasets",

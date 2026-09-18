@@ -21,11 +21,11 @@ const statusCategories = {
   active: ["production", "live", "active", "public"],
   pending: ["pending", "waiting", "queued", "running", "processing"],
   delayed: ["delayed"],
-  inactive: ["disabled", "inactive", "archived", "cancelled", "debug"],
+  inactive: ["disabled", "inactive", "archived", "cancelled"],
   paused: ["paused"],
   completed: ["completed", "done", "finished"],
-  error: ["error", "failed", "triggered"],
-  partial: ["partial", "warning"],
+  error: ["error", "failed"],
+  partial: ["partial"],
 } as const;
 
 export type Status =

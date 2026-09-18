@@ -11,7 +11,6 @@ import { LangfuseNotFoundError } from "@langfuse/shared";
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "get-dataset",
-    action: "datasets:read",
     querySchema: GetDatasetV2Query,
     responseSchema: GetDatasetV2Response,
     rateLimitResource: "datasets",

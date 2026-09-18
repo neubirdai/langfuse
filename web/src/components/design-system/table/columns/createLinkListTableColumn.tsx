@@ -1,8 +1,7 @@
-/* eslint-disable boundaries/dependencies */
 import { type CellContext, type RowData } from "@tanstack/react-table";
 
 import { TextLink } from "@/src/components/design-system/TextLink/TextLink";
-import { Skeleton } from "@/src/components/ui/skeleton";
+import { TableTextLoadingCell } from "@/src/components/table/loading-cells";
 import {
   createTableColumn,
   type TableColumnOptions,
@@ -24,11 +23,11 @@ export function createLinkListTableColumn<TData extends RowData>({
 }) {
   return createTableColumn<TData, string[]>({
     ...options,
-    loadingCell: <Skeleton className="h-4 w-1/2" />,
+    loadingCell: <TableTextLoadingCell />,
     renderCell: (value, context) => {
       const cell = getCell(value, context);
       if (!cell) return null;
-      if (!Array.isArray(cell)) return <Skeleton className="h-4 w-1/2" />;
+      if (!Array.isArray(cell)) return <TableTextLoadingCell />;
 
       return (
         <div className="flex gap-1">

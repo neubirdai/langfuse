@@ -9,62 +9,28 @@ import {
 } from "@/src/components/ui/dropdown-menu";
 import { Button } from "@/src/components/ui/button";
 import { Settings2, Check } from "lucide-react";
-import {
-  type ExperimentDiffMode,
-  type ExperimentResultsLayout,
-} from "@/src/features/experiments/hooks/useExperimentResultsState";
+import { type IoRenderMode } from "@/src/components/table/data-table-io-render-mode-switch";
 
 type ExperimentDisplaySettingsProps = {
-  layout: ExperimentResultsLayout;
-  onLayoutChange: (layout: ExperimentResultsLayout) => void;
-  diffMode: ExperimentDiffMode;
-  onDiffModeChange: (diffMode: ExperimentDiffMode) => void;
+  layout: "grid" | "list";
+  onLayoutChange: (layout: "grid" | "list") => void;
   itemVisibility: "baseline-only" | "all";
   onItemVisibilityChange: (visibility: "baseline-only" | "all") => void;
   hasComparisons: boolean;
   hasBaseline: boolean;
+  ioRenderMode: IoRenderMode;
+  onIoRenderModeChange: (mode: IoRenderMode) => void;
 };
 
-/** A menu row that reads as a radio option. */
-const OptionItem = ({
-  selected,
-  disabled,
-  onSelect,
-  children,
-}: {
-  selected: boolean;
-  disabled?: boolean;
-  onSelect: () => void;
-  children: React.ReactNode;
-}) => (
-  <DropdownMenuItem onClick={onSelect} disabled={disabled}>
-    {selected ? (
-      <Check className="mr-2 h-4 w-4 shrink-0" />
-    ) : (
-      <span className="mr-2 h-4 w-4 shrink-0" />
-    )}
-    {children}
-  </DropdownMenuItem>
-);
-
-/**
- * The shape of the comparison, as one menu: which layout, what each cell's
- * second line is measured against, and whether items missing from the baseline
- * are listed.
- *
- * All three live in the URL, so they travel with a shared link — which is the
- * line between this menu and the table's "Table settings" popover, where the
- * per-user preferences (columns, row height, cell format) live.
- */
 export function ExperimentDisplaySettings({
   layout,
   onLayoutChange,
-  diffMode,
-  onDiffModeChange,
   itemVisibility,
   onItemVisibilityChange,
   hasComparisons,
   hasBaseline,
+  ioRenderMode,
+  onIoRenderModeChange,
 }: ExperimentDisplaySettingsProps) {
   const isItemVisibilityDisabled = !hasComparisons || !hasBaseline;
 
@@ -76,66 +42,56 @@ export function ExperimentDisplaySettings({
           <span className="ml-2 hidden md:inline">Display</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Layout</DropdownMenuLabel>
-        <OptionItem
-          selected={layout === "list"}
-          onSelect={() => onLayoutChange("list")}
-        >
-          Diff — one row per item
-        </OptionItem>
-        <OptionItem
-          selected={layout === "grid"}
-          onSelect={() => onLayoutChange("grid")}
-        >
-          Side by side — a column per experiment
-        </OptionItem>
-        <OptionItem
-          selected={layout === "matrix"}
-          onSelect={() => onLayoutChange("matrix")}
-        >
-          Score matrix — scores as rows, runs as columns
-        </OptionItem>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuLabel>Diff</DropdownMenuLabel>
-        <OptionItem
-          selected={diffMode === "comparison"}
-          onSelect={() => onDiffModeChange("comparison")}
-        >
-          Comparison → Baseline
-        </OptionItem>
-        <OptionItem
-          selected={diffMode === "expected"}
-          onSelect={() => onDiffModeChange("expected")}
-        >
-          Expected → Output
-        </OptionItem>
-        <OptionItem
-          selected={diffMode === "off"}
-          onSelect={() => onDiffModeChange("off")}
-        >
-          Off — values only
-        </OptionItem>
+        <DropdownMenuItem onClick={() => onLayoutChange("grid")}>
+          {layout === "grid" && <Check className="mr-2 h-4 w-4" />}
+          {layout !== "grid" && <span className="mr-2 h-4 w-4" />}
+          Grid
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onLayoutChange("list")}>
+          {layout === "list" && <Check className="mr-2 h-4 w-4" />}
+          {layout !== "list" && <span className="mr-2 h-4 w-4" />}
+          List
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
         <DropdownMenuLabel>Item Visibility</DropdownMenuLabel>
-        <OptionItem
-          selected={itemVisibility === "baseline-only"}
+        <DropdownMenuItem
+          onClick={() => onItemVisibilityChange("baseline-only")}
           disabled={isItemVisibilityDisabled}
-          onSelect={() => onItemVisibilityChange("baseline-only")}
         >
+          {itemVisibility === "baseline-only" && (
+            <Check className="mr-2 h-4 w-4" />
+          )}
+          {itemVisibility !== "baseline-only" && (
+            <span className="mr-2 h-4 w-4" />
+          )}
           Show only items in baseline
-        </OptionItem>
-        <OptionItem
-          selected={itemVisibility === "all"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => onItemVisibilityChange("all")}
           disabled={isItemVisibilityDisabled}
-          onSelect={() => onItemVisibilityChange("all")}
         >
+          {itemVisibility === "all" && <Check className="mr-2 h-4 w-4" />}
+          {itemVisibility !== "all" && <span className="mr-2 h-4 w-4" />}
           Show all items
-        </OptionItem>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuLabel>Format</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => onIoRenderModeChange("json")}>
+          {ioRenderMode === "json" && <Check className="mr-2 h-4 w-4" />}
+          {ioRenderMode !== "json" && <span className="mr-2 h-4 w-4" />}
+          JSON
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onIoRenderModeChange("text")}>
+          {ioRenderMode === "text" && <Check className="mr-2 h-4 w-4" />}
+          {ioRenderMode !== "text" && <span className="mr-2 h-4 w-4" />}
+          Formatted
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -2,17 +2,15 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 import { getPromptForApi } from "@/src/features/prompts/server/prompt-api-service";
 import { deletePrompt } from "@/src/features/prompts/server/actions/deletePrompt";
-import {
-  withMiddlewares,
-  RateLimitService,
-} from "@/src/features/public-api/server";
+import { withMiddlewares } from "@/src/features/public-api/server/withMiddlewares";
 import { authorizePromptRequestOrThrow } from "../utils/authorizePromptRequest";
 import {
   GetPromptByNameSchema,
   LangfuseNotFoundError,
   PRODUCTION_LABEL,
 } from "@langfuse/shared";
-import { auditLog } from "@/src/features/audit-logs/server";
+import { RateLimitService } from "@/src/features/public-api/server/RateLimitService";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
 import { prisma } from "@langfuse/shared/src/db";
 
 const getPromptNameHandler = async (

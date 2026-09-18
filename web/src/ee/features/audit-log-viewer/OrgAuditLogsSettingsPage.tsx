@@ -1,13 +1,13 @@
 import Header from "@/src/components/layouts/header";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { AuditLogsTable } from "@/src/ee/features/audit-log-viewer/AuditLogsTable";
-import { useHasEntitlement } from "@/src/features/entitlements";
-import { useHasOrganizationAccess } from "@/src/features/rbac";
+import { useHasEntitlement } from "@/src/features/entitlements/hooks";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
 
 export function OrgAuditLogsSettingsPage(props: { orgId: string }) {
   const hasAccess = useHasOrganizationAccess({
     organizationId: props.orgId,
-    scope: "orgAuditLogs:read",
+    scope: "auditLogs:read",
   });
   const hasEntitlement = useHasEntitlement("audit-logs");
 
@@ -18,10 +18,10 @@ export function OrgAuditLogsSettingsPage(props: { orgId: string }) {
     </p>
   ) : !hasAccess ? (
     <Alert>
-      <Alert.Title>Access Denied</Alert.Title>
-      <Alert.Description>
+      <AlertTitle>Access Denied</AlertTitle>
+      <AlertDescription>
         Contact your organization administrator to request access.
-      </Alert.Description>
+      </AlertDescription>
     </Alert>
   ) : (
     <AuditLogsTable scope="organization" orgId={props.orgId} />

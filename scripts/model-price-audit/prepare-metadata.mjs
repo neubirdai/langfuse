@@ -1,15 +1,6 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import fs from "node:fs";
-import {
-  collectPricingModelChanges,
-  collectTypeModelChanges,
-  mergeModelChanges,
-  normalizeReportedModel,
-  validateChangedModelRow,
-  validateOfficialSources,
-} from "./audit-output-contract.mjs";
 
 process.on("uncaughtException", (error) => {
   console.error(`::error::${error.message}`);
@@ -18,9 +9,7 @@ process.on("uncaughtException", (error) => {
 
 const requiredEnvironment = [
   "BASE_PRICING_FILE",
-  "BASE_TYPES_FILE",
   "CURRENT_PRICING_FILE",
-  "CURRENT_TYPES_FILE",
   "STRUCTURED_OUTPUT_PATH",
   "TYPES_DIFF_FILE",
 ];
@@ -36,6 +25,8 @@ const output = JSON.parse(
 );
 const title = output.pullRequestTitle.trim();
 const normalize = (value) => value.trim().toLowerCase();
+const normalizeReportedModel = (value) =>
+  normalize(value).replace(/\s+\((?:also\s+)?matches\b[^)]*\)$/u, "");
 
 if (!/^chore\(pricing\): [^\r\n]+$/.test(title) || title.length > 100) {
   throw new Error(
@@ -54,50 +45,47 @@ if (
   );
 }
 
-const basePricingText = fs.readFileSync(process.env.BASE_PRICING_FILE, "utf8");
-const currentPricingText = fs.readFileSync(
-  process.env.CURRENT_PRICING_FILE,
-  "utf8",
+const basePrices = JSON.parse(
+  fs.readFileSync(process.env.BASE_PRICING_FILE, "utf8"),
 );
-const basePrices = JSON.parse(basePricingText);
-const currentPrices = JSON.parse(currentPricingText);
-const pricingModelChanges = collectPricingModelChanges(
-  basePrices,
-  currentPrices,
+const currentPrices = JSON.parse(
+  fs.readFileSync(process.env.CURRENT_PRICING_FILE, "utf8"),
 );
-const removedPricingModels = pricingModelChanges.filter(
-  (change) => change.expectedChange === "removed",
+const basePricesByName = new Map(
+  basePrices.map((item) => [normalize(item.modelName), item]),
 );
-if (removedPricingModels.length > 0) {
-  throw new Error(
-    `Automated pricing-entry removal is not allowed: ${removedPricingModels
-      .map((change) => change.modelName)
-      .join(", ")}`,
-  );
+const currentPricesByName = new Map(
+  currentPrices.map((item) => [normalize(item.modelName), item]),
+);
+const pricingModelChanges = [];
+for (const modelName of new Set(
+  Array.from(basePricesByName.keys()).concat(currentPricesByName.keys()),
+)) {
+  const before = basePricesByName.get(modelName);
+  const after = currentPricesByName.get(modelName);
+  if (JSON.stringify(before) !== JSON.stringify(after)) {
+    pricingModelChanges.push({
+      modelName: after?.modelName ?? before.modelName,
+      expectedChange: before ? "updated" : "added",
+    });
+  }
 }
 
-const typeModelChanges = collectTypeModelChanges(
-  fs.readFileSync(process.env.BASE_TYPES_FILE, "utf8"),
-  fs.readFileSync(process.env.CURRENT_TYPES_FILE, "utf8"),
-  fs.readFileSync(process.env.TYPES_DIFF_FILE, "utf8"),
-);
+const typeModelChanges = new Set();
+for (const line of fs
+  .readFileSync(process.env.TYPES_DIFF_FILE, "utf8")
+  .split("\n")) {
+  const match = line.match(/^[+-]\s*"([^"]+)"(?:,|:)/);
+  if (match) typeModelChanges.add(match[1]);
+}
 
 if (
   process.env.CHANGED_PRICING_JSON === "true" &&
   pricingModelChanges.length === 0
 ) {
-  const digest = (value) =>
-    createHash("sha256").update(value).digest("hex").slice(0, 12);
-  throw new Error(
-    "Pricing JSON changed without a concrete model-entry change " +
-      `(base entries: ${basePrices.length}, current entries: ${currentPrices.length}, ` +
-      `base sha256: ${digest(basePricingText)}, current sha256: ${digest(currentPricingText)})`,
-  );
+  throw new Error("Pricing JSON changed without a concrete model-entry change");
 }
-if (
-  process.env.CHANGED_MODEL_TYPES === "true" &&
-  typeModelChanges.length === 0
-) {
+if (process.env.CHANGED_MODEL_TYPES === "true" && typeModelChanges.size === 0) {
   throw new Error(
     "Selectable-model types changed without a concrete model identifier change",
   );
@@ -109,32 +97,26 @@ const changedModelRows = output.modelsChecked.filter((item) =>
 const changedRowsByModel = new Map(
   changedModelRows.map((item) => [normalizeReportedModel(item.model), item]),
 );
-for (const change of typeModelChanges) {
-  const row = changedRowsByModel.get(normalize(change.modelName));
-  if (row && normalize(row.provider) !== normalize(change.provider)) {
-    throw new Error(
-      `${change.arrayName} additions require provider ${change.provider}: ${change.modelName}`,
-    );
-  }
-}
-const expectedModelChanges = mergeModelChanges(
-  pricingModelChanges,
-  typeModelChanges,
-);
-for (const change of expectedModelChanges) {
+for (const change of pricingModelChanges) {
   const row = changedRowsByModel.get(normalize(change.modelName));
   if (!row || row.change !== change.expectedChange) {
     throw new Error(
-      `modelsChecked must report the actual ${change.expectedChange} model entry: ${change.modelName}`,
+      `modelsChecked must report the actual ${change.expectedChange} pricing entry: ${change.modelName}`,
     );
   }
-  validateOfficialSources(row.officialSources, row.model);
-  validateChangedModelRow(row);
 }
 
 const affectedModels = new Map();
-for (const change of expectedModelChanges) {
+for (const change of pricingModelChanges) {
   affectedModels.set(normalize(change.modelName), change.modelName);
+}
+for (const modelName of typeModelChanges) {
+  affectedModels.set(normalize(modelName), modelName);
+  if (!changedRowsByModel.has(normalize(modelName))) {
+    throw new Error(
+      `modelsChecked must report the selectable-model change: ${modelName}`,
+    );
+  }
 }
 for (const row of changedModelRows) {
   if (!affectedModels.has(normalizeReportedModel(row.model))) {

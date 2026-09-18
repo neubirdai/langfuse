@@ -31,10 +31,6 @@ export async function getActivationCostEstimates(params: {
   knownTestRunCostUsd?: number;
   shouldRunMissingTest?: boolean;
   shouldReadFromObservationsTable: boolean;
-  timeRange?: {
-    from: Date;
-    to: Date;
-  };
 }) {
   const validation = validateEvaluatorFiltersForTarget({
     targetObject: EvalTargetObject.EVENT,
@@ -58,7 +54,7 @@ export async function getActivationCostEstimates(params: {
     (evaluator) => evaluator.type === EvalTemplateType.LLM_AS_JUDGE,
   );
 
-  const since = params.timeRange?.from ?? new Date(Date.now() - SEVEN_DAYS_MS);
+  const since = new Date(Date.now() - SEVEN_DAYS_MS);
   const filter: FilterState = [
     ...validation.validatedFilters,
     {
@@ -67,16 +63,6 @@ export async function getActivationCostEstimates(params: {
       operator: ">=",
       value: since,
     },
-    ...(params.timeRange
-      ? [
-          {
-            column: "startTime" as const,
-            type: "datetime" as const,
-            operator: "<=" as const,
-            value: params.timeRange.to,
-          },
-        ]
-      : []),
   ];
   const [matchingObservations, recentRunCosts] = await Promise.all([
     getObservationsCountFromEventsTable({

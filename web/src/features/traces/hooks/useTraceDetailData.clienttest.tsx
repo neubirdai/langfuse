@@ -5,21 +5,21 @@ import { useTraceDetailData } from "@/src/features/traces/hooks/useTraceDetailDa
 
 // Created via vi.hoisted so they exist before the hoisted vi.mock factories run.
 const {
-  mockUseReadPath,
+  mockUseV4Beta,
   mockUseSession,
   mockUseEventsTraceData,
   mockTracesQuery,
   mockTraceReadConfigQuery,
 } = vi.hoisted(() => ({
-  mockUseReadPath: vi.fn(),
+  mockUseV4Beta: vi.fn(),
   mockUseSession: vi.fn(),
   mockUseEventsTraceData: vi.fn(),
   mockTracesQuery: vi.fn(),
   mockTraceReadConfigQuery: vi.fn(),
 }));
 
-vi.mock("@/src/features/events/hooks/useReadPath", () => ({
-  useReadPath: () => mockUseReadPath(),
+vi.mock("@/src/features/events/hooks/useV4Beta", () => ({
+  useV4Beta: () => mockUseV4Beta(),
 }));
 vi.mock("next-auth/react", () => ({
   useSession: () => mockUseSession(),
@@ -53,7 +53,7 @@ const render = () =>
 describe("useTraceDetailData (beta / events path)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseReadPath.mockReturnValue({ isV4: true });
+    mockUseV4Beta.mockReturnValue({ isBetaEnabled: true });
     mockUseSession.mockReturnValue({ status: "authenticated" });
     mockTraceReadConfigQuery.mockReturnValue({
       data: undefined,
@@ -111,7 +111,7 @@ describe("useTraceDetailData (beta / events path)", () => {
 describe("useTraceDetailData endpoint routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseReadPath.mockReturnValue({ isV4: false });
+    mockUseV4Beta.mockReturnValue({ isBetaEnabled: false });
     mockTraceReadConfigQuery.mockReturnValue({
       data: undefined,
       isLoading: false,
@@ -169,7 +169,7 @@ describe("useTraceDetailData endpoint routing", () => {
 
   it("uses events endpoints for authenticated beta users", () => {
     mockUseSession.mockReturnValue({ status: "authenticated" });
-    mockUseReadPath.mockReturnValue({ isV4: true });
+    mockUseV4Beta.mockReturnValue({ isBetaEnabled: true });
 
     render();
 

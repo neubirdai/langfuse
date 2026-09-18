@@ -22,7 +22,6 @@ export const config = {
 export default withMiddlewares({
   POST: createAuthedProjectAPIRoute({
     name: "Create Dataset Item",
-    action: "datasets:CUD",
     bodySchema: PostDatasetItemsV1Body,
     responseSchema: PostDatasetItemsV1Response,
     rateLimitResource: "datasets",
@@ -35,7 +34,6 @@ export default withMiddlewares({
   }),
   GET: createAuthedProjectAPIRoute({
     name: "Get Dataset Items",
-    action: "datasets:read",
     querySchema: GetDatasetItemsV1Query,
     responseSchema: GetDatasetItemsV1Response,
     rateLimitResource: "datasets",

@@ -1,14 +1,11 @@
-import { render, renderHook, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  V4MigrationBanner,
-  useV4MigrationBannerState,
-} from "./V4MigrationBanner";
+import { V4MigrationBanner } from "./V4MigrationBanner";
 import { type ProjectMigrationStatus } from "./migrationData";
 
 const mocks = vi.hoisted(() => ({
-  statusByProjectId: new Map<string, ProjectMigrationStatus>(),
+  statusByProjectId: new Map<string, object>(),
   organizationsArg: undefined as unknown,
 }));
 
@@ -74,57 +71,61 @@ describe("V4MigrationBanner", () => {
   });
 
   it("shows while the only project still needs migration work", () => {
-    render(
-      <V4MigrationBanner projectsNeedingMigration={1} totalProjects={1} />,
+    mocks.statusByProjectId.set(
+      "project-1",
+      status({ evals: { status: "loaded", count: 2 } }),
     );
+    render(<V4MigrationBanner />);
     expect(
       screen.getByText(/Your project needs an upgrade/),
     ).toBeInTheDocument();
   });
 
   it("says all projects need an upgrade only when they all do", () => {
-    render(
-      <V4MigrationBanner projectsNeedingMigration={2} totalProjects={2} />,
+    mocks.statusByProjectId.set(
+      "project-1",
+      status({ evals: { status: "loaded", count: 2 } }),
     );
+    mocks.statusByProjectId.set(
+      "project-2",
+      status({ apis: { status: "loaded", count: 1 } }),
+    );
+    render(<V4MigrationBanner />);
     expect(
       screen.getByText(/All projects need an upgrade/),
     ).toBeInTheDocument();
   });
 
   it("counts the projects needing an upgrade in mixed accounts", () => {
-    render(
-      <V4MigrationBanner projectsNeedingMigration={1} totalProjects={2} />,
+    mocks.statusByProjectId.set(
+      "project-1",
+      status({ evals: { status: "loaded", count: 2 } }),
     );
+    mocks.statusByProjectId.set("project-2", status());
+    render(<V4MigrationBanner />);
     expect(
       screen.getByText(/1 of your 2 projects needs an upgrade/),
     ).toBeInTheDocument();
   });
 
-  it("returns no migration work once every project is ready", () => {
+  it("hides once every project is ready", () => {
     mocks.statusByProjectId.set("project-1", status());
-
-    const { result } = renderHook(() => useV4MigrationBannerState(true));
-
-    expect(result.current).toEqual({
-      projectsNeedingMigration: 0,
-      totalProjects: 1,
-    });
+    render(<V4MigrationBanner />);
+    expect(screen.queryByText(/an upgrade/)).not.toBeInTheDocument();
   });
 
-  it("returns no migration work while readiness is still being checked", () => {
+  it("hides while readiness is still being checked", () => {
     mocks.statusByProjectId.set(
       "project-1",
       status({ evals: { status: "loading", count: 0 } }),
     );
-
-    const { result } = renderHook(() => useV4MigrationBannerState(true));
-
-    expect(result.current.projectsNeedingMigration).toBe(0);
+    render(<V4MigrationBanner />);
+    expect(screen.queryByText(/an upgrade/)).not.toBeInTheDocument();
   });
 
   it("excludes the demo org and deleted projects from the queried scope", () => {
-    renderHook(() => useV4MigrationBannerState(true));
-
+    mocks.statusByProjectId.set("project-1", status());
+    render(<V4MigrationBanner />);
     expect(mocks.organizationsArg).toEqual([
       {
         id: "org-1",

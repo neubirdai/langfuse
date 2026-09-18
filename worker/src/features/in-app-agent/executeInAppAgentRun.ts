@@ -60,7 +60,6 @@ import {
 import { createInAppAgentSandbox } from "./runtime/sandbox";
 import { createAgUiStream } from "./runtime/agent";
 import { getInAppAgentPromptClient } from "./runtime/promptClient";
-import { resolveLangfuseMcpUrl } from "./resolveLangfuseMcpUrl";
 import type { AgUiRunAgentInput } from "./runtime/types";
 
 import { env } from "../../env";
@@ -524,14 +523,18 @@ export async function executeInAppAgentRun(params: {
           if (outcome?.reachedStepLimit) {
             recordIncrement("langfuse.in_app_agent.step_limit_reached", 1);
           }
-          if (outcome?.truncatedByOutputLimit) {
-            recordIncrement("langfuse.in_app_agent.output_limit_reached", 1);
-          }
 
           await flushPersistedRunEvents(
             interruptRequest
               ? { status: InAppAgentRunStatus.AWAITING_APPROVAL }
-              : resolveCompletedRunFinish(outcome),
+              : outcome?.truncatedByStepLimit
+                ? {
+                    status: InAppAgentRunStatus.SUCCEEDED,
+                    errorCode: InAppAgentRunErrorCode.STEP_LIMIT,
+                    errorMessage:
+                      "The run reached the step limit before a final answer",
+                  }
+                : { status: InAppAgentRunStatus.SUCCEEDED },
           );
         },
         onAbort: async () => {
@@ -712,28 +715,6 @@ async function resolveUserProjectAccess(params: {
   };
 }
 
-function resolveCompletedRunFinish(outcome?: {
-  truncatedByStepLimit: boolean;
-  truncatedByOutputLimit: boolean;
-}): NonNullable<Parameters<typeof flushPendingRunEvents>[0]["finish"]> {
-  if (outcome?.truncatedByOutputLimit) {
-    return {
-      status: InAppAgentRunStatus.SUCCEEDED,
-      errorCode: InAppAgentRunErrorCode.OUTPUT_LIMIT,
-      errorMessage:
-        "The response hit the model's output-token limit before a final answer",
-    };
-  }
-  if (outcome?.truncatedByStepLimit) {
-    return {
-      status: InAppAgentRunStatus.SUCCEEDED,
-      errorCode: InAppAgentRunErrorCode.STEP_LIMIT,
-      errorMessage: "The run reached the step limit before a final answer",
-    };
-  }
-  return { status: InAppAgentRunStatus.SUCCEEDED };
-}
-
 function findPersistedApprovalRequest(
   events: readonly PersistedConversationEvent[],
   request: Extract<InAppAgentRunRequest, { kind: "approvalDecision" }>,
@@ -754,18 +735,20 @@ function findPersistedApprovalRequest(
 }
 
 function getLangfuseMcpUrl(): string {
-  const url = resolveLangfuseMcpUrl({
-    mcpBaseUrl: env.LANGFUSE_MCP_BASE_URL,
-    nextAuthUrl: env.NEXTAUTH_URL,
-  });
-
-  if (!url) {
+  if (!env.NEXTAUTH_URL) {
     throw new InAppAgentRunInitError(
-      "LANGFUSE_MCP_BASE_URL or NEXTAUTH_URL must be configured to derive the MCP endpoint",
+      "NEXTAUTH_URL must be configured to derive the MCP endpoint",
     );
   }
 
-  return url;
+  const rawUrl = env.NEXTAUTH_URL.replace(/\/api\/auth\/?$/, "");
+  const baseUrl = new URL(rawUrl);
+
+  baseUrl.pathname = `${baseUrl.pathname.replace(/\/$/, "")}/api/public/mcp`;
+  baseUrl.search = "";
+  baseUrl.hash = "";
+
+  return baseUrl.toString();
 }
 
 function buildTracingConfig(params: {

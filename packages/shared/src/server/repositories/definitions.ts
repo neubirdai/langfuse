@@ -1,7 +1,6 @@
 import z from "zod";
 import type { IngestionAttribution } from "../ingestion/ingestionAttribution";
 import { DEFAULT_TRACE_ENVIRONMENT } from "../ingestion/types";
-import { toClickhouseDateTime } from "../clickhouse/client";
 
 export const clickhouseStringDateSchema = z
   .string()
@@ -80,12 +79,12 @@ export type ObservationRecordReadType = z.infer<
 
 export const observationRecordInsertSchema = observationRecordBaseSchema.extend(
   {
-    created_at: z.string(),
-    updated_at: z.string(),
-    start_time: z.string(),
-    end_time: z.string().nullish(),
-    completion_start_time: z.string().nullish(),
-    event_ts: z.string(),
+    created_at: z.number(),
+    updated_at: z.number(),
+    start_time: z.number(),
+    end_time: z.number().nullish(),
+    completion_start_time: z.number().nullish(),
+    event_ts: z.number(),
     provided_usage_details: UsageCostSchema,
     provided_cost_details: UsageCostSchema,
     usage_details: UsageCostSchema,
@@ -101,7 +100,7 @@ export const observationBatchStagingRecordInsertSchema =
     ingestion_api_key: z.string(),
     ingestion_sdk_name: z.string(),
     ingestion_sdk_version: z.string(),
-    s3_first_seen_timestamp: z.string(),
+    s3_first_seen_timestamp: z.number(),
   });
 export type ObservationBatchStagingRecordInsertType = z.infer<
   typeof observationBatchStagingRecordInsertSchema
@@ -167,10 +166,10 @@ export const traceRecordReadSchema = traceRecordBaseSchema.extend({
 export type TraceRecordReadType = z.infer<typeof traceRecordReadSchema>;
 
 export const traceRecordInsertSchema = traceRecordBaseSchema.extend({
-  timestamp: z.string(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  event_ts: z.string(),
+  timestamp: z.number(),
+  created_at: z.number(),
+  updated_at: z.number(),
+  event_ts: z.number(),
 });
 export type TraceRecordInsertType = z.infer<typeof traceRecordInsertSchema>;
 
@@ -178,8 +177,8 @@ export const traceNullRecordInsertSchema = z.object({
   // Identifiers
   project_id: z.string(),
   id: z.string(),
-  start_time: z.string(),
-  end_time: z.string().nullish(),
+  start_time: z.number(),
+  end_time: z.number().nullish(),
   name: z.string().nullish(),
 
   // Metadata properties
@@ -205,9 +204,9 @@ export const traceNullRecordInsertSchema = z.object({
   input: z.string(),
   output: z.string(),
 
-  created_at: z.string(),
-  updated_at: z.string(),
-  event_ts: z.string(),
+  created_at: z.number(),
+  updated_at: z.number(),
+  event_ts: z.number(),
 });
 export type TraceNullRecordInsertType = z.infer<
   typeof traceNullRecordInsertSchema
@@ -226,8 +225,6 @@ export const scoreRecordBaseSchema = z.object({
   source: z.string(),
   comment: z.string().nullish(),
   metadata: z.record(z.string(), z.string()),
-  evaluator_id: z.string().optional(),
-  evaluation_rule_id: z.string().optional(),
   author_user_id: z.string().nullish(),
   config_id: z.string().nullish(),
   data_type: z.string(),
@@ -250,10 +247,10 @@ export const scoreRecordReadSchema = scoreRecordBaseSchema.extend({
 export type ScoreRecordReadType = z.infer<typeof scoreRecordReadSchema>;
 
 export const scoreRecordInsertSchema = scoreRecordBaseSchema.extend({
-  created_at: z.string(),
-  updated_at: z.string(),
-  timestamp: z.string(),
-  event_ts: z.string(),
+  created_at: z.number(),
+  updated_at: z.number(),
+  timestamp: z.number(),
+  event_ts: z.number(),
 });
 export type ScoreRecordInsertType = z.infer<typeof scoreRecordInsertSchema>;
 
@@ -299,11 +296,11 @@ export type DatasetRunItemRecord<WithIO extends boolean = true> =
 
 export const datasetRunItemRecordInsertSchema =
   datasetRunItemRecordBaseSchema.extend({
-    created_at: z.string(),
-    updated_at: z.string(),
-    event_ts: z.string(),
-    dataset_run_created_at: z.string(),
-    dataset_item_version: z.string().nullish(),
+    created_at: z.number(),
+    updated_at: z.number(),
+    event_ts: z.number(),
+    dataset_run_created_at: z.number(),
+    dataset_item_version: z.number().nullish(),
   });
 export type DatasetRunItemRecordInsertType = z.infer<
   typeof datasetRunItemRecordInsertSchema
@@ -332,9 +329,9 @@ export type BlobStorageFileRefRecordReadType = z.infer<
 >;
 export const blobStorageFileLogRecordInsertSchema =
   blobStorageFileLogRecordBaseSchema.extend({
-    created_at: z.string(),
-    updated_at: z.string(),
-    event_ts: z.string(),
+    created_at: z.number(),
+    updated_at: z.number(),
+    event_ts: z.number(),
   });
 export type BlobStorageFileLogInsertType = z.infer<
   typeof blobStorageFileLogRecordInsertSchema
@@ -345,28 +342,28 @@ export const convertTraceReadToInsert = (
 ): TraceRecordInsertType => {
   return {
     ...record,
-    created_at: toClickhouseDateTime(record.created_at),
-    updated_at: toClickhouseDateTime(record.updated_at),
-    timestamp: toClickhouseDateTime(record.timestamp),
-    event_ts: toClickhouseDateTime(record.event_ts),
+    created_at: new Date(record.created_at).getTime(),
+    updated_at: new Date(record.updated_at).getTime(),
+    timestamp: new Date(record.timestamp).getTime(),
+    event_ts: new Date(record.event_ts).getTime(),
   };
 };
 
 export const convertObservationReadToInsert = (
   record: ObservationRecordReadType,
 ): ObservationRecordInsertType => {
+  const convertDate = (date: string) => new Date(date).getTime();
+
   return {
     ...record,
-    created_at: toClickhouseDateTime(record.created_at),
-    updated_at: toClickhouseDateTime(record.updated_at),
-    start_time: toClickhouseDateTime(record.start_time),
-    end_time: record.end_time
-      ? toClickhouseDateTime(record.end_time)
-      : undefined,
+    created_at: convertDate(record.created_at),
+    updated_at: convertDate(record.updated_at),
+    start_time: convertDate(record.start_time),
+    end_time: record.end_time ? convertDate(record.end_time) : undefined,
     completion_start_time: record.completion_start_time
-      ? toClickhouseDateTime(record.completion_start_time)
+      ? convertDate(record.completion_start_time)
       : undefined,
-    event_ts: toClickhouseDateTime(record.event_ts),
+    event_ts: convertDate(record.event_ts),
     provided_usage_details: record.provided_usage_details,
     provided_cost_details: record.provided_cost_details,
     usage_details: record.usage_details,
@@ -379,10 +376,10 @@ export const convertScoreReadToInsert = (
 ): ScoreRecordInsertType => {
   return {
     ...record,
-    created_at: toClickhouseDateTime(record.created_at),
-    updated_at: toClickhouseDateTime(record.updated_at),
-    timestamp: toClickhouseDateTime(record.timestamp),
-    event_ts: toClickhouseDateTime(record.event_ts),
+    created_at: new Date(record.created_at).getTime(),
+    updated_at: new Date(record.updated_at).getTime(),
+    timestamp: new Date(record.timestamp).getTime(),
+    event_ts: new Date(record.event_ts).getTime(),
   };
 };
 
@@ -393,7 +390,7 @@ export const convertScoreReadToInsert = (
  */
 export const convertTraceToStagingObservation = (
   traceRecord: TraceRecordInsertType,
-  s3FirstSeenTimestamp: string,
+  s3FirstSeenTimestamp: number,
   attribution: IngestionAttribution,
 ): ObservationBatchStagingRecordInsertType => {
   return {
@@ -520,9 +517,6 @@ export const eventRecordBaseSchema = z.object({
   // Metadata
   metadata_names: z.array(z.string()).default([]),
   metadata_values: z.array(z.string()).default([]),
-  evaluator_id: z.string().optional(),
-  evaluation_rule_id: z.string().optional(),
-  evaluator_execution_is_test: z.boolean().optional(),
 
   // Experiment properties
   experiment_id: z.string().nullish(),
@@ -573,11 +567,11 @@ export const eventRecordReadSchema = eventRecordBaseSchema.extend({
 export type EventRecordReadType = z.infer<typeof eventRecordReadSchema>;
 
 export const eventRecordInsertSchema = eventRecordBaseSchema.extend({
-  start_time: z.string(),
-  end_time: z.string().nullish(),
-  completion_start_time: z.string().nullish(),
-  created_at: z.string(),
-  updated_at: z.string(),
-  event_ts: z.string(),
+  start_time: z.number(),
+  end_time: z.number().nullish(),
+  completion_start_time: z.number().nullish(),
+  created_at: z.number(),
+  updated_at: z.number(),
+  event_ts: z.number(),
 });
 export type EventRecordInsertType = z.infer<typeof eventRecordInsertSchema>;

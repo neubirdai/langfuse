@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { Button } from "@/src/components/ui/button";
 import {
   DialogBody,
@@ -79,9 +79,10 @@ export function TransferProjectDialogContent({
           className="flex flex-col gap-8"
         >
           <DialogBody>
-            <Alert variant="warning" icon={TriangleAlert}>
-              <Alert.Title>Warning</Alert.Title>
-              <Alert.Description>
+            <Alert>
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Warning</AlertTitle>
+              <AlertDescription>
                 Transferring the project will move it to a different
                 organization:
                 <ul className="list-disc pl-4">
@@ -96,7 +97,7 @@ export function TransferProjectDialogContent({
                     interruption.
                   </li>
                 </ul>
-              </Alert.Description>
+              </AlertDescription>
             </Alert>
             <FormField
               control={form.control}

@@ -14,7 +14,6 @@ import {
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get annotation queue items",
-    action: "annotationQueues:read",
     querySchema: GetAnnotationQueueItemsQuery,
     responseSchema: GetAnnotationQueueItemsResponse,
     rateLimitResource: "annotation-queues",
@@ -29,7 +28,6 @@ export default withMiddlewares({
   }),
   POST: createAuthedProjectAPIRoute({
     name: "Create annotation queue item",
-    action: "annotationQueues:CUD",
     querySchema: GetAnnotationQueueItemsQuery,
     bodySchema: CreateAnnotationQueueItemBody,
     responseSchema: CreateAnnotationQueueItemResponse,

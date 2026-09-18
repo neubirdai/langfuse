@@ -9,6 +9,8 @@ export function AnnotationQueueItemCountBadge({
   totalCount,
   layout,
 }: AnnotationQueueItemCountBadgeProps) {
+  if (totalCount <= 0) return null;
+
   return (
     <span
       className={cn(

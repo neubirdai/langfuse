@@ -1,5 +1,4 @@
 import {
-  EvaluatorPromptMessagesSchema,
   InvalidRequestError,
   publicApiPaginationLimitZod,
 } from "@langfuse/shared";
@@ -22,16 +21,21 @@ export const PublicApiCreator = z
   })
   .strict();
 
-const EvaluatorChatPrompt = EvaluatorPromptMessagesSchema;
-const EvaluatorChatPromptInput = z
-  .union([
-    z
-      .string()
-      .min(1)
-      .transform((content) => [{ role: "user" as const, content }]),
-    EvaluatorChatPrompt,
-  ])
-  .pipe(EvaluatorChatPrompt);
+const EvaluatorChatMessage = z
+  .object({
+    role: z.literal("user"),
+    content: z.string(),
+  })
+  .strict();
+
+const EvaluatorChatPrompt = z.array(EvaluatorChatMessage).min(1).max(1);
+const EvaluatorChatPromptInput = z.union([
+  z
+    .string()
+    .min(1)
+    .transform((content) => [{ role: "user" as const, content }]),
+  EvaluatorChatPrompt,
+]);
 
 const EvaluatorVersionBase = z.object({
   id: z.string(),

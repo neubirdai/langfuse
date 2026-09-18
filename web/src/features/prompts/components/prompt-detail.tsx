@@ -14,7 +14,7 @@ import {
   TabsBarContent,
   TabsBarTrigger,
 } from "@/src/components/ui/tabs-bar";
-import { Tabs } from "@/src/components/design-system/Tabs/Tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/src/components/ui/tabs";
 import { Badge } from "@/src/components/ui/badge";
 import { CodeView, JSONView } from "@/src/components/ui/CodeJsonViewer";
 import { DetailPageNav } from "@/src/features/navigate-detail-pages/DetailPageNav";
@@ -36,7 +36,7 @@ import { JumpToPlaygroundDropdownMenuController } from "@/src/features/playgroun
 import { ChatMlArraySchema } from "@/src/components/schemas/ChatMlSchema";
 import LegacyGenerations from "@/src/components/table/use-cases/observations";
 import EventsTable from "@/src/features/events/components/EventsTable";
-import { useReadPath } from "@/src/features/events";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import {
   ChevronDown,
   FlaskConical,
@@ -46,10 +46,10 @@ import {
   Plus,
   Terminal,
 } from "lucide-react";
-import { useHasProjectAccess } from "@/src/features/rbac";
+import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { Button } from "@/src/components/ui/button";
 import { ActionButtonCountBadge } from "@/src/components/ui/action-button-count-badge";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +57,7 @@ import {
 } from "@/src/components/ui/dialog";
 import { CreateExperimentsForm } from "@/src/features/experiments/components/CreateExperimentsForm";
 import { useMemo, useState } from "react";
-import { showSuccessToast } from "@/src/features/notifications";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
 import { DuplicatePromptButton } from "@/src/features/prompts/components/duplicate-prompt";
 import Page from "@/src/components/layouts/page";
 import {
@@ -69,10 +69,7 @@ import {
 import { DeletePromptVersion } from "@/src/features/prompts/components/delete-prompt-version";
 import { TagPromptDetailsPopover } from "@/src/features/tag/components/TagPromptDetailsPopover";
 import { SetPromptVersionLabels } from "@/src/features/prompts/components/SetPromptVersionLabels";
-import {
-  CommentDrawerController,
-  getCommentDrawerInitialStateFromUrl,
-} from "@/src/features/comments/CommentDrawerController";
+import { CommentDrawerController } from "@/src/features/comments/CommentDrawerController";
 import { Command, CommandInput } from "@/src/components/ui/command";
 import {
   PromptReferenceProvider,
@@ -127,7 +124,7 @@ export const PromptDetail = ({
   const projectId = useProjectIdFromURL();
   const capture = usePostHogClientCapture();
   const router = useRouter();
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
 
   const promptName =
     promptNameProp ||
@@ -369,56 +366,17 @@ export const PromptDetail = ({
               </Link>
             </Button>
           </div>
-          <CommentDrawerController
-            projectId={projectId as string}
-            mode="read-only"
-            onCommentChange={() =>
-              utils.prompts.allVersions.invalidate(promptHistoryInput)
-            }
-          >
-            {({ openDrawer }) => {
-              const openPromptComments = (
-                promptId: string,
-                promptVersion: number,
-              ) => {
-                const { label, ...query } = router.query;
-                router.push(
-                  {
-                    pathname: router.pathname,
-                    query: {
-                      ...query,
-                      version: promptVersion,
-                      comments: "open",
-                      commentObjectType: "PROMPT",
-                      commentObjectId: promptId,
-                    },
-                  },
-                  undefined,
-                  { shallow: true },
-                );
-                openDrawer({
-                  type: "comments",
-                  objectId: promptId,
-                  objectType: "PROMPT",
-                });
-              };
-
-              return (
-                <div className="flex flex-col overflow-y-auto">
-                  <PromptHistoryNode
-                    prompts={promptHistory.data.promptVersions}
-                    currentPromptVersion={prompt.version}
-                    setCurrentPromptVersion={(version) => {
-                      setCurrentPromptVersion(version);
-                      setCurrentPromptLabel(null);
-                    }}
-                    openCommentDrawer={openPromptComments}
-                    commentCounts={commentCounts}
-                  />
-                </div>
-              );
-            }}
-          </CommentDrawerController>
+          <div className="flex flex-col overflow-y-auto">
+            <PromptHistoryNode
+              prompts={promptHistory.data.promptVersions}
+              currentPromptVersion={prompt.version}
+              setCurrentPromptVersion={(version) => {
+                setCurrentPromptVersion(version);
+                setCurrentPromptLabel(null);
+              }}
+              commentCounts={commentCounts}
+            />
+          </div>
         </Command>
         <div className="col-span-2 mt-3 flex max-h-full min-h-0 flex-col md:col-span-3">
           <div className="flex flex-col items-start gap-2">
@@ -516,9 +474,8 @@ export const PromptDetail = ({
                 )}
                 <CommentDrawerController
                   projectId={projectId as string}
-                  initialState={() =>
-                    getCommentDrawerInitialStateFromUrl(router.query)
-                  }
+                  objectId={prompt.id}
+                  objectType="PROMPT"
                   count={getNumberFromMap(commentCounts, prompt.id)}
                   onCommentChange={() =>
                     utils.prompts.allVersions.invalidate(promptHistoryInput)
@@ -529,13 +486,7 @@ export const PromptDetail = ({
                       type="button"
                       variant="outline"
                       disabled={disabled}
-                      onClick={() =>
-                        openDrawer({
-                          type: "comments",
-                          objectId: prompt.id,
-                          objectType: "PROMPT",
-                        })
-                      }
+                      onClick={openDrawer}
                       className="gap-1"
                     >
                       {disabled ? (
@@ -596,7 +547,7 @@ export const PromptDetail = ({
               className="mt-0 mb-2 flex max-h-full min-h-0 flex-1 flex-col overflow-hidden"
             >
               <div className="flex h-full flex-1 flex-col overflow-hidden">
-                {isV4 ? (
+                {isBetaEnabled ? (
                   <EventsTable
                     projectId={prompt.projectId}
                     promptName={prompt.name}
@@ -627,18 +578,20 @@ export const PromptDetail = ({
                         setResolutionMode(value as "tagged" | "resolved");
                       }}
                     >
-                      <Tabs.List gap="sm" size="auto">
-                        <Tabs.Trigger
+                      <TabsList className="h-auto gap-1">
+                        <TabsTrigger
                           value="resolved"
-                          size="sm"
-                          label="Resolved prompt"
-                        />
-                        <Tabs.Trigger
+                          className="h-fit px-1 text-xs"
+                        >
+                          Resolved prompt
+                        </TabsTrigger>
+                        <TabsTrigger
                           value="tagged"
-                          size="sm"
-                          label="Tagged prompt"
-                        />
-                      </Tabs.List>
+                          className="h-fit px-1 text-xs"
+                        >
+                          Tagged prompt
+                        </TabsTrigger>
+                      </TabsList>
                     </Tabs>
                   </div>
                 )}
@@ -671,9 +624,7 @@ export const PromptDetail = ({
                     <JSONView json={prompt.prompt} title="Prompt" />
                   )}
                 </PromptReferenceProvider>
-                {extractedVariables.length > 0 && (
-                  <PromptVariableListPreview variables={extractedVariables} />
-                )}
+                <PromptVariableListPreview variables={extractedVariables} />
               </div>
             </TabsBarContent>
             <TabsBarContent

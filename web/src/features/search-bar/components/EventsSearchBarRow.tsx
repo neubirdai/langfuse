@@ -35,35 +35,9 @@ import type { SearchBarStore } from "@/src/features/search-bar/store/searchBarSt
 import type { SearchCommit } from "@/src/features/search-bar/hooks/useEventsSearchBar";
 import type { QueryPresetSection } from "@/src/features/search-bar/lib/completions";
 
-type EventsSearchBarRowProps = Omit<
-  React.ComponentProps<typeof EventsSearchBarRowContent>,
-  "aiFeaturesEnabled"
->;
-
-export function EventsSearchBarRow(props: EventsSearchBarRowProps) {
-  const registry = props.registry ?? EVENTS_FIELD_REGISTRY;
-  return props.projectId && registry.aiFilterPrompt ? (
-    <ProjectSearchBarRow {...props} />
-  ) : (
-    <EventsSearchBarRowContent {...props} aiFeaturesEnabled={false} />
-  );
-}
-
-function ProjectSearchBarRow(props: EventsSearchBarRowProps) {
-  const { organization } = useQueryProject();
-  return (
-    <EventsSearchBarRowContent
-      {...props}
-      aiFeaturesEnabled={Boolean(organization?.aiFeaturesEnabled)}
-    />
-  );
-}
-
-function EventsSearchBarRowContent({
-  aiFeaturesEnabled,
+export function EventsSearchBarRow({
   projectId,
   tableName,
-  isV4 = true,
   store,
   commit,
   observed,
@@ -79,11 +53,9 @@ function EventsSearchBarRowContent({
   className,
   registry = EVENTS_FIELD_REGISTRY,
 }: {
-  aiFeaturesEnabled: boolean;
-  projectId?: string;
+  projectId: string;
   /** Table this bar filters — threaded to AI-prompt analytics (LFE-10781). */
   tableName: string;
-  isV4?: boolean;
   store: SearchBarStore;
   commit: SearchCommit;
   observed: ObservedOptions | undefined;
@@ -126,25 +98,14 @@ function EventsSearchBarRowContent({
   registry?: FieldRegistry;
 }) {
   const [aiOpen, setAiOpen] = React.useState(false);
+  const { organization } = useQueryProject();
   // Mirror the legacy wand gate: org-level AI features. The server
   // enforces it too, so this only governs whether the affordance is offered.
   // Org entitlement AND a prompt written for this view — see
   // FieldRegistry.aiFilterPrompt. Without the second half a new surface silently
   // inherits the events prompt.
-  const aiRegistryId =
-    registry.id === "events" ||
-    registry.id === "evaluationRules" ||
-    registry.id === "evaluatorSamples" ||
-    registry.id === "ruleSamples" ||
-    registry.id === "sessions" ||
-    registry.id === "scores" ||
-    registry.id === "experiments" ||
-    registry.id === "users"
-      ? registry.id
-      : undefined;
   const aiAvailable =
-    Boolean(projectId && aiRegistryId && aiFeaturesEnabled) &&
-    registry.aiFilterPrompt;
+    Boolean(organization?.aiFeaturesEnabled) && registry.aiFilterPrompt;
 
   const activateAi = React.useCallback(() => {
     // Ground the model on real project values: lazily request the AI columns so
@@ -155,15 +116,14 @@ function EventsSearchBarRowContent({
 
   return (
     <div className={cn("min-w-0 px-2 pt-2 pb-1", className)}>
-      {aiOpen && aiAvailable && aiRegistryId && projectId ? (
+      {aiOpen && aiAvailable ? (
         <SearchBarAiPrompt
           projectId={projectId}
           tableName={tableName}
-          isV4={isV4}
           store={store}
           dataContext={aiDataContext}
           scoreNames={aiScoreNames}
-          registryId={aiRegistryId}
+          registryId={registry.id}
           onApply={onApplyFilters}
           onExit={() => setAiOpen(false)}
         />

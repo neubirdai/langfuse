@@ -36,9 +36,6 @@ const createPrismaInstance = () => {
         remoteExperimentSecretKey: true,
         remoteExperimentRequestHeaders: true,
       },
-      gatewayAiConnection: {
-        encryptedCredential: true,
-      },
     },
   });
 

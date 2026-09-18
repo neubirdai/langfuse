@@ -1,4 +1,4 @@
-/* eslint-disable @repo/no-style-props, @repo/no-margin-on-root-elements */
+/* eslint-disable @repo/no-style-props */
 "use client";
 
 import * as React from "react";
@@ -173,70 +173,35 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 /**
  * Owns dialog open state while callers retain trigger and content presentation.
+ * Use the supplied Trigger to preserve Radix behavior.
  */
-type DialogControllerProps<State = void> = {
-  // Evaluated only when the controller mounts; later callback or dependency changes do not update the dialog.
-  initialState?: () => State | undefined;
+type DialogControllerProps = {
   children: (control: {
     isOpen: boolean;
-    openDialog: (...args: [State] extends [void] ? [] : [state: State]) => void;
+    Trigger: typeof DialogTrigger;
   }) => React.ReactNode;
   closeOnInteractionOutside: boolean;
-  onBeforeClose?: () => boolean;
-  onDismiss?: () => void;
-  renderContent: (control: {
-    state: State;
-    closeDialog: () => void;
-  }) => React.ReactNode;
+  renderContent: (control: { closeDialog: () => void }) => React.ReactNode;
   size: React.ComponentProps<typeof DialogContent>["size"];
 };
 
-const DialogController = <State = void,>({
-  initialState,
+const DialogController = ({
   children,
   closeOnInteractionOutside,
-  onBeforeClose,
-  onDismiss,
   renderContent,
   size,
-}: DialogControllerProps<State>) => {
-  const [controllerState, setControllerState] = React.useState<
-    { active: false } | { active: boolean; state: State }
-  >(() => {
-    const state = initialState?.();
-    return state === undefined ? { active: false } : { active: true, state };
-  });
-  const closeDialog = () => {
-    if (onBeforeClose?.() === false) return false;
-    setControllerState((currentState) =>
-      "state" in currentState
-        ? { ...currentState, active: false }
-        : currentState,
-    );
-    return true;
-  };
+}: DialogControllerProps) => {
+  const [isOpen, setIsOpen] = React.useState(false);
 
   return (
-    <Dialog
-      open={controllerState.active}
-      onOpenChange={(open) => {
-        if (open) return;
-        if (closeDialog()) onDismiss?.();
-      }}
-    >
-      {children({
-        isOpen: controllerState.active,
-        openDialog: (...args) =>
-          setControllerState({ active: true, state: args[0] as State }),
-      })}
-      {"state" in controllerState ? (
-        <DialogContent
-          size={size}
-          closeOnInteractionOutside={closeOnInteractionOutside}
-        >
-          {renderContent({ state: controllerState.state, closeDialog })}
-        </DialogContent>
-      ) : null}
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {children({ isOpen, Trigger: DialogTrigger })}
+      <DialogContent
+        size={size}
+        closeOnInteractionOutside={closeOnInteractionOutside}
+      >
+        {renderContent({ closeDialog: () => setIsOpen(false) })}
+      </DialogContent>
     </Dialog>
   );
 };

@@ -1,7 +1,9 @@
-import { showErrorToast, showSuccessToast } from "@/src/features/notifications";
 import { useSession } from "next-auth/react";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
-import { useReadPath, V4_PREVIEW_LABEL } from "@/src/features/events";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
+import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
+import { V4_PREVIEW_LABEL } from "@/src/features/events/lib/v4PreviewLabel";
 import { featurePreviewLabels } from "@/src/features/feature-flags/available-flags";
 import { api } from "@/src/utils/api";
 
@@ -21,7 +23,7 @@ export function ControlledFeaturePreviewModal({
   onOpenChange,
 }: ControlledFeaturePreviewModalProps) {
   const authSession = useSession();
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const capture = usePostHogClientCapture();
   const setFeaturePreviewEnabled =
     api.userAccount.setFeaturePreviewEnabled.useMutation({
@@ -50,27 +52,14 @@ export function ControlledFeaturePreviewModal({
         authSession.data?.user?.featureFlags.modernSession === true ||
         authSession.data?.environment.enableExperimentalFeatures === true,
       disabled:
-        !isV4 ||
+        !isBetaEnabled ||
         authSession.data?.environment.enableExperimentalFeatures === true,
-      warningReason: !isV4
+      warningReason: !isBetaEnabled
         ? `Compact Session View is only available on the events-backed session view. Turn on ${V4_PREVIEW_LABEL} to enable it.`
         : authSession.data?.environment.enableExperimentalFeatures === true
           ? "This preview is enabled by LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES, so a per-user opt-out does not disable it."
           : undefined,
       onToggle: onToggle("modernSession"),
-      isToggling: setFeaturePreviewEnabled.isPending,
-    },
-    normalizedIoPreview: {
-      enabled:
-        authSession.data?.user?.featureFlags.normalizedIoPreview === true ||
-        authSession.data?.environment.enableExperimentalFeatures === true,
-      disabled:
-        authSession.data?.environment.enableExperimentalFeatures === true,
-      warningReason:
-        authSession.data?.environment.enableExperimentalFeatures === true
-          ? "This preview is enabled by LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES, so a per-user opt-out does not disable it."
-          : undefined,
-      onToggle: onToggle("normalizedIoPreview"),
       isToggling: setFeaturePreviewEnabled.isPending,
     },
   };

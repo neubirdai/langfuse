@@ -32,7 +32,7 @@ import {
   DatasetRunItemUpsertEventType,
   classifyEvaluatorLlmError,
   blockEvaluator,
-  buildEvalExecutionData,
+  buildEvalExecutionMetadata,
   EvaluatorBlockSource,
   executeLlmEvaluator,
   type CodeEvalScoreWithName,
@@ -56,7 +56,6 @@ import {
   Observation,
   EvalTargetObject,
   getEvaluatorBlockMetadata,
-  getEvaluatorPromptMessages,
   getBlockReasonForInvalidModelConfig,
   isEvalRuleExecutable,
   type EvalTemplateLlmAsAJudge,
@@ -65,7 +64,6 @@ import {
   type EvalOutputResult,
   extractValueFromObject,
   validateEvaluatorFiltersForTarget,
-  type EvalExecutionContext,
 } from "@langfuse/shared";
 import { env } from "../../env";
 import { prisma } from "@langfuse/shared/src/db";
@@ -945,7 +943,6 @@ export async function runLLMAsJudgeEvaluation({
   template,
   extractedVariables,
   executionMetadata,
-  evaluationContext,
   deps,
   evaluatorId,
 }: {
@@ -956,7 +953,6 @@ export async function runLLMAsJudgeEvaluation({
   template: EvalTemplateLlmAsAJudge;
   extractedVariables: ExtractedVariable[];
   executionMetadata: Record<string, string>;
-  evaluationContext: EvalExecutionContext;
   deps: EvalExecutionDeps;
   /**
    * Evaluator v2 identity, when the execution came from an evaluation rule.
@@ -1084,10 +1080,7 @@ export async function runLLMAsJudgeEvaluation({
       let evaluatorExecution: Awaited<ReturnType<typeof executeLlmEvaluator>>;
       try {
         evaluatorExecution = await executeLlmEvaluator({
-          promptMessages: getEvaluatorPromptMessages({
-            prompt: template.prompt,
-            promptMessages: template.promptMessages,
-          }),
+          templatePrompt: template.prompt,
           variables: extractedVariables,
           outputDefinition: parsedOutputDefinition.data,
           callLlm: async ({
@@ -1144,8 +1137,9 @@ export async function runLLMAsJudgeEvaluation({
                       traceId: executionTraceId,
                       traceName: `Execute evaluator: ${template.name}`,
                       environment: LangfuseInternalTraceEnvironment.LLMJudge,
-                      metadata: executionMetadata,
-                      evaluationContext,
+                      metadata: {
+                        ...executionMetadata,
+                      },
                     },
                   });
                   llmSpan.setAttribute("eval.llm.outcome", "success");
@@ -1225,7 +1219,6 @@ export async function runLLMAsJudgeEvaluation({
         scores,
         executionTraceId,
         metadata: executionMetadata,
-        evaluationContext,
       };
     },
   );
@@ -1271,7 +1264,7 @@ function toNormalizedScores(params: {
 export async function executeLLMAsJudgeEvaluation(
   params: Omit<
     Parameters<typeof runLLMAsJudgeEvaluation>[0],
-    "deps" | "executionMetadata" | "evaluationContext"
+    "deps" | "executionMetadata"
   > & {
     environment: string;
     deps?: EvalExecutionDeps;
@@ -1281,7 +1274,7 @@ export async function executeLLMAsJudgeEvaluation(
   },
 ): Promise<void> {
   const deps = params.deps ?? createProductionEvalExecutionDeps();
-  const executionData = buildEvalExecutionData({
+  const executionMetadata = buildEvalExecutionMetadata({
     type: "JOB",
     jobExecutionId: params.jobExecutionId,
     jobConfigurationId: params.job.jobConfigurationId,
@@ -1300,7 +1293,7 @@ export async function executeLLMAsJudgeEvaluation(
   const result = await runLLMAsJudgeEvaluation({
     ...params,
     deps,
-    ...executionData,
+    executionMetadata,
   });
 
   await completeEvalExecution({
@@ -1386,7 +1379,6 @@ async function resolveTraceExecution(params: {
     name: evaluator.name,
     version: version.version,
     prompt: version.prompt,
-    promptMessages: version.promptMessages,
     type: evaluator.type,
     partner: version.partner,
     model: version.model,

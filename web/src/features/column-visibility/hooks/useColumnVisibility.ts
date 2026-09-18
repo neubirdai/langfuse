@@ -3,11 +3,6 @@ import { type LangfuseColumnDef } from "@/src/components/table/types";
 import useLocalStorage from "@/src/components/useLocalStorage";
 import { useEffect } from "react";
 import isEqual from "lodash/isEqual";
-import {
-  hasRunMigration,
-  markMigrationRun,
-  type OneTimeMigration,
-} from "@/src/features/column-visibility/lib/one-time-migration";
 
 // returns deep copy of local storage object
 const readStoredVisibilityState = (
@@ -46,7 +41,6 @@ function setVisibility<TData>(
 function useColumnVisibility<TData>(
   localStorageKey: string,
   columns: LangfuseColumnDef<TData>[],
-  migrations?: OneTimeMigration<VisibilityState>[],
 ) {
   const initialVisibilityState = () => {
     const storedVisibilityState = readStoredVisibilityState(localStorageKey);
@@ -61,28 +55,18 @@ function useColumnVisibility<TData>(
     useLocalStorage<VisibilityState>(localStorageKey, initialVisibilityState());
 
   useEffect(() => {
-    let initialColumnVisibility = initialVisibilityState();
+    const initialColumnVisibility = initialVisibilityState();
     Object.keys(initialColumnVisibility).forEach((key) => {
       if (Object.hasOwn(columnVisibility, key)) {
         initialColumnVisibility[key] = columnVisibility[key];
       }
     });
 
-    // Apply any opt-in one-time migrations (e.g. a column that became visible
-    // by default). Each runs at most once, guarded by its versionKey.
-    migrations?.forEach((migration) => {
-      if (hasRunMigration(migration.versionKey)) return;
-      const migrated = migration.apply(initialColumnVisibility);
-      if (migrated === null) return; // deferred, retry on a later render
-      initialColumnVisibility = migrated;
-      markMigrationRun(migration.versionKey);
-    });
-
     if (!isEqual(initialColumnVisibility, columnVisibility)) {
       setColumnVisibility(initialColumnVisibility);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnVisibility, setColumnVisibility, columns, migrations]);
+  }, [columnVisibility, setColumnVisibility, columns]);
 
   return [columnVisibility, setColumnVisibility] as const;
 }

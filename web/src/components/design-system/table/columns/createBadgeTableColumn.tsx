@@ -1,8 +1,7 @@
-/* eslint-disable boundaries/dependencies */
 import { type RowData } from "@tanstack/react-table";
 
+import { TableBadgeLoadingCell } from "@/src/components/table/loading-cells";
 import { Badge } from "@/src/components/ui/badge";
-import { Skeleton } from "@/src/components/ui/skeleton";
 import {
   createTableColumn,
   type TableColumnOptions,
@@ -13,7 +12,7 @@ export function createBadgeTableColumn<TData extends RowData>(
 ) {
   return createTableColumn<TData, string>({
     ...options,
-    loadingCell: <Skeleton className="h-5 w-16 shrink-0 rounded-sm" />,
+    loadingCell: <TableBadgeLoadingCell />,
     renderCell: (value) =>
       value ? (
         <Badge

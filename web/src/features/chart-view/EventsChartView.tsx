@@ -7,7 +7,6 @@ import { chartConfigToWidgetInput } from "./lib/chartConfigToWidget";
 import { toChartFilters } from "./lib/chartFilterCompatibility";
 import { ChartViewPanel } from "./components/ChartViewPanel";
 import { AddToDashboardButton } from "./components/AddToDashboardButton";
-import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 
 /**
  * Production chart view for the v4 events table. Builds the observations
@@ -31,10 +30,6 @@ export function EventsChartView({
   config: ChartViewConfig;
   onConfigChange: (patch: Partial<ChartViewConfig>) => void;
 }) {
-  const canManageDashboards = useHasProjectAccess({
-    projectId,
-    scope: "dashboards:CUD",
-  });
   const filters = useMemo(() => toChartFilters(filterState), [filterState]);
 
   const query = useMemo(
@@ -51,7 +46,7 @@ export function EventsChartView({
     { projectId, query, version: "v2" },
     {
       enabled: validRange,
-      meta: { silentHttpCodes: [412, 422] },
+      meta: { silentHttpCodes: [422] },
       trpc: { context: { skipBatch: true } },
     },
   );
@@ -81,12 +76,7 @@ export function EventsChartView({
       isLoading={validRange && queryResult.isPending && !queryResult.isError}
       error={error}
       chartActions={
-        canManageDashboards && (
-          <AddToDashboardButton
-            projectId={projectId}
-            widgetInput={widgetInput}
-          />
-        )
+        <AddToDashboardButton projectId={projectId} widgetInput={widgetInput} />
       }
     />
   );

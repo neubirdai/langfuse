@@ -80,12 +80,3 @@ export type ApiAccessScopeIngestion = BaseApiAccessScope &
   MakeOptional<ApiAccessScopeMetadata>;
 
 export type ApiAccessScope = BaseApiAccessScope & ApiAccessScopeMetadata;
-
-// Gateway ingestion token don't specify the originating API key as they might be
-// batched across users
-export type ApiAccessScopeWithOptionalApiKeyId = Omit<
-  ApiAccessScope,
-  "apiKeyId"
-> & {
-  apiKeyId?: string;
-};

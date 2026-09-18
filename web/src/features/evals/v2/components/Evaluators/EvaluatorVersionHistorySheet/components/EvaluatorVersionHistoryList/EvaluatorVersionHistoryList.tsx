@@ -27,7 +27,7 @@ function toEvaluatorDefinition(
 
   return {
     type: EvalTemplateTypeEnum.LLM_AS_JUDGE,
-    promptMessages: version.promptMessages!,
+    prompt: version.prompt,
     // Each version pins the model it ran with; the project default only fills
     // in when it never had an explicit one.
     selectedModel:

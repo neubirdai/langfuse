@@ -15,7 +15,6 @@ import {
 export default withMiddlewares({
   POST: createAuthedProjectAPIRoute({
     name: "Create Annotation Queue Assignment",
-    action: "annotationQueueAssignments:CUD",
     bodySchema: CreateAnnotationQueueAssignmentBody,
     querySchema: AnnotationQueueAssignmentQuery,
     responseSchema: CreateAnnotationQueueAssignmentResponse,
@@ -35,7 +34,6 @@ export default withMiddlewares({
 
   DELETE: createAuthedProjectAPIRoute({
     name: "Delete Annotation Queue Assignment",
-    action: "annotationQueueAssignments:CUD",
     querySchema: AnnotationQueueAssignmentQuery,
     bodySchema: DeleteAnnotationQueueAssignmentBody,
     responseSchema: DeleteAnnotationQueueAssignmentResponse,

@@ -14,8 +14,6 @@ import {
 import {
   ClickhouseClientType,
   convertDateToClickhouseDateTime,
-  toClickhouseDateTime,
-  parseClickhouseUTCDateTimeFormat,
   convertObservationReadToInsert,
   convertScoreReadToInsert,
   convertTraceReadToInsert,
@@ -56,7 +54,6 @@ import {
   normalizeToolsForObservation,
   hasNoEvalConfigsCache,
   buildClickHouseLogComment,
-  sanitizeSdkMetricTagValue,
   type IngestionAttribution,
   type PricingTierMatchAttributes,
 } from "@langfuse/shared/src/server";
@@ -306,7 +303,6 @@ export class IngestionService {
     const modelParameters = parseEventModelParameters(
       eventData.modelParameters,
     );
-    const metadata = eventData.metadata ?? {};
 
     // Runs outside the modelName gate below so model-less events with provided
     // usage are still checked.
@@ -341,7 +337,7 @@ export class IngestionService {
             projectId: eventData.projectId,
             pricingMatchAttributeValues: {
               modelParameters,
-              metadata,
+              metadata: eventData.metadata,
             },
             observationRecord: {
               id: eventData.spanId,
@@ -357,14 +353,17 @@ export class IngestionService {
         : null,
     ]);
 
-    const now = toClickhouseDateTime();
+    const now = this.getMicrosecondTimestamp();
 
     // Flatten raw metadata first (before stringification destroys nested structure)
-    const flattened = flattenJsonToPathArrays(metadata);
+    const flattened = eventData.metadata
+      ? flattenJsonToPathArrays(eventData.metadata)
+      : { names: [], values: [] };
     const metadataNames = flattened.names;
     // Defensive: coerce null/undefined to empty string for Array(String) ClickHouse column.
     // Should not be required as convertValueToPlainJavascript() never returns null.
     const metadataValues = flattened.values.map((v) => v ?? "");
+
     const eventRecord: EventRecordInsertType = {
       // Required identifiers
       id: eventData.spanId,
@@ -397,10 +396,10 @@ export class IngestionService {
       status_message: eventData.statusMessage,
 
       // Timestamps
-      start_time: toClickhouseDateTime(eventData.startTimeISO),
-      end_time: toClickhouseDateTime(eventData.endTimeISO),
+      start_time: this.getMicrosecondTimestamp(eventData.startTimeISO),
+      end_time: this.getMicrosecondTimestamp(eventData.endTimeISO),
       completion_start_time: eventData.completionStartTime
-        ? toClickhouseDateTime(eventData.completionStartTime)
+        ? this.getMicrosecondTimestamp(eventData.completionStartTime)
         : null,
 
       // Prompt
@@ -440,10 +439,6 @@ export class IngestionService {
       // Metadata
       metadata_names: metadataNames,
       metadata_values: metadataValues,
-      evaluator_id: eventData.evaluationContext?.evaluatorId,
-      evaluation_rule_id: eventData.evaluationContext?.evaluationRuleId,
-      evaluator_execution_is_test:
-        eventData.evaluationContext?.evaluatorExecutionIsTest,
 
       // Source/instrumentation metadata
       source: eventData.source,
@@ -554,10 +549,12 @@ export class IngestionService {
 
             if (!runData || !itemData) return [];
 
-            const timestamp = toClickhouseDateTime(event.body.createdAt);
+            const timestamp = event.body.createdAt
+              ? new Date(event.body.createdAt).getTime()
+              : new Date().getTime();
 
             const datasetItemVersion = itemData.validFrom
-              ? toClickhouseDateTime(itemData.validFrom)
+              ? itemData.validFrom.getTime()
               : null;
 
             return [
@@ -580,7 +577,7 @@ export class IngestionService {
                 dataset_run_metadata: runData.metadata
                   ? convertPostgresJsonToMetadataRecord(runData.metadata)
                   : {},
-                dataset_run_created_at: toClickhouseDateTime(runData.createdAt),
+                dataset_run_created_at: runData.createdAt.getTime(),
                 // enriched with item data
                 dataset_item_version: datasetItemVersion,
                 dataset_item_input: JSON.stringify(itemData.input),
@@ -620,15 +617,8 @@ export class IngestionService {
     } = params;
     if (scoreEventList.length === 0) return;
 
-    // Re-sending a score with the same id and timestamp is the documented way
-    // to overwrite it, so ties must keep arrival order for the later one to
-    // win. Score events are all creates, so no create-first rule is needed.
-    const timeSortedEvents = scoreEventList
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-      );
+    const timeSortedEvents =
+      IngestionService.toTimeSortedEventList(scoreEventList);
 
     const minTimestamp = Math.min(
       ...timeSortedEvents.flatMap((e) =>
@@ -661,19 +651,12 @@ export class IngestionService {
               scoreId: entityId,
               projectId,
             });
-            const rawMetadata = scoreEvent.body.metadata
-              ? convertJsonSchemaToRecord(scoreEvent.body.metadata)
-              : {};
-            const evaluationFields =
-              scoreEvent.body as ScoreEventType["body"] & {
-                evaluatorId?: string;
-                evaluationRuleId?: string;
-              };
+
             return {
               id: entityId,
               project_id: projectId,
               environment: validatedScore.environment,
-              timestamp: toClickhouseDateTime(scoreEvent.timestamp),
+              timestamp: this.getMillisecondTimestamp(scoreEvent.timestamp),
               name: validatedScore.name,
               value: validatedScore.value,
               source: validatedScore.source,
@@ -684,9 +667,9 @@ export class IngestionService {
               observation_id: validatedScore.observationId,
               config_id: validatedScore.configId,
               comment: validatedScore.comment,
-              metadata: convertRecordValuesToString(rawMetadata),
-              evaluator_id: evaluationFields.evaluatorId,
-              evaluation_rule_id: evaluationFields.evaluationRuleId,
+              metadata: scoreEvent.body.metadata
+                ? convertJsonSchemaToRecord(scoreEvent.body.metadata)
+                : {},
               string_value: validatedScore.stringValue,
               long_string_value: validatedScore.longStringValue,
               execution_trace_id: validatedScore.executionTraceId,
@@ -694,9 +677,9 @@ export class IngestionService {
               ingestion_api_key: attribution.ingestionApiKey,
               ingestion_sdk_name: attribution.ingestionSdkName,
               ingestion_sdk_version: attribution.ingestionSdkVersion,
-              created_at: toClickhouseDateTime(),
-              updated_at: toClickhouseDateTime(),
-              event_ts: toClickhouseDateTime(scoreEvent.timestamp),
+              created_at: Date.now(),
+              updated_at: Date.now(),
+              event_ts: new Date(scoreEvent.timestamp).getTime(),
               is_deleted: 0,
             };
             // Gracefully handle any score schema validation errors, skip the score insert and reject silently.
@@ -745,9 +728,6 @@ export class IngestionService {
         reason: "score_validation_dropped",
         source: "api",
         domain: "score",
-        projectId,
-        sdkName: sanitizeSdkMetricTagValue(attribution.ingestionSdkName),
-        sdkVersion: sanitizeSdkMetricTagValue(attribution.ingestionSdkVersion),
       });
     }
 
@@ -775,8 +755,7 @@ export class IngestionService {
         scoreRecords,
       });
     finalScoreRecord.created_at =
-      clickhouseScoreRecord?.created_at ??
-      toClickhouseDateTime(createdAtTimestamp);
+      clickhouseScoreRecord?.created_at ?? createdAtTimestamp.getTime();
 
     this.clickHouseWriter.addToQueue(TableName.Scores, finalScoreRecord);
   }
@@ -853,8 +832,7 @@ export class IngestionService {
       traceRecords,
     });
     finalTraceRecord.created_at =
-      clickhouseTraceRecord?.created_at ??
-      toClickhouseDateTime(createdAtTimestamp);
+      clickhouseTraceRecord?.created_at ?? createdAtTimestamp.getTime();
 
     finalTraceRecord.input = finalIO.input ?? clickhouseTraceRecord?.input;
     finalTraceRecord.output = finalIO.output ?? clickhouseTraceRecord?.output;
@@ -921,9 +899,7 @@ export class IngestionService {
       payload: {
         projectId,
         traceId: entityId,
-        exactTimestamp: parseClickhouseUTCDateTimeFormat(
-          finalTraceRecord.timestamp,
-        ),
+        exactTimestamp: new Date(finalTraceRecord.timestamp),
         traceEnvironment: finalTraceRecord.environment,
       },
       id: randomUUID(),
@@ -1000,8 +976,7 @@ export class IngestionService {
       clickhouseObservationRecord,
     });
     mergedObservationRecord.created_at =
-      clickhouseObservationRecord?.created_at ??
-      toClickhouseDateTime(createdAtTimestamp);
+      clickhouseObservationRecord?.created_at ?? createdAtTimestamp.getTime();
     mergedObservationRecord.level = mergedObservationRecord.level ?? "DEFAULT";
 
     // Search for the first non-null input and output in the observation events and set them on the merged result.
@@ -1087,13 +1062,13 @@ export class IngestionService {
         timestamp: finalObservationRecord.start_time,
         project_id: projectId,
         environment: finalObservationRecord.environment,
-        created_at: toClickhouseDateTime(),
-        updated_at: toClickhouseDateTime(),
+        created_at: Date.now(),
+        updated_at: Date.now(),
         metadata: {},
         tags: [],
         bookmarked: false,
         public: false,
-        event_ts: toClickhouseDateTime(),
+        event_ts: Date.now(),
         is_deleted: 0,
       };
 
@@ -1232,42 +1207,24 @@ export class IngestionService {
       result = overwriteObject(result, record, immutableEntityKeys);
     }
 
-    result.event_ts = toClickhouseDateTime();
+    result.event_ts = new Date().getTime();
 
     return result;
   }
 
   private static toTimeSortedEventList<
-    T extends TraceEventType | ObservationEvent,
+    T extends TraceEventType | ScoreEventType | ObservationEvent,
   >(eventList: T[]): T[] {
-    // The merge folds this list left to right with a last-wins overwrite, so
-    // the winner for any group is whichever event sorts last. Events arrive in
-    // upload order (the queue processor lists files by upload time), captured
-    // here as the arrival index and used as the tie-break so the ordering is a
-    // total order rather than relying on the sort engine's handling of ties.
-    return eventList
-      .map((event, index) => ({ event, index }))
-      .sort((a, b) => {
-        const aTimestamp = new Date(a.event.timestamp).getTime();
-        const bTimestamp = new Date(b.event.timestamp).getTime();
-        if (aTimestamp !== bTimestamp) return aTimestamp - bTimestamp;
+    return eventList.slice().sort((a, b) => {
+      const aTimestamp = new Date(a.timestamp).getTime();
+      const bTimestamp = new Date(b.timestamp).getTime();
 
-        const aIsCreate = a.event.type.includes("create");
-        const bIsCreate = b.event.type.includes("create");
-        // Creates sort before updates, so an update at the same timestamp wins.
-        if (aIsCreate !== bIsCreate) return aIsCreate ? -1 : 1;
+      if (aTimestamp === bTimestamp) {
+        return a.type.includes("create") ? -1 : 1; // create events should come first
+      }
 
-        // Tied creates: the first-arriving one wins. OTel emits a root span's
-        // trace-create and a child span's trace-create carrying explicit
-        // update_current_trace() values at the same span start time; the child
-        // arrives first and its explicit fields must beat the root's derived
-        // ones. Placing the earlier arrival last makes it win the merge.
-        if (aIsCreate) return b.index - a.index;
-
-        // Tied updates: the last-arriving one wins.
-        return a.index - b.index;
-      })
-      .map(({ event }) => event);
+      return aTimestamp - bTimestamp;
+    });
   }
 
   private async getPrompt(
@@ -1872,7 +1829,7 @@ export class IngestionService {
     return traceEventList.map((trace) => {
       const traceRecord: TraceRecordInsertType = {
         id: entityId,
-        timestamp: toClickhouseDateTime(
+        timestamp: this.getMillisecondTimestamp(
           trace.body.timestamp ?? trace.timestamp,
         ),
         // timestamp: ("timestamp" in trace.body && trace.body.timestamp
@@ -1895,9 +1852,9 @@ export class IngestionService {
         // input: this.stringify(trace.body.input),
         // output: this.stringify(trace.body.output), // convert even json to string
         session_id: trace.body.sessionId,
-        created_at: toClickhouseDateTime(),
-        updated_at: toClickhouseDateTime(),
-        event_ts: toClickhouseDateTime(trace.timestamp),
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        event_ts: new Date(trace.timestamp).getTime(),
         is_deleted: 0,
       };
 
@@ -2020,17 +1977,19 @@ export class IngestionService {
         name: obs.body.name,
         environment:
           "environment" in obs.body ? obs.body.environment : "default",
-        start_time: toClickhouseDateTime(obs.body.startTime ?? obs.timestamp),
+        start_time: this.getMillisecondTimestamp(
+          obs.body.startTime ?? obs.timestamp,
+        ),
         // start_time: ("startTime" in obs.body && obs.body.startTime
         //   ? this.getMillisecondTimestamp(obs.body.startTime)
         //   : undefined) as number, // Casting here is dirty, but our requirement is to have a start_time _after_ the merge
         end_time:
           "endTime" in obs.body && obs.body.endTime
-            ? toClickhouseDateTime(obs.body.endTime)
+            ? this.getMillisecondTimestamp(obs.body.endTime)
             : undefined,
         completion_start_time:
           "completionStartTime" in obs.body && obs.body.completionStartTime
-            ? toClickhouseDateTime(obs.body.completionStartTime)
+            ? this.getMillisecondTimestamp(obs.body.completionStartTime)
             : undefined,
         metadata: obs.body.metadata
           ? convertJsonSchemaToRecord(obs.body.metadata)
@@ -2058,9 +2017,9 @@ export class IngestionService {
         prompt_id: prompt?.id,
         prompt_name: prompt?.name,
         prompt_version: prompt?.version,
-        created_at: toClickhouseDateTime(),
-        updated_at: toClickhouseDateTime(),
-        event_ts: toClickhouseDateTime(obs.timestamp),
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        event_ts: new Date(obs.timestamp).getTime(),
         is_deleted: 0,
       };
 
@@ -2076,6 +2035,14 @@ export class IngestionService {
     return typeof obj === "string" ? obj : JSON.stringify(obj);
   }
 
+  private getMicrosecondTimestamp(timestamp?: string | null): number {
+    return timestamp ? new Date(timestamp).getTime() * 1000 : Date.now() * 1000;
+  }
+
+  private getMillisecondTimestamp(timestamp?: string | null): number {
+    return timestamp ? new Date(timestamp).getTime() : Date.now();
+  }
+
   /**
    * Returns a partition-aware timestamp for staging table writes.
    * If the createdAtTimestamp is within the last 2 minutes, returns it as-is.
@@ -2089,7 +2056,7 @@ export class IngestionService {
    * that data is processed correctly. Worst case is slightly more duplication in the events table
    * which should resolve automatically using the ReplacingMergeTree.
    */
-  private getPartitionAwareTimestamp(createdAtTimestamp: Date): string {
+  private getPartitionAwareTimestamp(createdAtTimestamp: Date): number {
     const now = Date.now();
     const createdAt = createdAtTimestamp.getTime();
     const ageInMs = now - createdAt;
@@ -2097,7 +2064,7 @@ export class IngestionService {
 
     // If the createdAtTimestamp is within the last 2 minutes, use it
     // Otherwise, use the current timestamp to avoid updating old partitions
-    return toClickhouseDateTime(ageInMs < twoMinutesInMs ? createdAt : now);
+    return ageInMs < twoMinutesInMs ? createdAt : now;
   }
 }
 

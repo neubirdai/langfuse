@@ -1,7 +1,11 @@
-/* eslint-disable boundaries/dependencies */
 import { type CellContext, type RowData } from "@tanstack/react-table";
 
-import { Avatar } from "@/src/components/design-system/Avatar/Avatar";
+import { TableTextLoadingCell } from "@/src/components/table/loading-cells";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/src/components/ui/avatar";
 import { Skeleton } from "@/src/components/ui/skeleton";
 import {
   createTableColumn,
@@ -44,10 +48,10 @@ export function createUserTableColumn<
     variant === "avatar" ? (
       <div className="flex items-center space-x-2">
         <Skeleton className="h-7 w-7 shrink-0 rounded-full" />
-        <Skeleton className="h-4 w-1/2" />
+        <TableTextLoadingCell />
       </div>
     ) : (
-      <Skeleton className="h-4 w-1/2" />
+      <TableTextLoadingCell />
     );
 
   return createTableColumn<TData, TValue>({
@@ -70,9 +74,18 @@ export function createUserTableColumn<
         );
       }
 
+      const initials = name
+        ?.split(" ")
+        .map((word) => word[0])
+        .slice(0, 2)
+        .join("");
+
       return (
         <div className="flex items-center space-x-2">
-          <Avatar size="md" src={image ?? undefined} displayName={label} />
+          <Avatar className="h-7 w-7">
+            <AvatarImage src={image ?? undefined} alt={name ?? "User Avatar"} />
+            <AvatarFallback>{initials}</AvatarFallback>
+          </Avatar>
           <span>{label}</span>
         </div>
       );

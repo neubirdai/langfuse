@@ -47,21 +47,14 @@ export function JSONView(props: {
   controlButtons?: React.ReactNode;
   externalJsonCollapsed?: boolean;
   onToggleCollapse?: () => void;
-  collapseDepth?: number;
-  /** Skip normalization of prepared payloads to preserve exact source strings and field-marker identities. */
-  preserveStrings?: boolean;
-  customizeNode?: (node: unknown) => React.ReactElement | undefined;
 }) {
   // some users ingest stringified json nested in json, parse it. Also decode
   // \uXXXX escapes (e.g. Japanese ingested with Python ensure_ascii=True) so
   // non-ASCII content renders as real characters. Already-decoded strings are
   // a no-op (decodeUnicodeEscapesOnly returns early when there is no backslash).
   const parsedJson = useMemo(
-    () =>
-      props.preserveStrings
-        ? props.json
-        : decodeUnicodeInJson(deepParseJson(props.json)),
-    [props.json, props.preserveStrings],
+    () => decodeUnicodeInJson(deepParseJson(props.json)),
+    [props.json],
   );
   const { resolvedTheme } = useTheme();
   const { setIsMarkdownEnabled } = useMarkdownContext();
@@ -74,8 +67,7 @@ export function JSONView(props: {
       ? 100_000_000 // if null, show all (100M chars)
       : (props.collapseStringsAfterLength ?? 500);
 
-  const isFullyCollapsed = props.externalJsonCollapsed ?? internalCollapsed;
-  const collapsed = isFullyCollapsed ? 1 : (props.collapseDepth ?? false);
+  const isCollapsed = props.externalJsonCollapsed ?? internalCollapsed;
 
   const handleOnCopy = (event?: React.MouseEvent<HTMLButtonElement>) => {
     if (event) {
@@ -143,8 +135,8 @@ export function JSONView(props: {
               src={parsedJson}
               theme="github"
               dark={resolvedTheme === "dark"}
-              collapsed={collapsed}
-              collapseObjectsAfterLength={isFullyCollapsed ? 0 : 20}
+              collapsed={isCollapsed ? 1 : false}
+              collapseObjectsAfterLength={isCollapsed ? 0 : 20}
               collapseStringsAfterLength={collapseStringsAfterLength}
               collapseStringMode="word"
               customizeCollapseStringUI={(fullSTring, truncated) =>
@@ -154,14 +146,12 @@ export function JSONView(props: {
                   ""
                 )
               }
-              displaySize={isFullyCollapsed ? "collapsed" : "expanded"}
+              displaySize={isCollapsed ? "collapsed" : "expanded"}
               matchesURL={true}
               // Render previewable media (Langfuse refs, data URIs, media URLs)
               // as a hover-to-peek chip instead of the raw string; everything
               // else falls through to the default value rendering.
               customizeNode={({ node }) => {
-                const customNode = props.customizeNode?.(node);
-                if (customNode !== undefined) return customNode;
                 const descriptor = classifyMediaValue(node);
                 return descriptor ? (
                   <MediaReferenceTag descriptor={descriptor} />
@@ -214,9 +204,9 @@ export function JSONView(props: {
                 size="icon-xs"
                 onClick={handleToggleCollapse}
                 className="hover:bg-border -mr-2"
-                title={isFullyCollapsed ? "Expand all" : "Collapse all"}
+                title={isCollapsed ? "Expand all" : "Collapse all"}
               >
-                {isFullyCollapsed ? (
+                {isCollapsed ? (
                   <UnfoldVertical className="h-3 w-3" />
                 ) : (
                   <FoldVertical className="h-3 w-3" />

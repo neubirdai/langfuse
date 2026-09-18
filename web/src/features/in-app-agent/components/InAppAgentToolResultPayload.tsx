@@ -17,22 +17,20 @@ const TOOL_CALL_RESULT_PRESENTATION = {
 >;
 
 export function InAppAgentToolResultPayload({
-  status,
-  value,
-  toolName,
+  tool,
 }: {
-  status: InAppAgentToolCallContent["status"];
-  value: string;
-  toolName?: string;
+  tool: InAppAgentToolCallContent;
 }) {
-  const presentation = TOOL_CALL_RESULT_PRESENTATION[status];
+  if (tool.result === undefined && tool.error === undefined) {
+    return null;
+  }
+
+  const presentation = TOOL_CALL_RESULT_PRESENTATION[tool.status];
 
   return (
     <InAppAgentToolPayload
-      toolName={toolName}
-      kind="result"
       label={presentation.label}
-      value={value}
+      value={tool.error ?? tool.result ?? ""}
       variant={presentation.variant}
     />
   );

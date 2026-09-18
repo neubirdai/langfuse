@@ -1,5 +1,5 @@
 import { type FilterState } from "@langfuse/shared";
-import { resolveField } from "@/src/features/search-bar";
+import { resolveField } from "@/src/features/search-bar/lib/fields";
 
 /**
  * Which of the events table's sidebar/search filters a chart can honour, and a
@@ -68,11 +68,9 @@ const MEASURE_COLUMNS = new Set([
   "latency",
   "timeToFirstToken",
   "inputTokens",
-  "cachedInputTokens",
   "outputTokens",
   "totalTokens",
   "inputCost",
-  "cachedInputCost",
   "outputCost",
   "totalCost",
 ]);

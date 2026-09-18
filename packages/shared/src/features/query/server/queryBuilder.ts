@@ -592,7 +592,7 @@ export class QueryBuilder {
         } else {
           clickhouseSelect = dimension.sql;
         }
-        type = dimension.type ?? "string";
+        type = "string";
         if (dimension.relationTable) {
           clickhouseTableName = dimension.relationTable;
         }
@@ -901,15 +901,6 @@ export class QueryBuilder {
     return `ARRAY JOIN\n  ${d.sql} AS ${d.alias ?? d.sql},\n  ${d.pairExpand!.valuesSql} AS ${d.pairExpand!.valueAlias}`;
   }
 
-  /**
-   * ARRAY JOIN already binds the pairExpand key (`mapKeys(...) AS costType`).
-   * Selecting `costType AS costType` in the same query makes ClickHouse throw
-   * "Duplicate alias in ARRAY JOIN".
-   */
-  private pairExpandKeyColumn(dimension: AppliedDimensionType): string {
-    return dimension.alias ?? dimension.sql;
-  }
-
   private buildWhereClause(
     filterList: FilterList,
     parameters: Record<string, unknown>,
@@ -1084,7 +1075,7 @@ export class QueryBuilder {
           // Note: the paired value column (e.g. cost_value) is NOT in GROUP BY and IS
           // wrapped in any() in buildInnerMetricsPart, so the outer query can re-aggregate it.
           if (dimension.pairExpand) {
-            return this.pairExpandKeyColumn(dimension);
+            return `${dimension.alias} as ${dimension.alias ?? dimension.sql}`;
           }
           // Explode array dimensions using arrayJoin
           if (dimension.explodeArray) {
@@ -1178,10 +1169,9 @@ export class QueryBuilder {
     // Add regular dimensions
     if (appliedDimensions.length > 0) {
       dimensions += `${appliedDimensions
-        .map((dimension) =>
-          dimension.pairExpand
-            ? this.pairExpandKeyColumn(dimension)
-            : `${dimension.alias ?? dimension.sql} as ${dimension.alias || dimension.sql}`,
+        .map(
+          (dimension) =>
+            `${dimension.alias ?? dimension.sql} as ${dimension.alias || dimension.sql}`,
         )
         .join(",\n")},`;
     }
@@ -1376,7 +1366,8 @@ export class QueryBuilder {
         appliedDimensions
           .map((d) => {
             if (d.pairExpand) {
-              return this.pairExpandKeyColumn(d);
+              // Bare reference — already projected by the ARRAY JOIN clause
+              return `${d.alias} as ${d.alias ?? d.sql}`;
             }
             if (d.explodeArray) {
               return `arrayJoin(${d.sql}) as ${d.alias ?? d.sql}`;

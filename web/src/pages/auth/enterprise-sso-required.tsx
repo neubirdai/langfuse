@@ -18,8 +18,7 @@ import {
 } from "@/src/components/ui/form";
 import { Input } from "@/src/components/ui/input";
 import { env } from "@/src/env.mjs";
-import { reportError } from "@/src/utils/reportError";
-import { isJsonParseSyntaxError } from "@/src/features/auth/lib/expectedAuthErrors";
+import { captureUnknownError } from "@/src/utils/captureUnknownError";
 
 const enterpriseSsoFormSchema = z.object({
   email: z.email(),
@@ -37,7 +36,6 @@ const PROVIDER_LABELS: Record<string, string> = {
   auth0: "Auth0",
   cognito: "Cognito",
   keycloak: "Keycloak",
-  jumpcloud: "JumpCloud",
   workos: "WorkOS",
   wordpress: "WordPress",
   custom: "Custom OAuth",
@@ -125,11 +123,7 @@ export default function EnterpriseSsoRequiredPage() {
           "Unable to start the Enterprise SSO sign-in flow. Please try again.",
       );
     } catch (err) {
-      reportError(err, {
-        area: "auth.enterpriseSso",
-        expected: isJsonParseSyntaxError(err),
-        extra: { context: "auth.enterpriseSso" },
-      });
+      captureUnknownError("auth.enterpriseSso", err);
       setError(
         "Something went wrong while checking your Enterprise SSO configuration. Please try again.",
       );

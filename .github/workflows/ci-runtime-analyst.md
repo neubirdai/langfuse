@@ -20,12 +20,11 @@ environment: github-agent-workflows
 checkout:
   fetch-depth: 0
 
-# opus 5: this workflow does multi-day timing analysis and root-cause
-# investigation, which benefits from the deeper model. Plain model id only. Do
-# not append the `?effort=` alias suffix: Claude Code rejects it and the awf
-# api-proxy remaps it to a fallback model. gh-aw v0.86 has no frontmatter knob
-# for effort, so Claude Code uses its default effort for this model.
-model: claude-opus-5
+# opus 5 at medium reasoning effort: this workflow does multi-day timing
+# analysis and root-cause investigation, which benefits from the deeper
+# model; medium effort balances thinking depth against the AI-credit budget
+# above. Syntax per the model-alias spec: <model>?effort=<low|medium|high>.
+model: claude-opus-5?effort=medium
 
 engine:
   id: claude
@@ -78,7 +77,8 @@ network:
 tools:
   github:
     toolsets: [actions, pull_requests]
-  bash: [
+  bash:
+    [
       "pnpm:*",
       "npx:*",
       "node:*",
@@ -164,12 +164,13 @@ checklist is only the spine. Every run ends the same way: exactly one issue.
 - [ ] Update all memory files, including `charts/<week>.svg`, `issues.json`,
       and pruned `notes.md`.
 - [ ] Write the FULL report — both filled-in `mermaid` charts (Chart 1 and
-      Chart 2, never the bare template), tables, `## Outcome` section — as the
-      issue body. Before calling `create_issue`, confirm the message you're
-      about to submit literally contains two ` ```mermaid ` blocks ("Report
-      and graph" — final gate). This holds even when you skip a fresh analysis
-      (reuse the latest `history/*.json` numbers and say so); never file an
-      issue with a one-line body ("Report and graph").
+      Chart 2, never the bare template), tables, `## Outcome` section — to
+      the job summary, and use it as the issue body. Before calling
+      `create_issue`, confirm the message you're about to submit literally
+      contains two ` ```mermaid ` blocks ("Report and graph" — final gate).
+      This holds even when you skip a fresh analysis (reuse the latest
+      `history/*.json` numbers and say so); never file an issue with a
+      one-line body ("Report and graph").
 
 ## Extracting bulk data without bloating your own context
 
@@ -235,16 +236,9 @@ prints only the small record below, and discard the raw payload immediately
 after — never `Read` it, never keep it around for a later turn:
 
 ```json
-{
-  "date": "2026-07-27",
-  "runs": 7,
-  "perceivedMedianS": 0,
-  "executionMedianS": 0,
-  "runnerWaitMedianS": 0,
-  "buildMedianS": 0,
-  "runTestsMedianS": 0,
-  "e2eMedianS": 0
-}
+{"date": "2026-07-27", "runs": 7, "perceivedMedianS": 0, "executionMedianS": 0,
+ "runnerWaitMedianS": 0, "buildMedianS": 0, "runTestsMedianS": 0,
+ "e2eMedianS": 0}
 ```
 
 so the raw job and step JSON never enters your own context. Weekly figures are
@@ -293,15 +287,11 @@ the end of every run:
 Extract and keep only the parsed blocks for each run, never the raw log text:
 
 ```json
-{
-  "runId": 123,
-  "event": "merge_group",
-  "slowest": [{ "file": "web/src/x.test.ts", "test": "name", "ms": 4210 }],
-  "slowestFiles": [{ "file": "web/src/x.test.ts", "ms": 9100 }],
-  "retried": [
-    { "file": "web/src/y.test.ts", "test": "name", "retries": 2, "flaky": true }
-  ]
-}
+{"runId": 123, "event": "merge_group",
+ "slowest": [{"file": "web/src/x.test.ts", "test": "name", "ms": 4210}],
+ "slowestFiles": [{"file": "web/src/x.test.ts", "ms": 9100}],
+ "retried": [{"file": "web/src/y.test.ts", "test": "name", "retries": 2,
+              "flaky": true}]}
 ```
 
 An empty `retried` array means the `Retried tests` block was absent, i.e. zero
@@ -327,9 +317,9 @@ this layout:
   flaky tests (from merge-group + pull-request runs).
 - `issues.json` — ledger of every issue this workflow has opened, oldest
   first, entries: `{number, url, openedAt, title, suggestedDiff: bool,
-expectedImpact: {metric, baseline, expected} | null, baselineStats: {..},
-appliedOnMain: bool, appliedAt: null | date, followUps: [{date, action,
-evidence}], lastCheckedAt, outcome}`. When the issue includes a suggested
+  expectedImpact: {metric, baseline, expected} | null, baselineStats: {..},
+  appliedOnMain: bool, appliedAt: null | date, followUps: [{date, action,
+  evidence}], lastCheckedAt, outcome}`. When the issue includes a suggested
   diff, always record `expectedImpact` with the concrete metric (e.g.
   "median tests-web `run tests` step, currently 412s, expected ≤ 370s") and
   the baseline numbers it must be judged against.
@@ -337,7 +327,7 @@ evidence}], lastCheckedAt, outcome}`. When the issue includes a suggested
   issue is created later, in a separate job, after this run's repo-memory
   push already happened, so you can never know its real `number`/`url` in
   the same run that files it. Append this run's entry with `number: null,
-url: null` (title is the reconciliation key), then on the NEXT run,
+  url: null` (title is the reconciliation key), then on the NEXT run,
   before doing anything else, call `list_issues`/`search_issues` for open
   or closed issues titled `CI Runtime Report: ` with the `ci-performance`
   label, match by exact title against any `null`-number ledger entries, and
@@ -376,7 +366,7 @@ url: null` (title is the reconciliation key), then on the NEXT run,
    that could be hoisted, oversized fixtures, unnecessary sleeps/timeouts,
    redundant DB round-trips. A quiet week with no regressions is the best
    time to land one such improvement. Missing baseline history blocks
-   regression _claims_ — it never blocks optimizing a measurably slow test.
+   regression *claims* — it never blocks optimizing a measurably slow test.
 4. Only when you have a concrete improvement whose expected effect you can
    justify from the measured data — and that passed the verification
    described below — include it in this run's issue as a suggested diff.
@@ -506,11 +496,12 @@ against `issues.json`:
 run ends with exactly one issue carrying it.** A quiet week, an early exit,
 or a decision to skip recomputing changes the Outcome section, never the
 report's presence or completeness, and never whether the issue gets filed.
-Use the full report verbatim as the issue body. If you decided not to
-recompute (e.g. a manual re-trigger shortly after the previous analysis), you
-may fill individual days from the latest `history/*.json` and state that those
-days are reused — but reuse never shrinks the chart window (see below): days
-the history does not cover are computed fresh from the API in this run.
+Write the full report to the GitHub job summary AND use it verbatim as the
+issue body. If you decided not to recompute (e.g. a manual re-trigger
+shortly after the previous analysis), you may fill individual days from the
+latest `history/*.json` and state that those days are reused — but reuse
+never shrinks the chart window (see below): days the history does not cover
+are computed fresh from the API in this run.
 
 The report always contains, in order:
 
@@ -547,45 +538,45 @@ three series in one chart, and never move the legend into the chart title
 
 **Chart 1 — pipeline totals:**
 
-🔵 overall incl. wait · 🟠 overall excl. wait · 🟣 runner wait
+  🔵 overall incl. wait · 🟠 overall excl. wait · 🟣 runner wait
 
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#3987e5,#de5a20,#8875e0"}}}}%%
-xychart-beta
-    title "Daily merge-group medians: pipeline totals (seconds)"
-    x-axis [MM-DD, MM-DD, MM-DD]
-    y-axis "seconds" 0 --> 600
-    line [0, 0, 0]
-    line [0, 0, 0]
-    line [0, 0, 0]
-```
+  ```mermaid
+  %%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#3987e5,#de5a20,#8875e0"}}}}%%
+  xychart-beta
+      title "Daily merge-group medians: pipeline totals (seconds)"
+      x-axis [MM-DD, MM-DD, MM-DD]
+      y-axis "seconds" 0 --> 600
+      line [0, 0, 0]
+      line [0, 0, 0]
+      line [0, 0, 0]
+  ```
 
-The gap between 🔵 and 🟠 is the runner-wait share, plotted directly
-as 🟣.
+  The gap between 🔵 and 🟠 is the runner-wait share, plotted directly
+  as 🟣.
 
 **Chart 2 — critical-path segments:**
 
-🔵 run tests · 🟠 Build · 🟣 e2e-tests
+  🔵 run tests · 🟠 Build · 🟣 e2e-tests
 
-```mermaid
-%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#3987e5,#de5a20,#8875e0"}}}}%%
-xychart-beta
-    title "Daily merge-group medians: segments (seconds)"
-    x-axis [MM-DD, MM-DD, MM-DD]
-    y-axis "seconds" 0 --> 600
-    line [0, 0, 0]
-    line [0, 0, 0]
-    line [0, 0, 0]
-```
+  ```mermaid
+  %%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#3987e5,#de5a20,#8875e0"}}}}%%
+  xychart-beta
+      title "Daily merge-group medians: segments (seconds)"
+      x-axis [MM-DD, MM-DD, MM-DD]
+      y-axis "seconds" 0 --> 600
+      line [0, 0, 0]
+      line [0, 0, 0]
+      line [0, 0, 0]
+  ```
 
-Follow the charts with one table carrying the same numbers:
+  Follow the charts with one table carrying the same numbers:
 
-| Day   | overall incl. wait | overall excl. wait | runner wait | run tests | Build | e2e-tests |
-| ----- | ------------------ | ------------------ | ----------- | --------- | ----- | --------- |
-| MM-DD | …                  | …                  | …           | …         | …     | …         |
+  | Day | overall incl. wait | overall excl. wait | runner wait | run tests | Build | e2e-tests |
+  |---|---|---|---|---|---|---|
+  | MM-DD | … | … | … | … | … | … |
 
-Once `history/*.json` holds at least two weeks, add the same two charts
-with ISO weeks on the x-axis (weekly medians, same series and legends).
+  Once `history/*.json` holds at least two weeks, add the same two charts
+  with ISO weeks on the x-axis (weekly medians, same series and legends).
 
 **Final gate before calling `create_issue`:** re-read the exact message
 string you are about to submit and confirm, mechanically, that it contains

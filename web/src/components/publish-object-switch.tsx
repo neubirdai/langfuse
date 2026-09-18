@@ -10,7 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/src/components/ui/tooltip";
-import { useReadPath } from "@/src/features/events/hooks/useReadPath";
+import { useV4Beta } from "@/src/features/events/hooks/useV4Beta";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import { env } from "@/src/env.mjs";
@@ -34,7 +34,7 @@ export const PublishTraceSwitch = (props: {
   /** Hover tooltip for the icon button (suppressed while the popover is open). */
   tooltip?: string;
 }) => {
-  const { isV4 } = useReadPath();
+  const { isBetaEnabled } = useV4Beta();
   const capture = usePostHogClientCapture();
   const hasAccess = useHasProjectAccess({
     projectId: props.projectId,
@@ -54,7 +54,7 @@ export const PublishTraceSwitch = (props: {
   };
   const mut = api.traces.publish.useMutation({
     onMutate: async (input) => {
-      if (isV4) {
+      if (isBetaEnabled) {
         await utils.events.byTraceId.cancel(eventsTraceQueryInput);
 
         const previousEvents = utils.events.byTraceId.getData(
@@ -90,7 +90,7 @@ export const PublishTraceSwitch = (props: {
       return { previousTrace };
     },
     onError: (err, _input, context) => {
-      if (isV4) {
+      if (isBetaEnabled) {
         utils.events.byTraceId.setData(
           eventsTraceQueryInput,
           context?.previousEvents,
@@ -104,7 +104,7 @@ export const PublishTraceSwitch = (props: {
       trpcErrorToast(err);
     },
     onSuccess: async () => {
-      if (!isV4) {
+      if (!isBetaEnabled) {
         await utils.traces.all.invalidate();
       }
     },

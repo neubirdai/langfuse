@@ -9,7 +9,6 @@ import {
 export default withMiddlewares({
   GET: createAuthedProjectAPIRoute({
     name: "Get Comment",
-    action: "comments:read",
     querySchema: GetCommentV1Query,
     responseSchema: GetCommentV1Response,
     fn: async ({ query, auth }) =>

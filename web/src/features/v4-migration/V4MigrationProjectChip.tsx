@@ -1,22 +1,23 @@
 import { type V4MigrationTargetProject } from "@/src/features/v4-migration/V4MigrationPanelProvider";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
-import { type ProjectMigrationReadiness } from "@/src/features/v4-migration/migrationData";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
+import {
+  getProjectMigrationReadiness,
+  type ProjectMigrationStatus,
+} from "@/src/features/v4-migration/migrationData";
 import { useOpenV4MigrationPanel } from "@/src/features/v4-migration/hooks/useOpenV4MigrationPanel";
 import { PARTNER_INTEGRATION_FAQ_URL } from "@/src/features/v4-migration/partnerIntegrationDocs";
 
 export function V4MigrationProjectChip({
   project,
-  readiness,
+  status,
 }: {
   project: V4MigrationTargetProject;
-  readiness: Extract<
-    ProjectMigrationReadiness,
-    "action-needed" | "partner-managed"
-  >;
+  status: ProjectMigrationStatus | undefined;
 }) {
   const openMigrationPanel = useOpenV4MigrationPanel();
   const capture = usePostHogClientCapture();
 
+  const readiness = status ? getProjectMigrationReadiness(status) : "checking";
   // Forced-v3 projects show no migration action — the upgrade is handled by
   // their integration partner. Point them at the FAQ instead.
   if (readiness === "partner-managed") {
@@ -35,6 +36,10 @@ export function V4MigrationProjectChip({
         Update to v4 managed by integration partner
       </a>
     );
+  }
+
+  if (readiness !== "action-needed") {
+    return null;
   }
 
   const handleClick = () => {

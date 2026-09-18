@@ -28,7 +28,7 @@ import { useLazyEvaluatorExecutionCounts } from "@/src/features/evals/hooks/useL
 import { TablePeekView } from "@/src/components/table/peek";
 import { LangfuseIcon } from "@/src/components/design-system/LangfuseIcon/LangfuseIcon";
 import { useEvalCapabilities } from "@/src/features/evals/hooks/useEvalCapabilities";
-import { Alert } from "@/src/components/design-system/Alert/Alert";
+import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 
 const PeekViewEvaluatorConfigDetail = ({
   projectId,
@@ -51,10 +51,7 @@ const PeekViewEvaluatorConfigDetail = ({
     evaluatorId: evalConfig?.id,
     evaluator: evalConfig,
   });
-  const hasAccess = useHasProjectAccess({
-    projectId,
-    scope: "evaluationRule:CUD",
-  });
+  const hasAccess = useHasProjectAccess({ projectId, scope: "evalJob:CUD" });
 
   if (!evalConfig) {
     return <Skeleton className="h-full w-full rounded-none" />;
@@ -136,25 +133,23 @@ const PeekViewEvaluatorConfigDetail = ({
         </div>
 
         {showLegacyReadOnlyNotice ? (
-          <Alert variant="warning" icon={AlertTriangle}>
-            <Alert.Title>Legacy evaluator is read-only</Alert.Title>
-            <Alert.Description>
+          <Alert className="border-light-yellow bg-light-yellow text-dark-yellow [&>svg]:text-dark-yellow">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Legacy evaluator is read-only</AlertTitle>
+            <AlertDescription>
               This evaluator uses a legacy target that the current rule editor
               cannot represent safely. You can review or delete it here, but it
               cannot be edited or reactivated.
-            </Alert.Description>
+            </AlertDescription>
           </Alert>
         ) : null}
       </div>
 
-      {evalConfig.blockedAt && (
-        <EvaluatorPausedCallout
-          projectId={projectId}
-          evalConfig={evalConfig}
-          blockedAt={evalConfig.blockedAt}
-          allowReactivation={!readOnly}
-        />
-      )}
+      <EvaluatorPausedCallout
+        projectId={projectId}
+        evalConfig={evalConfig}
+        allowReactivation={!readOnly}
+      />
 
       <CardDescription className="flex items-center text-sm">
         <span className="mr-2 text-sm font-bold">Referenced Evaluator</span>
@@ -206,12 +201,13 @@ const PeekViewEvaluatorConfigDetail = ({
             }}
           />
         ) : (
-          <Alert icon={AlertTriangle}>
-            <Alert.Title>Referenced evaluator unavailable</Alert.Title>
-            <Alert.Description>
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Referenced evaluator unavailable</AlertTitle>
+            <AlertDescription>
               This legacy rule no longer has an evaluator attached, so its
               evaluator configuration cannot be displayed.
-            </Alert.Description>
+            </AlertDescription>
           </Alert>
         )}
       </div>

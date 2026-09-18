@@ -20,7 +20,7 @@ import { Button } from "@/src/components/ui/button";
 import Link from "next/link";
 import { StringParam, useQueryParams } from "use-query-params";
 import { Input } from "@/src/components/ui/input";
-import { useHasOrganizationAccess } from "@/src/features/rbac";
+import { useHasOrganizationAccess } from "@/src/features/rbac/utils/checkOrganizationAccess";
 import { env } from "@/src/env.mjs";
 import { Fragment } from "react";
 import { useRouter } from "next/router";
@@ -32,19 +32,14 @@ import {
 import { isCloudPlan, planLabels } from "@langfuse/shared";
 import ContainerPage from "@/src/components/layouts/container-page";
 import { type Session } from "next-auth";
-import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
+import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { AgentToolsBanner } from "@/src/features/developer-tools/components/AgentToolsBanner";
-import {
-  V4MigrationBanner,
-  useV4MigrationBannerState,
-} from "@/src/features/v4-migration/V4MigrationBanner";
+import { V4MigrationBanner } from "@/src/features/v4-migration/V4MigrationBanner";
 import { V4MigrationProjectChip } from "@/src/features/v4-migration/V4MigrationProjectChip";
 import { api } from "@/src/utils/api";
 import { formatCompactRelativeTime } from "@/src/utils/dates";
 import { useV4UpgradeUiEnabled } from "@/src/features/v4-migration/useV4UpgradeUiEnabled";
 import { useAccountV4MigrationData } from "@/src/features/v4-migration/hooks/useV4MigrationData";
-import { getProjectMigrationReadiness } from "@/src/features/v4-migration/migrationData";
-import { ErrorPage } from "@/src/components/error-page";
 
 const OrganizationProjectTiles = ({
   org,
@@ -76,13 +71,8 @@ const OrganizationProjectTiles = ({
         .filter(
           (p) => !search || p.name.toLowerCase().includes(search.toLowerCase()),
         )
-        .map((project) => {
-          const migrationStatus = migrationStatusByProjectId.get(project.id);
-          const migrationReadiness = migrationStatus
-            ? getProjectMigrationReadiness(migrationStatus)
-            : "checking";
-
-          return v4UpgradeUiEnabled ? (
+        .map((project) =>
+          v4UpgradeUiEnabled ? (
             <Card
               key={project.id}
               className="group hover:bg-muted/50 relative transition-colors"
@@ -102,14 +92,12 @@ const OrganizationProjectTiles = ({
                   >
                     {project.name}
                   </CardTitle>
-                  {!project.deletedAt &&
-                    (migrationReadiness === "action-needed" ||
-                      migrationReadiness === "partner-managed") && (
-                      <V4MigrationProjectChip
-                        project={{ id: project.id, name: project.name }}
-                        readiness={migrationReadiness}
-                      />
-                    )}
+                  {!project.deletedAt && (
+                    <V4MigrationProjectChip
+                      project={{ id: project.id, name: project.name }}
+                      status={migrationStatusByProjectId.get(project.id)}
+                    />
+                  )}
                 </div>
               </CardHeader>
               {!project.deletedAt && (
@@ -158,8 +146,8 @@ const OrganizationProjectTiles = ({
                 </CardContent>
               )}
             </Card>
-          );
-        })}
+          ),
+        )}
     </div>
   );
 };
@@ -242,14 +230,21 @@ const OrganizationActionButtons = ({
 };
 
 const SingleOrganizationPage = ({
-  org,
+  orgId,
   search,
 }: {
-  org: NonNullable<Session["user"]>["organizations"][number];
+  orgId: string;
   search?: string;
 }) => {
+  const session = useSession();
+  const org = session.data?.user?.organizations.find((o) => o.id === orgId);
+
+  if (!org) {
+    return null;
+  }
+
   const isDemoOrg =
-    env.NEXT_PUBLIC_DEMO_ORG_ID === org.id &&
+    env.NEXT_PUBLIC_DEMO_ORG_ID === orgId &&
     org.projects.some((p) => p.id === env.NEXT_PUBLIC_DEMO_PROJECT_ID);
 
   if (isDemoOrg) {
@@ -267,8 +262,8 @@ const SingleOrganizationPage = ({
   return (
     <ContainerPage
       headerProps={{
-        title: org.name,
-        actionButtonsRight: <OrganizationActionButtons orgId={org.id} />,
+        title: org?.name ?? "Organization",
+        actionButtonsRight: <OrganizationActionButtons orgId={orgId} />,
       }}
     >
       <OrganizationProjectTiles org={org} search={search} />
@@ -277,31 +272,38 @@ const SingleOrganizationPage = ({
 };
 
 const SingleOrganizationProjectOverviewTile = ({
-  org,
+  orgId,
   search,
 }: {
-  org: NonNullable<Session["user"]>["organizations"][number];
+  orgId: string;
   search?: string;
 }) => {
+  const session = useSession();
+  const org = session.data?.user?.organizations.find((o) => o.id === orgId);
+
+  if (!org) {
+    return null;
+  }
+
   const isDemoOrg =
-    env.NEXT_PUBLIC_DEMO_ORG_ID === org.id &&
+    env.NEXT_PUBLIC_DEMO_ORG_ID === orgId &&
     org.projects.some((p) => p.id === env.NEXT_PUBLIC_DEMO_PROJECT_ID);
 
   if (isDemoOrg) {
     return (
-      <div key={org.id}>
+      <div key={orgId}>
         <DemoOrganizationTile />
       </div>
     );
   }
 
   return (
-    <div key={org.id}>
+    <div key={orgId}>
       <Header
         title={org.name}
         className="truncate"
         labelBadge={
-          org.id === env.NEXT_PUBLIC_DEMO_ORG_ID ? "Demo Org" : undefined
+          orgId === env.NEXT_PUBLIC_DEMO_ORG_ID ? "Demo Org" : undefined
         }
         label={
           isCloudPlan(org.plan)
@@ -313,7 +315,7 @@ const SingleOrganizationProjectOverviewTile = ({
         }
         actionButtons={
           <OrganizationActionButtons
-            orgId={org.id}
+            orgId={orgId}
             primaryButtonVariant="secondary"
           />
         }
@@ -331,7 +333,6 @@ export const OrganizationProjectOverview = () => {
   const canCreateOrg = session.data?.user?.canCreateOrganizations;
   const organizations = session.data?.user?.organizations;
   const [{ search }, setQueryParams] = useQueryParams({ search: StringParam });
-  const v4MigrationBannerState = useV4MigrationBannerState(v4UpgradeUiEnabled);
 
   if (organizations === undefined) {
     return "loading...";
@@ -345,15 +346,12 @@ export const OrganizationProjectOverview = () => {
     const org = organizations.find((org) => org.id === queryOrgId);
 
     if (!org) {
-      return (
-        <ErrorPage
-          title="Organization not found"
-          message="This organization does not exist or you do not have access to it."
-        />
-      );
+      return null;
     }
 
-    return <SingleOrganizationPage org={org} search={search ?? undefined} />;
+    return (
+      <SingleOrganizationPage orgId={org.id} search={search ?? undefined} />
+    );
   }
 
   return (
@@ -390,18 +388,7 @@ export const OrganizationProjectOverview = () => {
         ),
       }}
     >
-      {v4UpgradeUiEnabled ? (
-        v4MigrationBannerState.projectsNeedingMigration > 0 && (
-          <V4MigrationBanner
-            projectsNeedingMigration={
-              v4MigrationBannerState.projectsNeedingMigration
-            }
-            totalProjects={v4MigrationBannerState.totalProjects}
-          />
-        )
-      ) : (
-        <AgentToolsBanner />
-      )}
+      {v4UpgradeUiEnabled ? <V4MigrationBanner /> : <AgentToolsBanner />}
       {showOnboarding && <Onboarding />}
       {organizations
         .map((org) => {
@@ -419,7 +406,7 @@ export const OrganizationProjectOverview = () => {
               {!queryOrgId && isDemo && <Separator className="my-8" />}
               <div key={org.id} className={index > 0 && !isDemo ? "mt-8" : ""}>
                 <SingleOrganizationProjectOverviewTile
-                  org={org}
+                  orgId={org.id}
                   search={search ?? undefined}
                 />
               </div>

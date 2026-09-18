@@ -123,7 +123,6 @@ describe("UserFeaturePreviewsControl", () => {
       userId: "user-1",
       featurePreviews: {
         modernSession: false,
-        normalizedIoPreview: false,
       },
       management: {
         allowed: false,
@@ -150,7 +149,6 @@ describe("UserFeaturePreviewsControl", () => {
       userId: "user-1",
       featurePreviews: {
         modernSession: false,
-        normalizedIoPreview: false,
       },
       management: { allowed: true },
     });
@@ -186,7 +184,6 @@ describe("UserFeaturePreviewsControl", () => {
       userId: "user-1",
       featurePreviews: {
         modernSession: false,
-        normalizedIoPreview: false,
       },
       management: { allowed: true },
     });
@@ -213,7 +210,6 @@ describe("UserFeaturePreviewsControl", () => {
       userId: "user-1",
       featurePreviews: {
         modernSession: false,
-        normalizedIoPreview: false,
       },
       management: { allowed: true },
     });

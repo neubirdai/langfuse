@@ -1,5 +1,4 @@
-import type { FilterConfig } from "@/src/features/filters";
-import { renderLevelIcon } from "@/src/components/level-colors";
+import type { FilterConfig } from "@/src/features/filters/lib/filter-config";
 import type { ColumnDefinition, ObservationLevelType } from "@langfuse/shared";
 
 /**
@@ -64,35 +63,26 @@ export const experimentItemsTableCols: ColumnDefinition[] = [
     internal: "latency_ms",
     nullable: true,
   },
-  // Level-agnostic scores: one filter per data type that matches a score
-  // whether it was recorded on the item's root span or on its trace. The
-  // `obs_*` ids are aliases so existing links and saved views keep resolving -
-  // and start matching trace-level scores, which is the fix. The old DISPLAY
-  // names are aliases too: a saved view may store a column by its label, and
-  // `validateFilters` drops what it cannot resolve.
   {
-    name: "Numeric Scores",
-    id: "scores_avg",
+    name: "Scores (numeric)",
+    id: "obs_scores_avg",
     type: "numberObject",
-    internal: "scores_avg",
-    aliases: ["obs_scores_avg", "Scores (numeric)"],
+    internal: "obs_scores_avg",
   },
   {
-    name: "Categorical Scores",
-    id: "score_categories",
+    name: "Scores (categorical)",
+    id: "obs_score_categories",
     type: "categoryOptions",
-    internal: "score_categories",
+    internal: "obs_score_categories",
     options: [],
     nullable: true,
-    aliases: ["obs_score_categories", "Scores (categorical)"],
   },
   {
-    name: "Boolean Scores",
-    id: "score_booleans",
+    name: "Scores (boolean)",
+    id: "obs_score_booleans",
     type: "booleanObject",
-    internal: "score_booleans",
+    internal: "obs_score_booleans",
     nullable: true,
-    aliases: ["obs_score_booleans", "Scores (boolean)"],
   },
   {
     name: "Trace Scores (numeric)",
@@ -153,12 +143,6 @@ export const experimentItemsFilterConfig: FilterConfig = {
 
   facets: [
     {
-      type: "categorical" as const,
-      column: "level",
-      label: getExperimentItemsColumnName("level"),
-      renderIcon: renderLevelIcon,
-    },
-    {
       type: "stringKeyValue" as const,
       column: "itemMetadata",
       label: getExperimentItemsColumnName("itemMetadata"),
@@ -170,18 +154,33 @@ export const experimentItemsFilterConfig: FilterConfig = {
     },
     {
       type: "keyValue" as const,
-      column: "score_categories",
-      label: getExperimentItemsColumnName("score_categories"),
+      column: "obs_score_categories",
+      label: getExperimentItemsColumnName("obs_score_categories"),
     },
     {
       type: "numericKeyValue" as const,
-      column: "scores_avg",
-      label: getExperimentItemsColumnName("scores_avg"),
+      column: "obs_scores_avg",
+      label: getExperimentItemsColumnName("obs_scores_avg"),
     },
     {
       type: "booleanKeyValue" as const,
-      column: "score_booleans",
-      label: getExperimentItemsColumnName("score_booleans"),
+      column: "obs_score_booleans",
+      label: getExperimentItemsColumnName("obs_score_booleans"),
+    },
+    {
+      type: "keyValue" as const,
+      column: "trace_score_categories",
+      label: getExperimentItemsColumnName("trace_score_categories"),
+    },
+    {
+      type: "numericKeyValue" as const,
+      column: "trace_scores_avg",
+      label: getExperimentItemsColumnName("trace_scores_avg"),
+    },
+    {
+      type: "booleanKeyValue" as const,
+      column: "trace_score_booleans",
+      label: getExperimentItemsColumnName("trace_score_booleans"),
     },
   ],
 };

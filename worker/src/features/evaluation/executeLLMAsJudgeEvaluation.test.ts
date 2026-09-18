@@ -525,12 +525,9 @@ describe("executeLLMAsJudgeEvaluation", () => {
             traceId: expect.any(String),
             traceName: `Execute evaluator: ${mockEvalTemplate.name}`,
             environment: "langfuse-llm-as-a-judge",
-            evaluationContext: {
-              evaluationRuleId: mockJobExecution.jobConfigurationId,
-              evaluatorExecutionIsTest: false,
-            },
             metadata: expect.objectContaining({
               job_execution_id: jobExecutionId,
+              job_configuration_id: mockJobExecution.jobConfigurationId,
               target_trace_id: mockJobExecution.jobInputTraceId,
             }),
           }),
@@ -847,8 +844,9 @@ describe("executeLLMAsJudgeEvaluation", () => {
         createExecutionParams({ job: fullJob, deps }),
       );
 
-      const expectedTraceMetadata = {
+      const expectedMetadata = {
         job_execution_id: jobExecutionId,
+        job_configuration_id: fullJob.jobConfigurationId,
         target_trace_id: fullJob.jobInputTraceId,
         target_observation_id: "obs-full",
         target_dataset_item_id: "dataset-full",
@@ -857,11 +855,7 @@ describe("executeLLMAsJudgeEvaluation", () => {
       expect(callLLM).toHaveBeenCalledWith(
         expect.objectContaining({
           traceSinkParams: expect.objectContaining({
-            evaluationContext: {
-              evaluationRuleId: fullJob.jobConfigurationId,
-              evaluatorExecutionIsTest: false,
-            },
-            metadata: expect.objectContaining(expectedTraceMetadata),
+            metadata: expect.objectContaining(expectedMetadata),
           }),
         }),
       );
@@ -870,13 +864,7 @@ describe("executeLLMAsJudgeEvaluation", () => {
         expect.objectContaining({
           event: expect.objectContaining({
             body: expect.objectContaining({
-              evaluationRuleId: fullJob.jobConfigurationId,
-              metadata: expect.objectContaining({
-                job_execution_id: jobExecutionId,
-                target_trace_id: fullJob.jobInputTraceId,
-                target_observation_id: "obs-full",
-                target_dataset_item_id: "dataset-full",
-              }),
+              metadata: expect.objectContaining(expectedMetadata),
             }),
           }),
         }),
@@ -909,14 +897,12 @@ describe("executeLLMAsJudgeEvaluation", () => {
             name: mockJobConfiguration.scoreName,
             value: 0.88,
             comment: "Well structured response",
-            configId: undefined,
             source: "EVAL",
             environment: "production",
             executionTraceId: expect.any(String),
-            evaluatorId: undefined,
-            evaluationRuleId: mockJobExecution.jobConfigurationId,
             metadata: expect.objectContaining({
               job_execution_id: jobExecutionId,
+              job_configuration_id: mockJobExecution.jobConfigurationId,
               target_trace_id: mockJobExecution.jobInputTraceId,
             }),
             dataType: "NUMERIC",

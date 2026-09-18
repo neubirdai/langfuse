@@ -1,11 +1,9 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { JobExecutionStatus } from "@prisma/client";
-import type { EvalExecutionContext } from "@langfuse/shared";
 import { prisma } from "@langfuse/shared/src/db";
 import {
   buildEventBucketPrefix,
-  compileLangfuseMediaMessages,
   createLLMOutput,
   DefaultEvalModelService,
   generateLLMText,
@@ -21,13 +19,7 @@ import { getEvalS3StorageClient } from "./s3StorageClient";
 import { createInternalEventsWriter } from "../internal-tracing/createInternalEventsWriter";
 import { recordExportVolume } from "../../services/exportVolumeMetric";
 
-type StructuredOutputSchema = z.ZodObject<{
-  reasoning: z.ZodString;
-  score: z.ZodType;
-}>;
-
-const MODEL_FACING_OUTPUT_SCHEMA_DESCRIPTION =
-  'Return only top-level "score" and "scoreExplanation". Put other requested fields inside "scoreExplanation".';
+type StructuredOutputSchema = z.ZodType;
 
 /**
  * Result of fetching model configuration.
@@ -64,7 +56,6 @@ interface LLMCallParams {
     traceName: string;
     environment: string;
     metadata: Record<string, unknown>;
-    evaluationContext?: EvalExecutionContext;
   };
 }
 
@@ -151,12 +142,6 @@ function serializeSchemaForEgress(schema: unknown): string {
   }
 }
 
-function serializeProviderMessagesForEgress(messages: unknown): string {
-  return JSON.stringify(messages, (_key, value) =>
-    value instanceof Uint8Array ? Buffer.from(value).toString("base64") : value,
-  );
-}
-
 /**
  * Creates the production implementation of eval execution dependencies.
  * This is the default implementation used in production code.
@@ -233,50 +218,29 @@ export function createProductionEvalExecutionDeps(): EvalExecutionDeps {
         typeof mapLegacyLLMCompletionParams
       >[0]["modelParams"]["adapter"];
 
-      const modelParams = {
-        provider: params.modelConfig.provider,
-        model: params.modelConfig.model,
-        adapter,
-        ...params.modelConfig.modelParams,
-      };
+      // llmaj egress: serialized request body (messages + schema), uncompressed.
+      const bytes =
+        Buffer.byteLength(JSON.stringify(params.messages), "utf8") +
+        (params.structuredOutputSchema
+          ? Buffer.byteLength(
+              serializeSchemaForEgress(params.structuredOutputSchema),
+              "utf8",
+            )
+          : 0);
+
       const llmParams = mapLegacyLLMCompletionParams({
         connection,
         messages: params.messages,
-        modelParams,
-      });
-      const { providerMessages, traceMessages } =
-        await compileLangfuseMediaMessages({
-          projectId: params.traceSinkParams.targetProjectId,
-          messages: params.messages,
+        modelParams: {
+          provider: params.modelConfig.provider,
+          model: params.modelConfig.model,
           adapter,
-        });
-
-      // Keep the evaluator contract unchanged while the model-facing schema
-      // resolves custom output instructions into the supported fields.
-      const modelFacingStructuredOutputSchema = z
-        .object({
-          scoreExplanation: params.structuredOutputSchema.shape.reasoning,
-          score: params.structuredOutputSchema.shape.score,
-        })
-        .describe(MODEL_FACING_OUTPUT_SCHEMA_DESCRIPTION);
-
-      // llmaj egress: provider-bound messages (including base64-expanded inline
-      // media) plus schema, uncompressed.
-      const bytes =
-        Buffer.byteLength(
-          serializeProviderMessagesForEgress(providerMessages),
-          "utf8",
-        ) +
-        Buffer.byteLength(
-          serializeSchemaForEgress(modelFacingStructuredOutputSchema),
-          "utf8",
-        );
-
+          ...params.modelConfig.modelParams,
+        },
+      });
       const result = await generateLLMText({
         ...llmParams,
-        messages: providerMessages,
-        traceInput: traceMessages,
-        output: createLLMOutput(modelFacingStructuredOutputSchema),
+        output: createLLMOutput(params.structuredOutputSchema),
         maxRetries: 1,
         trace: {
           targetProjectId: params.traceSinkParams.targetProjectId,
@@ -284,7 +248,6 @@ export function createProductionEvalExecutionDeps(): EvalExecutionDeps {
           traceName: params.traceSinkParams.traceName,
           environment: params.traceSinkParams.environment,
           metadata: params.traceSinkParams.metadata,
-          evaluationContext: params.traceSinkParams.evaluationContext,
           eventsWriter: createInternalEventsWriter(),
         },
       });
@@ -296,10 +259,7 @@ export function createProductionEvalExecutionDeps(): EvalExecutionDeps {
         projectId: params.traceSinkParams.targetProjectId,
       });
 
-      return {
-        score: result.output.score,
-        reasoning: result.output.scoreExplanation,
-      };
+      return result.output;
     },
 
     fetchModelConfig: async ({ projectId, provider, model, modelParams }) => {

@@ -41,12 +41,10 @@ function formatSSEEvent(event: SSEEvent): string {
   }
 }
 
-// `version` is required on purpose — see dashboard.executeQuery: an implicit
-// v1 default let unresolved-session clients silently pick the read path.
 const inputSchema = z.object({
   projectId: z.string(),
   query: customQuery,
-  version: viewVersions,
+  version: viewVersions.optional().default("v1"),
 });
 
 export default async function handler(
@@ -129,18 +127,8 @@ export default async function handler(
   });
   res.flushHeaders();
 
-  // A closed client should also stop the ClickHouse query, not just this
-  // response: the `break` below tears down the CH stream (its socket closes
-  // within one progress event), and cancel_http_readonly_queries_on_client_close
-  // makes ClickHouse kill the query on that close instead of running the
-  // abandoned aggregation to completion. max_execution_time still bounds the
-  // stragglers either way.
   let aborted = false;
-  // `res`, not `req`: the request stream can end once the POST body is
-  // consumed, while the response lives for the whole stream — its close
-  // fires on a client disconnect mid-stream (and only after res.end() on
-  // the happy path, where the loop has already finished).
-  res.on("close", () => {
+  req.on("close", () => {
     aborted = true;
   });
 
@@ -155,13 +143,7 @@ export default async function handler(
 
     for await (const event of queryClickhouseWithProgress<
       Record<string, unknown>
-    >({
-      ...chOpts,
-      clickhouseSettings: {
-        ...chOpts.clickhouseSettings,
-        cancel_http_readonly_queries_on_client_close: 1,
-      },
-    })) {
+    >(chOpts)) {
       if (aborted) break;
 
       if (isProgressRow(event)) {

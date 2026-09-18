@@ -1,8 +1,5 @@
 import { type JobConfiguration, type JobExecution } from "@prisma/client";
-import {
-  type EvalExecutionContext,
-  type EvalTemplateCodeBased,
-} from "@langfuse/shared";
+import { type EvalTemplateCodeBased } from "@langfuse/shared";
 import {
   CodeEvalExecutionError,
   instrumentAsync,
@@ -27,7 +24,6 @@ export async function executeCodeBasedEvaluation(params: {
   extractedVariables: ExtractedVariable[];
   hasExperimentContext?: boolean;
   executionMetadata: Record<string, string>;
-  evaluationContext: EvalExecutionContext;
   // Unused by code-based eval; the shared observation processor passes it.
   deps?: EvalExecutionDeps;
 }): Promise<EvalExecutionResult> {
@@ -74,7 +70,6 @@ export async function executeCodeBasedEvaluation(params: {
         hasExperimentContext: params.hasExperimentContext ?? false,
         traceName: `Execute evaluator: ${params.template.name}`,
         metadata: executionMetadata,
-        evaluationContext: params.evaluationContext,
         // Publish via the OTel ingestion pipeline (like LLM-as-a-judge) so the
         // trace reaches the legacy tables too in dual write mode — a direct
         // events-table write alone 404s in the trace detail view.
@@ -91,7 +86,6 @@ export async function executeCodeBasedEvaluation(params: {
         scores: dispatchOutcome.scores,
         executionTraceId,
         metadata: executionMetadata,
-        evaluationContext: params.evaluationContext,
       };
     },
   );

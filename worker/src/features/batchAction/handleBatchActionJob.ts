@@ -476,9 +476,6 @@ export const handleBatchActionJob = async (
       evaluatorIds,
       batchActionId,
       evalVersion,
-      evaluatorMappings,
-      sampling = 1,
-      rowLimit = env.LANGFUSE_MAX_HISTORIC_EVAL_CREATION_LIMIT,
     } = batchActionEvent;
 
     if (!batchActionId) {
@@ -517,12 +514,6 @@ export const handleBatchActionJob = async (
         });
 
         evaluatorLabels = stableEvaluators.map(({ name }) => name);
-        const mappingByEvaluatorId = new Map(
-          (evaluatorMappings ?? []).map((mapping) => [
-            mapping.evaluatorId,
-            mapping.variableMapping,
-          ]),
-        );
         // A batch run addresses the evaluator directly (`ruleId` stays null),
         // but uses a deterministic associated rule as its legacy execution
         // anchor so existing readers can still find it.
@@ -533,14 +524,14 @@ export const handleBatchActionJob = async (
           ruleId: null,
           projectId,
           filter: [] as [],
-          sampling: new Decimal(sampling),
+          sampling: new Decimal(1),
           status: JobConfigState.ACTIVE,
           targetObject: EvalTargetObject.EVENT,
           assignments: [
             {
               id: evaluator.id,
               evaluatorId: evaluator.id,
-              variableMapping: mappingByEvaluatorId.get(evaluator.id) ?? null,
+              variableMapping: null,
               evaluator: {
                 id: evaluator.id,
                 projectId: evaluator.projectId,
@@ -588,7 +579,7 @@ export const handleBatchActionJob = async (
               | typeof EvalTargetObject.EXPERIMENT,
             filter: [],
           }),
-          sampling: new Decimal(sampling),
+          sampling: new Decimal(1),
         }));
       }
     } catch (error) {
@@ -621,10 +612,7 @@ export const handleBatchActionJob = async (
       filter,
       searchQuery: query.searchQuery ?? undefined,
       searchType: query.searchType ?? ["id", "content"],
-      rowLimit: Math.min(
-        rowLimit,
-        env.LANGFUSE_MAX_HISTORIC_EVAL_CREATION_LIMIT,
-      ),
+      rowLimit: env.LANGFUSE_MAX_HISTORIC_EVAL_CREATION_LIMIT,
     });
 
     await processBatchedObservationEval({

@@ -91,8 +91,8 @@ describe("hasPaidBillingState", () => {
     ],
     ["manual plan override", { plan: "Team" }, true],
     [
-      "CHB attached plan",
-      { clickhouse: { organizationId: CHB_ORG_ID, attachedPlanId: "ap_123" } },
+      "CHB bundle",
+      { clickhouse: { organizationId: CHB_ORG_ID, bundleId: "bdl_123" } },
       true,
     ],
     [

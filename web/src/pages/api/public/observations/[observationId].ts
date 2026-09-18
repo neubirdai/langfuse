@@ -22,7 +22,6 @@ export default withMiddlewares(
   {
     GET: createAuthedProjectAPIRoute({
       name: "Get Observation",
-      action: "traces:read",
       allowInAppAgentKey: true,
       rateLimitResource: "public-api-legacy",
       querySchema: GetObservationV1Query,
@@ -31,37 +30,19 @@ export default withMiddlewares(
       rejectInEventsOnlyMode: true,
       deprecation: OBSERVATIONS_V1_DEPRECATION,
       fn: async ({ query, auth }) => {
-        const startTime = query.startTime
-          ? new Date(query.startTime)
-          : undefined;
-
-        const lookupObservation = (withStartTime: boolean) =>
-          query.useEventsTable
-            ? getObservationByIdFromEventsTable({
-                id: query.observationId,
-                projectId: auth.scope.projectId,
-                fetchWithInputOutput: true,
-                startTime: withStartTime ? startTime : undefined,
-              })
-            : // eslint-disable-next-line @typescript-eslint/no-deprecated
-              getObservationById({
-                id: query.observationId,
-                projectId: auth.scope.projectId,
-                fetchWithInputOutput: true,
-                startTime: withStartTime ? startTime : undefined,
-                preferredClickhouseService: "ReadOnly",
-              });
-
-        // startTime is a performance hint: it bounds the lookup to its minute so
-        // ClickHouse can prune parts/partitions. On a miss we retry unbounded,
-        // so a wrong or stale hint only ever costs speed, never correctness.
-        let clickhouseObservation;
-        try {
-          clickhouseObservation = await lookupObservation(true);
-        } catch (e) {
-          if (!(e instanceof LangfuseNotFoundError) || !startTime) throw e;
-          clickhouseObservation = await lookupObservation(false);
-        }
+        const clickhouseObservation = query.useEventsTable
+          ? await getObservationByIdFromEventsTable({
+              id: query.observationId,
+              projectId: auth.scope.projectId,
+              fetchWithInputOutput: true,
+            })
+          : // eslint-disable-next-line @typescript-eslint/no-deprecated
+            await getObservationById({
+              id: query.observationId,
+              projectId: auth.scope.projectId,
+              fetchWithInputOutput: true,
+              preferredClickhouseService: "ReadOnly",
+            });
 
         if (!clickhouseObservation) {
           throw new LangfuseNotFoundError(

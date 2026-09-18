@@ -11,7 +11,7 @@ export function evaluatorToEvaluatorSetupDraft(
     evaluator.type === "LLM_AS_JUDGE"
       ? {
           type: evaluator.type,
-          promptMessages: latest.promptMessages,
+          prompt: latest.prompt ?? "",
           provider: latest.provider,
           model: latest.model,
           modelParams: latest.modelParams,

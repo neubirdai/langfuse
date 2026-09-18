@@ -30,14 +30,13 @@ import {
 import * as evaluatorRepository from "@/src/features/evals/v2/server/evaluators/evaluatorRepository";
 import {
   type CreateEvaluatorInput,
-  type NormalizedEvaluatorDefinition,
+  type EvaluatorDefinition,
   EvaluatorVersionsSchema,
 } from "@/src/features/evals/v2/server/evaluators/evaluatorTypes";
 
 const mocks = vi.hoisted(() => ({
   generateLangfuseAIText: vi.fn(),
   getRecentEvaluatorExecutionTraces: vi.fn(),
-  getTotalCostByEvaluatorIds: vi.fn(),
   invalidateProjectEvalConfigCaches: vi.fn(),
   assertEvaluatorConfigurationValid: vi.fn(),
   getEvaluatorDefinitionPreflightError: vi.fn(),
@@ -55,7 +54,6 @@ vi.mock("@langfuse/shared/src/server", async (importOriginal) => ({
   ...(await importOriginal<typeof SharedServer>()),
   generateLangfuseAIText: mocks.generateLangfuseAIText,
   getRecentEvaluatorExecutionTraces: mocks.getRecentEvaluatorExecutionTraces,
-  getTotalCostByEvaluatorIds: mocks.getTotalCostByEvaluatorIds,
   invalidateProjectEvalConfigCaches: mocks.invalidateProjectEvalConfigCaches,
 }));
 
@@ -102,14 +100,14 @@ let otherProjectId = "";
 const llmInput = (
   name: string,
 ): CreateEvaluatorInput & {
-  definition: Extract<NormalizedEvaluatorDefinition, { type: "LLM_AS_JUDGE" }>;
+  definition: Extract<EvaluatorDefinition, { type: "LLM_AS_JUDGE" }>;
 } => ({
   projectId,
   name,
   description: "Initial description",
   definition: {
     type: "LLM_AS_JUDGE",
-    promptMessages: [{ role: "user", content: "Judge {{output}}" }],
+    prompt: "Judge {{output}}",
     provider: null,
     model: null,
     modelParams: null,
@@ -166,7 +164,6 @@ beforeAll(async () => {
 beforeEach(() => {
   mocks.generateLangfuseAIText.mockReset();
   mocks.getRecentEvaluatorExecutionTraces.mockReset();
-  mocks.getTotalCostByEvaluatorIds.mockReset();
   mocks.invalidateProjectEvalConfigCaches.mockReset();
   mocks.assertEvaluatorConfigurationValid.mockReset();
   mocks.assertEvaluatorConfigurationValid.mockResolvedValue(undefined);
@@ -236,141 +233,23 @@ describe("EvaluatorService", () => {
   it("creates an evaluator with version one and rejects cross-project reads", async () => {
     const service = createService();
     const evaluatorId = crypto.randomUUID();
-    const input = llmInput("Create evaluator");
-    input.definition.promptMessages = [
-      { role: "system", content: "Judge carefully" },
-      { role: "user", content: "Judge {{output}}" },
-    ];
-    const created = await service.create({ ...input, evaluatorId }, null);
+    const created = await service.create(
+      { ...llmInput("Create evaluator"), evaluatorId },
+      null,
+    );
 
-    expect(created.versions[0]).not.toHaveProperty("prompt");
     expect(created).toMatchObject({
       id: evaluatorId,
       projectId,
       name: "Create evaluator",
-      versions: [
-        expect.objectContaining({
-          version: 1,
-          promptMessages: input.definition.promptMessages,
-        }),
-      ],
+      versions: [expect.objectContaining({ version: 1 })],
     });
-    const fetched = await service.get(projectId, created.id);
-    expect(fetched.versions[0]).not.toHaveProperty("prompt");
-    expect(fetched).toMatchObject({
+    await expect(service.get(projectId, created.id)).resolves.toMatchObject({
       id: created.id,
-      versions: [
-        expect.objectContaining({
-          promptMessages: input.definition.promptMessages,
-        }),
-      ],
     });
-
-    await prisma.evaluatorVersion.updateMany({
-      where: { evaluatorId: created.id },
-      data: { promptMessages: Prisma.DbNull },
-    });
-    await expect(service.get(projectId, created.id)).resolves.toMatchObject({
-      versions: [
-        expect.objectContaining({
-          promptMessages: [
-            {
-              role: "user",
-              content: input.definition.promptMessages
-                .map(({ content }) => content)
-                .join("\n\n"),
-            },
-          ],
-        }),
-      ],
-    });
-
-    await prisma.evaluatorVersion.updateMany({
-      where: { evaluatorId: created.id },
-      data: { prompt: "   ", promptMessages: Prisma.DbNull },
-    });
-    await expect(service.get(projectId, created.id)).resolves.toMatchObject({
-      versions: [
-        expect.objectContaining({
-          promptMessages: [{ role: "user", content: "No prompt provided" }],
-        }),
-      ],
-    });
-
     await expect(service.get(otherProjectId, created.id)).rejects.toThrow(
       "Evaluator not found",
     );
-  });
-
-  it("returns the existing evaluator when create is retried with the same id and content", async () => {
-    const audit = vi.fn();
-    const service = new EvaluatorService(prisma, audit);
-    const evaluatorId = crypto.randomUUID();
-    const input = { ...llmInput("Retry create"), evaluatorId };
-    const created = await service.create(input, null);
-
-    const retried = await service.create(input, null);
-
-    expect(retried).toMatchObject({
-      id: created.id,
-      projectId,
-      name: "Retry create",
-    });
-    expect(audit).toHaveBeenCalledTimes(1);
-    expect(mocks.invalidateProjectEvalConfigCaches).toHaveBeenCalledTimes(1);
-    await expect(
-      prisma.evaluator.count({ where: { id: evaluatorId } }),
-    ).resolves.toBe(1);
-  });
-
-  it.each([
-    ["name", (input: CreateEvaluatorInput) => ({ ...input, name: "Changed" })],
-    [
-      "description",
-      (input: CreateEvaluatorInput) => ({
-        ...input,
-        description: "Changed description",
-      }),
-    ],
-    [
-      "definition",
-      (input: CreateEvaluatorInput) => ({
-        ...input,
-        definition: {
-          ...input.definition,
-          promptMessages: [{ role: "user" as const, content: "Changed" }],
-        },
-      }),
-    ],
-  ])("rejects a same-project retry with changed %s", async (_field, change) => {
-    const service = createService();
-    const evaluatorId = crypto.randomUUID();
-    const input = { ...llmInput("Retry create"), evaluatorId };
-    await service.create(input, null);
-
-    await expect(service.create(change(input), null)).rejects.toThrow(
-      "An evaluator with this id already exists",
-    );
-  });
-
-  it("rejects a client id that already exists in another project", async () => {
-    const service = createService();
-    const evaluatorId = crypto.randomUUID();
-    await service.create(
-      {
-        ...llmInput("Other project evaluator"),
-        projectId: otherProjectId,
-        evaluatorId,
-      },
-      null,
-    );
-
-    await expect(
-      service.create(
-        { ...llmInput("This project evaluator"), evaluatorId },
-        null,
-      ),
-    ).rejects.toThrow("An evaluator with this id already exists");
   });
 
   it("writes the canonical mapping when creating a code evaluator", async () => {
@@ -652,9 +531,7 @@ describe("EvaluatorService", () => {
         evaluatorId: evaluator.id,
         definition: {
           ...llmInput("Invalid model").definition,
-          promptMessages: [
-            { role: "user", content: "Updated prompt: {{output}}" },
-          ],
+          prompt: "Updated prompt: {{output}}",
           provider: "openai",
           model: "available-model",
         },
@@ -681,9 +558,7 @@ describe("EvaluatorService", () => {
         evaluatorId: evaluator.id,
         definition: {
           ...llmInput("Invalid model").definition,
-          promptMessages: [
-            { role: "user", content: "Another updated prompt: {{output}}" },
-          ],
+          prompt: "Another updated prompt: {{output}}",
           provider: "openai",
           model: "available-model",
         },
@@ -771,12 +646,7 @@ describe("EvaluatorService", () => {
         description: "Changed only metadata",
         definition: {
           ...input.definition,
-          promptMessages: [
-            {
-              role: "user" as const,
-              content: "Judge {{output}} strictly",
-            },
-          ],
+          prompt: "Judge {{output}} strictly",
         },
       },
       null,
@@ -857,12 +727,7 @@ describe("EvaluatorService", () => {
           evaluatorId: created.id,
           definition: {
             ...input.definition,
-            promptMessages: [
-              {
-                role: "user",
-                content: "Judge {{input}} and {{output}}",
-              },
-            ],
+            prompt: "Judge {{input}} and {{output}}",
             vars: ["input", "output"],
             variableMapping: [
               { templateVariable: "input", selectedColumnId: "input" },
@@ -894,20 +759,14 @@ describe("EvaluatorService", () => {
           tx,
           evaluatorId: created.id,
           version: 2,
-          definition: {
-            ...input.definition,
-            prompt: "Judge {{output}}",
-          },
+          definition: input.definition,
           createdByUserId: null,
         });
         await evaluatorRepository.appendEvaluatorVersion({
           tx,
           evaluatorId: created.id,
           version: 2,
-          definition: {
-            ...input.definition,
-            prompt: "Judge {{output}}",
-          },
+          definition: input.definition,
           createdByUserId: null,
         });
       }),
@@ -953,21 +812,11 @@ describe("EvaluatorService", () => {
       }),
     ).resolves.toEqual({ score: 1 });
 
-    await expect(
-      service.testEvaluator({
-        orgId,
-        projectId,
-        definition: llmInput("Test evaluator").definition,
-        ...observation,
-      }),
-    ).resolves.toEqual({ score: 1 });
-
-    expect(mocks.testEvaluator).toHaveBeenCalledTimes(3);
+    expect(mocks.testEvaluator).toHaveBeenCalledTimes(2);
     expect(mocks.testEvaluator).toHaveBeenCalledWith(
       expect.objectContaining({
         orgId,
         evaluatorId: newEvaluatorId,
-        includeEvaluatorLink: false,
         ...observation,
       }),
     );
@@ -975,16 +824,6 @@ describe("EvaluatorService", () => {
       expect.objectContaining({
         orgId,
         evaluatorId: evaluator.id,
-        includeEvaluatorLink: true,
-        ...observation,
-      }),
-    );
-    expect(mocks.testEvaluator).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        orgId,
-        evaluatorId: expect.any(String),
-        includeEvaluatorLink: false,
         ...observation,
       }),
     );
@@ -1003,51 +842,6 @@ describe("EvaluatorService", () => {
     ).rejects.toThrow("Evaluator not found");
   });
 
-  it("tests the latest version of a saved evaluator", async () => {
-    mocks.testEvaluator.mockResolvedValue({ score: 1 });
-    const service = createService();
-    const evaluator = await service.create(llmInput("Saved evaluator"), null);
-    const latestDefinition = {
-      ...llmInput("Saved evaluator").definition,
-      promptMessages: [
-        { role: "user" as const, content: "Judge the latest {{output}}" },
-      ],
-    };
-    await service.update(
-      {
-        ...llmInput("Saved evaluator"),
-        evaluatorId: evaluator.id,
-        definition: latestDefinition,
-      },
-      null,
-    );
-
-    const observation = {
-      observationId: "test-observation-id",
-      traceId: "test-trace-id",
-      startTime: new Date("2026-08-11T00:00:00.000Z"),
-      shouldReadFromObservationsTable: false,
-    };
-
-    await expect(
-      service.testEvaluator({
-        orgId,
-        projectId,
-        evaluatorId: evaluator.id,
-        ...observation,
-      }),
-    ).resolves.toEqual({ score: 1 });
-
-    expect(mocks.testEvaluator).toHaveBeenCalledWith({
-      orgId,
-      projectId,
-      evaluatorId: evaluator.id,
-      definition: latestDefinition,
-      includeEvaluatorLink: true,
-      ...observation,
-    });
-  });
-
   it("suggests a safe name and silently returns null when unavailable", async () => {
     mocks.generateLangfuseAIText
       .mockResolvedValueOnce('  "Concise quality judge"  ')
@@ -1058,7 +852,7 @@ describe("EvaluatorService", () => {
     const service = createService();
     const definition = {
       type: "LLM_AS_JUDGE" as const,
-      promptMessages: [{ role: "user" as const, content: "Judge quality" }],
+      prompt: "Judge quality",
     };
 
     await expect(
@@ -1125,7 +919,7 @@ describe("EvaluatorService", () => {
     const service = createService();
     const definition = {
       type: "LLM_AS_JUDGE" as const,
-      promptMessages: [{ role: "user" as const, content: "Judge quality" }],
+      prompt: "Judge quality",
     };
 
     await expect(
@@ -1259,62 +1053,66 @@ describe("EvaluatorService", () => {
     );
   });
 
-  it("returns recent traces by evaluator id", async () => {
+  it("returns recent traces by evaluator execution name", async () => {
     const service = createService();
-    const evaluatorIds = [crypto.randomUUID(), crypto.randomUUID()];
+    const [firstEvaluator, secondEvaluator, otherEvaluator] = await Promise.all(
+      [
+        service.create(llmInput("First execution evaluator"), null),
+        service.create(llmInput("Second execution evaluator"), null),
+        service.create(
+          {
+            ...llmInput("Other project execution evaluator"),
+            projectId: otherProjectId,
+          },
+          null,
+        ),
+      ],
+    );
     mocks.getRecentEvaluatorExecutionTraces.mockResolvedValue([
       ...[7, 6, 5, 4, 3].map((day) => ({
         id: `first-${day}`,
-        evaluatorId: evaluatorIds[0],
+        traceName: "Execute evaluator: First execution evaluator",
         level: "WARNING",
         timestamp: new Date(`2026-08-0${day}T00:00:00.000Z`),
       })),
       ...[4, 3, 2, 1].map((day) => ({
         id: `second-${day}`,
-        evaluatorId: evaluatorIds[1],
+        traceName: "Execute evaluator: Second execution evaluator",
         level: "DEFAULT",
         timestamp: new Date(`2026-08-0${day}T00:00:00.000Z`),
       })),
     ]);
-
-    const result = await service.listRecent({ projectId, evaluatorIds });
+    const result = await service.listRecent({
+      projectId,
+      evaluatorIds: [firstEvaluator.id, secondEvaluator.id, otherEvaluator.id],
+    });
 
     expect(mocks.getRecentEvaluatorExecutionTraces).toHaveBeenCalledWith(
       projectId,
-      evaluatorIds,
+      expect.any(Array),
     );
-    expect(result[evaluatorIds[0]]?.map(({ id }) => id)).toEqual([
+    expect(mocks.getRecentEvaluatorExecutionTraces).toHaveBeenCalledTimes(1);
+    expect(
+      new Set(mocks.getRecentEvaluatorExecutionTraces.mock.calls[0]?.[1]),
+    ).toEqual(
+      new Set([
+        "Execute evaluator: First execution evaluator",
+        "Execute evaluator: Second execution evaluator",
+      ]),
+    );
+    expect(result[firstEvaluator.id]?.map(({ id }) => id)).toEqual([
       "first-7",
       "first-6",
       "first-5",
       "first-4",
       "first-3",
     ]);
-    expect(result[evaluatorIds[1]]?.map(({ id }) => id)).toEqual([
+    expect(result[secondEvaluator.id]?.map(({ id }) => id)).toEqual([
       "second-4",
       "second-3",
       "second-2",
       "second-1",
     ]);
-  });
-
-  it("returns total costs by evaluator id", async () => {
-    const service = createService();
-    const evaluatorIds = [crypto.randomUUID(), crypto.randomUUID()];
-    mocks.getTotalCostByEvaluatorIds.mockResolvedValue([
-      { evaluatorId: evaluatorIds[0], totalCost: 1.5 },
-      { evaluatorId: evaluatorIds[1], totalCost: 2.5 },
-    ]);
-
-    await expect(
-      service.getTotalCosts({ projectId, evaluatorIds }),
-    ).resolves.toEqual({
-      [evaluatorIds[0]]: 1.5,
-      [evaluatorIds[1]]: 2.5,
-    });
-    expect(mocks.getTotalCostByEvaluatorIds).toHaveBeenCalledWith(
-      projectId,
-      evaluatorIds,
-    );
+    expect(result[otherEvaluator.id]).toEqual([]);
   });
 });
