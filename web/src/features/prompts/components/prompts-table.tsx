@@ -1,4 +1,8 @@
 import { useEffect, useMemo } from "react";
+import {
+  normalizeOrderByForTable,
+  TableViewPresetTableName,
+} from "@langfuse/shared";
 import { DataTable } from "@/src/components/table/data-table";
 import {
   DataTableControlsProvider,
@@ -17,18 +21,32 @@ import { api } from "@/src/utils/api";
 import { type RouterOutput } from "@/src/utils/types";
 import { TagPromptPopover } from "@/src/features/tag/components/TagPromptPopover";
 import { DataTableToolbar } from "@/src/components/table/data-table-toolbar";
-import { useQueryFilterState } from "@/src/features/filters/hooks/useFilterState";
-import { useSidebarFilterState } from "@/src/features/filters/hooks/useSidebarFilterState";
-import { promptFilterConfig } from "@/src/features/filters/config/prompts-config";
+import {
+  promptFilterConfig,
+  useQueryFilterState,
+  useSidebarFilterState,
+} from "@/src/features/filters";
 import { useOrderByState } from "@/src/features/orderBy/hooks/useOrderByState";
 import { joinTableCoreAndMetrics } from "@/src/components/table/utils/joinTableCoreAndMetrics";
 import { Skeleton } from "@/src/components/ui/skeleton";
-import { useDebounce } from "@/src/hooks/useDebounce";
-import { LocalIsoDate } from "@/src/components/LocalIsoDate";
 import { useFullTextSearch } from "@/src/components/table/use-cases/useFullTextSearch";
 import { useFolderPagination } from "@/src/features/folders/hooks/useFolderPagination";
 import { buildFullPath } from "@/src/features/folders/utils";
 import { FolderBreadcrumb } from "@/src/features/folders/components/FolderBreadcrumb";
+import { createDateTableColumn } from "@/src/components/design-system/table/columns/createDateTableColumn";
+import { createNumberTableColumn } from "@/src/components/design-system/table/columns/createNumberTableColumn";
+import { createTextTableColumn } from "@/src/components/design-system/table/columns/createTextTableColumn";
+
+import {
+  useColumnOrder,
+  useColumnVisibility,
+} from "@/src/features/column-visibility";
+import { useTableViewManager } from "@/src/components/table/table-view-presets/hooks/useTableViewManager";
+import { useTableViewFilterChange } from "@/src/components/table/table-view-presets/hooks/useTableViewFilterChange";
+import { TableSearchBar } from "@/src/features/search-bar/components/TableSearchBar";
+import { SearchScopeSelect } from "@/src/components/table/SearchScopeSelect";
+import { toObservedOptions } from "@/src/features/search-bar/lib/observed-options";
+import { PROMPTS_FIELD_REGISTRY } from "@/src/features/prompts/constants/promptsSearchRegistry";
 
 type PromptTableRow = {
   id: string;
@@ -81,6 +99,10 @@ export function PromptTable() {
     column: "createdAt",
     order: "DESC",
   });
+  const orderBy = normalizeOrderByForTable({
+    orderBy: orderByState,
+    expectedTimeColumn: "createdAt",
+  });
 
   const {
     paginationState,
@@ -105,7 +127,7 @@ export function PromptTable() {
       limit: paginationState.pageSize,
       projectId,
       filter: filterState,
-      orderBy: orderByState,
+      orderBy,
       pathPrefix: currentFolderPath,
       searchQuery: searchQuery || undefined,
       searchType: searchType,
@@ -246,10 +268,13 @@ export function PromptTable() {
     [promptFilterOptions.data],
   );
 
+  const { viewControllersRef, onExplicitFilterStateChange } =
+    useTableViewFilterChange();
   const queryFilter = useSidebarFilterState(
     promptFilterConfig,
     newFilterOptions,
     {
+      onExplicitFilterStateChange,
       loading: promptFilterOptions.isPending,
       stateLocation: "urlAndSessionStorage",
       sessionFilterContextId: projectId ?? null,
@@ -294,36 +319,36 @@ export function PromptTable() {
         };
       },
     }),
-    {
+    createNumberTableColumn<PromptTableRow>({
       accessorKey: "version",
       header: "Versions",
-      id: "version",
       enableSorting: true,
       size: 70,
-      cell: ({ getValue, row }) => {
-        if (row.original.type === "folder") return null;
-        return getValue<number | undefined>();
+      formatter: (value) => String(value),
+      getValue: (value, { row }) => {
+        if (row.original.type === "folder") return undefined;
+        return value ?? undefined;
       },
-    },
-    {
+    }),
+    createTextTableColumn<PromptTableRow>({
       accessorKey: "type",
       header: "Type",
-      id: "type",
       enableSorting: true,
       size: 60,
-    },
-    {
+    }),
+    createDateTableColumn({
       accessorKey: "createdAt",
       header: "Latest Version Created At",
-      id: "createdAt",
       enableSorting: true,
       size: 200,
-      cell: ({ getValue, row }) => {
-        if (row.original.type === "folder") return null;
-        const createdAt = getValue<Date | undefined>();
-        return createdAt ? <LocalIsoDate date={createdAt} /> : null;
+      getValue: (value, context) => {
+        if (context.row.original.type === "folder") {
+          return undefined;
+        }
+
+        return value ?? undefined;
       },
-    },
+    }),
     {
       accessorKey: "numberOfObservations",
       header: "Number of Observations (7d)",
@@ -373,7 +398,7 @@ export function PromptTable() {
               limit: 50,
               projectId,
               filter: filterState,
-              orderBy: orderByState,
+              orderBy,
             }}
           />
         );
@@ -403,6 +428,57 @@ export function PromptTable() {
     },
   ];
 
+  const [columnVisibility, setColumnVisibility] =
+    useColumnVisibility<PromptTableRow>(
+      "promptsColumnVisibility",
+      promptColumns,
+    );
+  const [columnOrder, setColumnOrder] = useColumnOrder<PromptTableRow>(
+    "promptsColumnOrder",
+    promptColumns,
+  );
+  const { isLoading: isViewLoading, ...viewControllers } = useTableViewManager({
+    tableName: TableViewPresetTableName.Prompts,
+    projectId,
+    stateUpdaters: {
+      setColumnVisibility,
+      setColumnOrder,
+      setOrderBy: setOrderByState,
+      setFilters: (filters) =>
+        queryFilter.setFilterState(filters, { origin: "saved_view" }),
+      setSearchQuery,
+      setExpandedFilters: queryFilter.onExpandedChange,
+    },
+    validationContext: {
+      columns: promptColumns,
+      filterColumnDefinition: promptFilterConfig.columnDefinitions,
+      expandableFilterColumns: promptFilterConfig.facets.map(
+        (facet) => facet.column,
+      ),
+    },
+    currentFilterState: queryFilter.explicitFilterState,
+    currentExpandedFilters: queryFilter.expanded,
+  });
+  viewControllersRef.current = viewControllers;
+  const handleSearchQueryChange = (query: string | null) => {
+    viewControllers.handleUserStateChange(searchQuery ?? "", query ?? "");
+    setSearchQuery(query);
+  };
+  const handleSearchTypeChange = (next: typeof searchType) => {
+    viewControllers.handleUserStateChange(searchType, next);
+    setSearchType(next);
+  };
+  const handleColumnOrderChange: typeof setColumnOrder = (next) => {
+    const value = typeof next === "function" ? next(columnOrder) : next;
+    viewControllers.handleUserStateChange(columnOrder, value);
+    setColumnOrder(value);
+  };
+  const handleColumnVisibilityChange: typeof setColumnVisibility = (next) => {
+    const value = typeof next === "function" ? next(columnVisibility) : next;
+    viewControllers.handleUserStateChange(columnVisibility, value);
+    setColumnVisibility(value);
+  };
+
   return (
     <DataTableControlsProvider
       tableName={promptFilterConfig.tableName}
@@ -416,40 +492,69 @@ export function PromptTable() {
             navigateToFolder={navigateToFolder}
           />
         )}
+        <TableSearchBar
+          key={`${projectId}:${viewControllers.filterEditorResetKey}:${queryFilter.draftResetKey}`}
+          projectId={projectId}
+          tableName="prompts"
+          registry={PROMPTS_FIELD_REGISTRY}
+          filterState={queryFilter.searchBarFilterState}
+          setFilterState={queryFilter.setFilterState}
+          observed={toObservedOptions(
+            newFilterOptions,
+            promptFilterOptions.isPending,
+          )}
+          isV4={false}
+          search={{
+            query: searchQuery,
+            type: searchType,
+            setQuery: handleSearchQueryChange,
+          }}
+          searchScope={
+            <SearchScopeSelect
+              searchType={searchType}
+              setSearchType={handleSearchTypeChange}
+              metadataLabel="Names, Tags"
+              fullTextLabel="Full Text"
+              availableSearchTypes={{
+                content: true,
+                input: false,
+                output: false,
+              }}
+            />
+          }
+        />
         <DataTableToolbar
+          tableName="prompts"
           columns={promptColumns}
           filterState={queryFilter.filterState}
           columnsWithCustomSelect={["labels", "tags"]}
-          searchConfig={{
-            metadataSearchFields: ["Name", "Tags", "Content"],
-            updateQuery: useDebounce(setSearchQuery, 300),
-            currentQuery: searchQuery ?? undefined,
-            tableAllowsFullTextSearch: true,
-            setSearchType,
-            searchType,
-            customDropdownLabels: {
-              metadata: "Names, Tags",
-              fullText: "Full Text",
-            },
-            hidePerformanceWarning: true,
-            availableSearchTypes: {
-              content: true,
-              input: false,
-              output: false,
-            },
+          isV4={false}
+          currentSearchQuery={searchQuery ?? ""}
+          orderByState={orderBy}
+          columnOrder={columnOrder}
+          setColumnOrder={handleColumnOrderChange}
+          columnVisibility={columnVisibility}
+          setColumnVisibility={handleColumnVisibilityChange}
+          viewConfig={{
+            tableName: TableViewPresetTableName.Prompts,
+            projectId,
+            controllers: viewControllers,
           }}
         />
 
         {/* Content area with sidebar and table */}
         <ResizableFilterLayout>
-          <DataTableControls queryFilter={queryFilter} />
+          <DataTableControls
+            key={viewControllers.filterEditorResetKey}
+            queryFilter={queryFilter}
+          />
 
           <div className="flex flex-1 flex-col overflow-hidden">
             <DataTable
               tableName="prompts"
               columns={promptColumns}
               data={
-                prompts.isLoading
+                prompts.isLoading || isViewLoading
                   ? { isLoading: true, isError: false }
                   : prompts.isError
                     ? {
@@ -473,8 +578,15 @@ export function PromptTable() {
                         })),
                       }
               }
-              orderBy={orderByState}
-              setOrderBy={setOrderByState}
+              orderBy={orderBy}
+              setOrderBy={(next) => {
+                viewControllers.handleUserStateChange(orderByState, next);
+                setOrderByState(next);
+              }}
+              columnOrder={columnOrder}
+              onColumnOrderChange={handleColumnOrderChange}
+              columnVisibility={columnVisibility}
+              onColumnVisibilityChange={handleColumnVisibilityChange}
               pagination={{
                 totalCount,
                 onChange: setPaginationAndFolderState,

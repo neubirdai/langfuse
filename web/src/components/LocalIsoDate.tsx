@@ -59,7 +59,7 @@ export const LocalIsoDate = ({
 }) => {
   const preparedDate = prepareLocalIsoDate({ date, accuracy });
 
-  return preparedDate ? (
-    <span title={preparedDate.title}>{preparedDate.display}</span>
-  ) : null;
+  return (
+    <span title={preparedDate?.title}>{preparedDate?.display ?? "-"}</span>
+  );
 };
