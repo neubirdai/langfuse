@@ -569,6 +569,12 @@ const EVENTS_AGGREGATION_FIELDS = {
   tags: "argMaxIf(tags, event_ts, notEmpty(tags)) AS tags",
   release: "argMaxIf(release, event_ts, release <> '') AS release",
 
+  // Evaluator execution fields are stamped on every internal evaluation span.
+  evaluator_id:
+    "argMaxIf(evaluator_id, event_ts, evaluator_id <> '') AS evaluator_id",
+  evaluation_rule_id:
+    "argMaxIf(evaluation_rule_id, event_ts, evaluation_rule_id <> '') AS evaluation_rule_id",
+
   // experiment fields
   experiment_id: "any(experiment_id) as experiment_id",
 } as const;
@@ -1950,7 +1956,9 @@ const EXPERIMENTS_AGGREGATION_FIELDS = {
     "nullIf(any(e.experiment_dataset_id), '') AS experiment_dataset_id",
   startTime: "min(e.start_time) AS start_time",
   itemCount: "uniq(e.experiment_item_id) AS item_count",
-  errorCount: "countIf(e.level = 'ERROR') AS error_count",
+  // Distinct items that carry any ERROR event, so the number matches the
+  // items-view Status=ERROR list the badge opens.
+  errorCount: "uniqIf(e.experiment_item_id, e.level = 'ERROR') AS error_count",
   prompts:
     "groupUniqArrayIf(tuple(e.prompt_name, e.prompt_version), e.prompt_name != '') AS prompts",
   experimentMetadata:
