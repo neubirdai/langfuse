@@ -768,6 +768,9 @@ importers:
       json-schema-faker:
         specifier: 0.6.1
         version: 0.6.1
+      jsonpath-plus:
+        specifier: 10.3.0
+        version: 10.3.0
       langfuse:
         specifier: 3.38.4
         version: 3.38.4

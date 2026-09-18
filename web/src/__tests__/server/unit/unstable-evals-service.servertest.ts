@@ -129,7 +129,7 @@ vi.mock("@/src/features/evals/server/codeEvalJobConfigValidation", () => ({
       super(message);
     }
   },
-  assertCodeEvalRuleCanRun: vi.fn(),
+  assertCodeEvalJobConfigCanRun: vi.fn(),
 }));
 
 vi.mock("@/src/features/evals/server/isCodeEvalEnabled", () => ({
@@ -145,7 +145,7 @@ vi.mock("@langfuse/shared/src/server", async () => ({
 import { prisma } from "@langfuse/shared/src/db";
 import {
   CodeEvalJobConfigError,
-  assertCodeEvalRuleCanRun,
+  assertCodeEvalJobConfigCanRun,
 } from "@/src/features/evals/server/codeEvalJobConfigValidation";
 import {
   createPublicEvaluationRule,
@@ -372,7 +372,7 @@ describe("unstable public evaluation-rule service", () => {
     (findPublicV2EvaluatorInFamilyOrThrow as Mock).mockResolvedValue(
       codeEvaluator,
     );
-    (assertCodeEvalRuleCanRun as Mock).mockRejectedValue(
+    (assertCodeEvalJobConfigCanRun as Mock).mockRejectedValue(
       new CodeEvalJobConfigError("Sandbox run failed", "preflight_failed"),
     );
 
@@ -403,7 +403,7 @@ describe("unstable public evaluation-rule service", () => {
     (findPublicV2EvaluatorInFamilyOrThrow as Mock).mockResolvedValue(
       codeEvaluator,
     );
-    (assertCodeEvalRuleCanRun as Mock).mockRejectedValue(
+    (assertCodeEvalJobConfigCanRun as Mock).mockRejectedValue(
       new CodeEvalJobConfigError("Unsupported target", "invalid_target"),
     );
 

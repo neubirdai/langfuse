@@ -9,7 +9,7 @@ import {
   type ObservationVariableMapping,
 } from "@langfuse/shared";
 import {
-  assertCodeEvalRuleCanRun,
+  assertCodeEvalJobConfigCanRun,
   CodeEvalJobConfigError,
 } from "@/src/features/evals/server/codeEvalJobConfigValidation";
 import { auditLog } from "@/src/features/audit-logs/auditLog";
@@ -167,11 +167,11 @@ async function assertEvaluationRuleCanRunForPublicApi(params: {
   }
 
   try {
-    await assertCodeEvalRuleCanRun({
+    await assertCodeEvalJobConfigCanRun({
       prisma,
       orgId: params.orgId,
       projectId: params.projectId,
-      evaluatorId: params.evaluatorId,
+      evalTemplateId: params.evaluatorId,
       target: params.target,
       mapping: params.mapping,
       scoreName: params.scoreName,
