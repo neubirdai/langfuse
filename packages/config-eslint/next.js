@@ -140,11 +140,7 @@ export default [
     ignores: ["**/vitest.config.mts"],
     languageOptions: {
       parserOptions: {
-        projectService: {
-          allowDefaultProject: [
-            "src/__tests__/posthog-session-replay-mask.clienttest.tsx",
-          ],
-        },
+        projectService: true,
       },
       globals: {
         React: "readonly",
@@ -159,7 +155,6 @@ export default [
       },
     },
     rules: {
-      "@repo/no-abstracted-overlay-trigger": "warn",
       "@repo/no-tailwind-overflow-scroll": "warn",
       // Custom rules from old config
       "@typescript-eslint/consistent-type-imports": [
@@ -199,7 +194,6 @@ export default [
       "**/*.stories.{ts,tsx}",
     ],
     rules: {
-      "@repo/no-abstracted-overlay-trigger": "off",
       "@repo/no-tailwind-overflow-scroll": "off",
     },
   },
