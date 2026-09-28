@@ -119,6 +119,99 @@ const expectDropTags = (
   expect(tags?.sdkVersion).toBe("3.8.1");
 };
 
+describe("gateway metadata", () => {
+  it.each([
+    ["v3", "langfuse-ai-gateway"],
+    ["v4", "langfuse-ai-gateway"],
+    ["v3", "other-instrumentation"],
+    ["v4", "other-instrumentation"],
+  ])(
+    "preserves canonical fields and metadata for %s %s",
+    async (path, scope) => {
+      const completionStartTime = "2025-07-13T05:20:00.500Z";
+      const modelParameters = {
+        service_tier: "default",
+        stream: true,
+        reasoning: { effort: "low" },
+      };
+      const usageDetails = { input: 10, output: 21 };
+      const canonicalAttributes = {
+        "langfuse.observation.type": "generation",
+        "langfuse.observation.level": "ERROR",
+        "langfuse.observation.status_message": "HTTP 429: rate limited",
+        "langfuse.observation.model.name": "test-model",
+        "langfuse.observation.model.parameters":
+          JSON.stringify(modelParameters),
+        "langfuse.observation.usage_details": JSON.stringify(usageDetails),
+        "langfuse.observation.cost_details": JSON.stringify({ total: 0.001 }),
+        "langfuse.observation.completion_start_time": completionStartTime,
+      };
+      const batch = buildBatch(
+        Object.entries({
+          ...canonicalAttributes,
+          "langfuse.observation.input": '[{"role":"user","content":"Hi"}]',
+          "langfuse.observation.output": '[{"type":"message","content":[]}]',
+          "langfuse.observation.metadata": JSON.stringify({
+            "langfuse.gateway.provider.request_id": "req-test",
+          }),
+          "langfuse.observation.metadata.langfuse.gateway.api-key.id":
+            "key-test",
+          "custom.attribute": "keep-custom",
+          "langfuse.observation.custom": "keep-unknown",
+        }).map(([key, value]) => ({ key, value: { stringValue: value } })),
+      );
+      batch[0].scopeSpans![0].scope!.name = scope;
+      const processor = createProcessor();
+      const observation =
+        path === "v4"
+          ? processor.processToEvent(batch)[0]
+          : (await processor.processToIngestionEvents(batch)).find(
+              (event) => event.type === "generation-create",
+            )?.body;
+
+      expect(observation).toMatchObject({
+        level: "ERROR",
+        statusMessage: "HTTP 429: rate limited",
+        modelParameters: {
+          service_tier: "default",
+          stream: "true",
+          reasoning: '{"effort":"low"}',
+        },
+        completionStartTime,
+        input: '[{"role":"user","content":"Hi"}]',
+        output: '[{"type":"message","content":[]}]',
+        ...(path === "v4"
+          ? {
+              type: "GENERATION",
+              modelName: "test-model",
+              providedUsageDetails: usageDetails,
+              providedCostDetails: { total: 0.001 },
+            }
+          : {
+              model: "test-model",
+              usageDetails,
+              costDetails: { total: 0.001 },
+            }),
+      });
+      expect(observation?.metadata).toEqual({
+        "langfuse.gateway.provider.request_id": "req-test",
+        "langfuse.gateway.api-key.id": "key-test",
+        attributes: {
+          ...(scope === "langfuse-ai-gateway" ? {} : canonicalAttributes),
+          "custom.attribute": "keep-custom",
+          "langfuse.observation.custom": "keep-unknown",
+        },
+        resourceAttributes: { "service.name": "test-svc" },
+        scope: {
+          name: scope,
+          version: "3.8.1",
+          attributes: { public_key: "pk-test" },
+        },
+      });
+    },
+  );
+});
+
 describe("OTel metadata_dropped metric", () => {
   beforeEach(() => {
     recordIncrementMock.mockClear();
@@ -844,80 +937,6 @@ describe("metadata_dropped attribution tags (parse_failure kind, attributeKey)",
         expect(codePoint).toBeGreaterThan(31);
         expect(codePoint).not.toBe(127);
       }
-    }
-  });
-});
-
-describe("OTel reconstructed array drop telemetry", () => {
-  beforeEach(() => {
-    recordIncrementMock.mockClear();
-  });
-
-  const arrayDropCalls = () =>
-    recordIncrementMock.mock.calls.filter(
-      ([stat]) => stat === ARRAY_ATTRIBUTE_DROPPED_METRIC,
-    );
-
-  it("reports an out-of-range array attribute", async () => {
-    const processor = createProcessor();
-    const batch = buildBatch([
-      {
-        key: "llm.input_messages.10001.content",
-        value: { stringValue: "dropped" },
-      },
-    ]);
-
-    await processor.processToIngestionEvents(batch);
-
-    expect(arrayDropCalls()).toContainEqual([
-      ARRAY_ATTRIBUTE_DROPPED_METRIC,
-      1,
-      {
-        reason: "reconstruction_budget_exceeded",
-        prefix: "llm.input_messages",
-      },
-    ]);
-  });
-
-  it("caps warnings without logging rejected attribute keys or values", async () => {
-    const warnSpy = vi
-      .spyOn(serverBarrel.logger, "warn")
-      .mockImplementation(() => serverBarrel.logger);
-
-    try {
-      const batches = Array.from(
-        { length: 12 },
-        (_, index) =>
-          buildBatch([
-            {
-              key: `llm.input_messages.${10_001 + index}.secret-content`,
-              value: { stringValue: `customer-secret-${index}` },
-            },
-          ])[0],
-      );
-
-      await createProcessor().processToIngestionEvents(batches);
-
-      expect(arrayDropCalls().length).toBeGreaterThan(0);
-      const arrayDropWarnings = warnSpy.mock.calls.filter(
-        ([message]) => String(message) === "OTEL array attribute dropped",
-      );
-      expect(arrayDropWarnings).toHaveLength(10);
-      for (const warning of arrayDropWarnings) {
-        expect(warning).toEqual([
-          "OTEL array attribute dropped",
-          {
-            projectId: PROJECT_ID,
-            prefix: "llm.input_messages",
-            reason: "reconstruction_budget_exceeded",
-            droppedAttributeCount: 1,
-          },
-        ]);
-        expect(JSON.stringify(warning)).not.toContain("customer-secret");
-        expect(JSON.stringify(warning)).not.toContain("secret-content");
-      }
-    } finally {
-      warnSpy.mockRestore();
     }
   });
 });

@@ -35,8 +35,10 @@ export class ClickHouseCompileDialect implements Dialect {
 let compileDb: Kysely<ClickHouseDatabase> | undefined;
 
 export function getClickhouseKysely(): Kysely<ClickHouseDatabase> {
-  compileDb ??= new Kysely<ClickHouseDatabase>({
-    dialect: new ClickHouseCompileDialect(),
-  });
+  if (compileDb === undefined) {
+    compileDb = new Kysely<ClickHouseDatabase>({
+      dialect: new ClickHouseCompileDialect(),
+    });
+  }
   return compileDb;
 }
