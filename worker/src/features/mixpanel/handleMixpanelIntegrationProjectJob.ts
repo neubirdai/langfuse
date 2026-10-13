@@ -250,8 +250,6 @@ export const handleMixpanelIntegrationProjectJob = async (
     return;
   }
 
-  const runStartTime = new Date();
-
   try {
     // Fetch relevant data and send it to Mixpanel
     const executionConfig: MixpanelExecutionConfig = {
@@ -328,13 +326,6 @@ export const handleMixpanelIntegrationProjectJob = async (
       `[MIXPANEL] Mixpanel integration processing complete for project ${projectId}`,
     );
   } catch (error) {
-    recordExportFreshnessLag({
-      integration: "mixpanel",
-      window: "1h",
-      status: "failure",
-      runStartTime,
-      maxExportedTimestamp: mixpanelIntegration.lastSyncAt,
-    });
     const mixpanelFaultReason = classifyCustomerFault(error);
     if (mixpanelFaultReason !== undefined) {
       recordIncrement(MIXPANEL_INTEGRATION_CUSTOMER_FAULT_METRIC, 1, {

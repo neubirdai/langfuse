@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useRef } from "react";
+/* eslint-disable no-nested-ternary */
+import { useMemo } from "react";
 import { type Prisma, type ScoreDomain, deepParseJson } from "@langfuse/shared";
 import { PrettyJsonView } from "@/src/components/ui/PrettyJsonView";
 import { type MetadataFilterActions } from "@/src/components/table/ValueCell";
 import { useMarkdownRenderCharacterLimit } from "@/src/hooks/useMarkdownRenderCharacterLimit";
-import { type MediaReturnType } from "@/src/features/media/validation";
+import { type MediaReturnType } from "@/src/features/media";
 import { type ChatMLParserResult } from "../../hooks/useChatMLParser";
 import {
-  type IOPreviewParserComparisonOutcome,
-  type IOPreviewParserMode,
   hasRenderableChatMessages,
   useIOPreviewParser,
 } from "../../hooks/useIOPreviewParser";
@@ -98,7 +97,6 @@ export interface IOPreviewPrettyProps extends ExpansionStateProps {
   parsedOutput?: unknown;
   parsedMetadata?: unknown;
   chatMLParserResult?: ChatMLParserResult;
-  observationName?: string;
   isLoading?: boolean;
   isParsing?: boolean;
   hideIfNull?: boolean;
@@ -143,7 +141,6 @@ export function IOPreviewPretty({
   parsedOutput: preParsedOutput,
   parsedMetadata: preParsedMetadata,
   chatMLParserResult,
-  observationName,
   isLoading = false,
   isParsing = false,
   hideIfNull = false,
@@ -193,19 +190,29 @@ export function IOPreviewPretty({
     [projectId, observationId],
   );
 
-  // Parse into the shared preview contract. The normalized parser is opt-in
-  // while it is being rolled out; legacy remains the safe default.
-  const { result: parserResult, comparisonOutcome } = useIOPreviewParser(
-    parser,
+  // Parse into the shared preview contract.
+  const parserResult = useIOPreviewParser(
     input,
     output,
     metadata,
-    observationName,
     parsedInput,
     parsedOutput,
     parsedMetadata,
     chatMLParserResult,
   );
+
+  const {
+    allMessages,
+    additionalInput,
+    allTools,
+    toolCallCounts,
+    toolCallsByName,
+    messageToToolCallNumbers,
+    toolNameToDefinitionNumber,
+    inputMessageCount,
+  } = parserResult;
+
+  const characterLimit = useMarkdownRenderCharacterLimit();
 
   const {
     allMessages,

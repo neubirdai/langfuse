@@ -1991,7 +1991,7 @@ describe("BlobStorageIntegrationProcessingJob", () => {
       expect(timeDiff).toBeLessThan(5000); // Within 5 seconds
     });
 
-    it("records freshness success when catch-up enqueue fails after the watermark advances", async () => {
+    it("keeps the advanced watermark when catch-up enqueue fails", async () => {
       const { projectId } = await createOrgProjectAndApiKey();
       s3Prefix = projectId;
       const now = new Date();
@@ -2027,7 +2027,6 @@ describe("BlobStorageIntegrationProcessingJob", () => {
       const getInstanceSpy = vi
         .spyOn(BlobStorageIntegrationProcessingQueue, "getInstance")
         .mockReturnValue({ add } as never);
-      mockRecordDistribution.mockClear();
 
       try {
         await expect(
@@ -2044,20 +2043,6 @@ describe("BlobStorageIntegrationProcessingJob", () => {
           twoDaysAgo.getTime() + 60 * 60 * 1000,
         );
         expect(add).toHaveBeenCalled();
-        expect(mockRecordDistribution).toHaveBeenCalledWith(
-          EXPORT_FRESHNESS_LAG_METRIC,
-          expect.any(Number),
-          expect.objectContaining({
-            integration: "blob_storage",
-            window: "1h",
-            status: "success",
-          }),
-        );
-        expect(mockRecordDistribution).not.toHaveBeenCalledWith(
-          EXPORT_FRESHNESS_LAG_METRIC,
-          expect.anything(),
-          expect.objectContaining({ status: "failure" }),
-        );
       } finally {
         getInstanceSpy.mockRestore();
       }

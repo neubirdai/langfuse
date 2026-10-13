@@ -12,7 +12,25 @@ import { auditLog } from "@/src/features/audit-logs/server";
 import { logger } from "@langfuse/shared/src/server";
 import { type BillingProvider } from "@langfuse/shared";
 import { resolveBillingService } from "./resolveBillingService";
-import { isCloudBillingEnabled } from "../utils/isCloudBilling";
+import { isCloudBillingEnabled } from "../utils/isCloudBillingEnabled";
+
+const PROVIDER_LABEL: Record<BillingProvider, string> = {
+  stripe: "Stripe",
+  clickhouse: "ClickHouse Billing",
+};
+
+/**
+ * Names the provider that actually failed. Both procedures below can dispatch
+ * to either provider, so a hardcoded "Stripe error:" would point on-call at
+ * the wrong system for a CHB REST failure.
+ */
+const billingErrorMessage = (
+  billingProvider: BillingProvider,
+  error: unknown,
+) => {
+  const label = PROVIDER_LABEL[billingProvider];
+  return `${label} error: ${error instanceof Error ? error.message : `Unknown ${label} error`}`;
+};
 
 const PROVIDER_LABEL: Record<BillingProvider, string> = {
   stripe: "Stripe",
