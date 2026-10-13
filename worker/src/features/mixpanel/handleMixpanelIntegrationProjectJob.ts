@@ -14,7 +14,6 @@ import {
 import { decrypt } from "@langfuse/shared/encryption";
 import { MixpanelClient } from "./mixpanelClient";
 import { recordExportVolume } from "../../services/exportVolumeMetric";
-import { recordExportFreshnessLag } from "../../services/exportFreshnessLagMetric";
 import {
   transformTraceForMixpanel,
   transformGenerationForMixpanel,
@@ -314,13 +313,6 @@ export const handleMixpanelIntegrationProjectJob = async (
       integration: "mixpanel",
       bytes: mixpanel.getSerializedBytes(),
       projectId,
-    });
-    recordExportFreshnessLag({
-      integration: "mixpanel",
-      window: "1h",
-      status: "success",
-      runStartTime,
-      maxExportedTimestamp: executionConfig.maxTimestamp,
     });
     logger.info(
       `[MIXPANEL] Mixpanel integration processing complete for project ${projectId}`,

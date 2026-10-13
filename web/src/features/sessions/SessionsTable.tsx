@@ -74,10 +74,6 @@ import { showSuccessToast } from "@/src/features/notifications";
 import { useScoreColumns, scoreFilters } from "@/src/features/scores";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
 import { BatchExportTableButton } from "@/src/components/BatchExportTableButton";
-import { sessionsFieldRegistry } from "@/src/features/filters/config/sessionsSearchRegistry";
-import { toObservedOptions } from "@/src/features/search-bar/lib/observed-options";
-import { TableSearchBar } from "@/src/features/search-bar/components/TableSearchBar";
-import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 
 import { toObservedOptions, TableSearchBar } from "@/src/features/search-bar";
 
@@ -310,9 +306,6 @@ export default function SessionsTable({
     filterOptions.isPending ||
     environmentFilterOptions.isPending ||
     (isV4 && eventToolOptions.isFilterOptionsPending);
-
-  const { viewControllersRef, onExplicitFilterStateChange } =
-    useTableViewFilterChange();
 
   const { viewControllersRef, onExplicitFilterStateChange } =
     useTableViewFilterChange();

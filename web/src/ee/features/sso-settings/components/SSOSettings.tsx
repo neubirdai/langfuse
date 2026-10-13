@@ -6,11 +6,6 @@ import { VerifiedDomainsSettings } from "@/src/ee/features/verified-domains";
 import { AlertCircle } from "lucide-react";
 import { ConnectedSsoConfigsTable } from "./SsoConfigsTable/ConnectedSsoConfigsTable";
 
-type SsoConfigTableRow = {
-  domain: string;
-  config: SsoConfigRow | null;
-};
-
 export const SSOSettings = ({ orgId }: { orgId: string }) => {
   const hasEntitlement = useHasEntitlement("cloud-multi-tenant-sso");
   const hasAccess = useHasOrganizationAccess({

@@ -142,18 +142,6 @@ const ftsMetadataArrayTokenConjunct = (
   valueParam: string,
 ): string => ftsTokenPrefilterPredicate(arrayExpr, valueParam, false);
 
-// Text-index prefilter for exact metadata equality. The stored value equals the
-// search value, so it trivially contains all of the value's tokens: a
-// correctness-safe superset that engages `idx_fts_metadata_values`. Guard against
-// tokenless values (e.g. "!!!"), where `tokens()` is empty and the prefilter
-// would otherwise exclude legitimate matches; the exact `= value` check remains
-// the precise post-filter. Metadata is case-sensitive, so tokens are not lowered.
-const ftsMetadataArrayEqualityTokenConjunct = (
-  arrayExpr: string,
-  valueParam: string,
-): string =>
-  `(empty(${ftsSearchTokensExpr(valueParam, false)}) OR ${ftsMetadataArrayTokenConjunct(arrayExpr, valueParam)})`;
-
 type FtsMetadataArrayConditionContext = {
   hasKey: string;
   valuesColumn: string;

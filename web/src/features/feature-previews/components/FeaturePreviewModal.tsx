@@ -19,8 +19,6 @@ import {
 } from "@/src/features/feature-flags";
 import modernSessionDarkIllustration from "../assets/modern-session-dark.svg";
 import modernSessionLightIllustration from "../assets/modern-session-light.svg";
-import improvedMessageRenderingDarkIllustration from "../assets/improved-message-rendering-dark.svg";
-import improvedMessageRenderingLightIllustration from "../assets/improved-message-rendering-light.svg";
 
 /** Flags the Feature Preview modal can toggle. Keep in sync with the
  *  userAccount.setFeaturePreviewEnabled allowlist and available-flags.ts. */

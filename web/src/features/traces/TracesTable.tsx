@@ -522,15 +522,11 @@ function TracesTableInternal({
     orderBy: orderByState,
   };
 
-  // A filter/page/sort change (or a re-anchored window) is a new query key:
-  // keep the rows that are on screen until the new ones land, so only a genuine
-  // cold load renders skeletons.
   const traces = api.traces.all.useQuery(tracesAllQueryFilter, {
     ...placeholderOptions,
     enabled: environmentFilterOptions.data !== undefined,
     refetchOnMount: false,
     refetchOnWindowFocus: true,
-    placeholderData: (prev) => prev,
   });
   const traceMetrics = api.traces.metrics.useQuery(
     {
@@ -543,7 +539,6 @@ function TracesTableInternal({
       enabled: traces.data !== undefined,
       refetchOnMount: false,
       refetchOnWindowFocus: true,
-      placeholderData: (prev) => prev,
     },
   );
 
@@ -1660,10 +1655,6 @@ const TracesDynamicCell = ({
     }
     return trace.data?.metadata;
   })();
-
-  if (trace.isPending) {
-    return <ConnectedIOTableCell isLoading singleLine={singleLine} />;
-  }
 
   if (trace.isPending) {
     return <ConnectedIOTableCell isLoading singleLine={singleLine} />;

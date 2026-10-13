@@ -196,7 +196,6 @@ export function useEventsTableData({
       rowsEnabled && activeObservations.isSuccess && batchIOPayload !== null,
     refetchOnWindowFocus: false,
     staleTime: 0,
-    placeholderData: (prev) => prev,
   });
 
   // I/O lands one query behind the rows.
@@ -247,7 +246,6 @@ export function useEventsTableData({
     ...placeholderOptions,
     enabled: selectAll,
     refetchOnWindowFocus: true,
-    placeholderData: (prev) => prev,
   });
 
   const totalCount = selectAll

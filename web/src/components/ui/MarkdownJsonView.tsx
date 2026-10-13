@@ -37,34 +37,6 @@ export function MarkdownJsonViewHeader({
   hoverRevealControls = false,
 }: MarkdownJsonViewHeaderProps) {
   const [isCopied, setIsCopied] = useState(false);
-  const collapseSubject = collapseControl?.subject ?? "system prompt";
-  const collapseLabel = collapseControl
-    ? collapseControl.isCollapsed
-      ? `Expand ${collapseSubject}`
-      : `Collapse ${collapseSubject}`
-    : undefined;
-  // Keep the visible title in the title-button name (WCAG 2.5.3). A generic
-  // aria-label would hide message `name`s from assistive tech.
-  const titleButtonLabel =
-    typeof title === "string" && collapseLabel
-      ? `${title}, ${collapseLabel}`
-      : collapseLabel;
-
-  const titleContent = (
-    <>
-      {collapseControl ? (
-        <ChevronDown
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 transition-transform",
-            collapseControl.isCollapsed && "-rotate-90",
-          )}
-          aria-hidden
-        />
-      ) : null}
-      {titleIcon}
-      {title}
-    </>
-  );
 
   const titleContent = (
     <>

@@ -77,10 +77,6 @@ import { env } from "../../env";
 import { assertExportSourceWritable } from "../exportWriteModeGuard";
 import { recordExportVolume } from "../../services/exportVolumeMetric";
 import {
-  recordExportFreshnessLag,
-  windowClassFromBlobFrequency,
-} from "../../services/exportFreshnessLagMetric";
-import {
   buildBlobExportManifest,
   buildBlobExportManifestKey,
   formatBlobExportTimestamp,
@@ -1306,15 +1302,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
         lastErrorAt: null,
       },
     });
-    recordExportFreshnessLag({
-      integration: "blob_storage",
-      window: windowClassFromBlobFrequency(
-        blobStorageIntegration.exportFrequency,
-      ),
-      status: "success",
-      runStartTime,
-      maxExportedTimestamp: blobStorageIntegration.lastSyncAt,
-    });
     return;
   }
 
@@ -1322,7 +1309,6 @@ export const handleBlobStorageIntegrationProjectJob = async (
   // self-hosted), so the deprecation notice below is Cloud-only too.
   const isCloud = Boolean(env.NEXT_PUBLIC_LANGFUSE_CLOUD_REGION);
 
-  let watermarkAdvanced = false;
   try {
     // The catch persists lastError and notifies admins.
     assertExportSourceWritable(

@@ -19,7 +19,6 @@ import { copyTextToClipboard } from "@/src/utils/clipboard";
 import { JSONView } from "@/src/components/ui/CodeJsonViewer";
 import { Button } from "@/src/components/ui/button";
 import { useClickWithoutSelection } from "@/src/hooks/useClickWithoutSelection";
-import { useCollapsibleSystemPrompt } from "@/src/hooks/useCollapsibleSystemPrompt";
 import {
   ChevronDown,
   ChevronRight,
@@ -84,35 +83,6 @@ const MAX_CELL_DISPLAY_CHARS = 2000;
 const ASSISTANT_TITLES = ["assistant", "Output", "model"];
 
 const PREVIEW_TEXT_CLASSES = "text-gray-500 dark:text-gray-400";
-
-type PrettyJsonViewTone = "danger" | "warning" | "muted" | "neutral";
-
-const PRETTY_JSON_VIEW_TONE_CLASSES: Record<
-  PrettyJsonViewTone,
-  { container: string; row: string; cell: string }
-> = {
-  danger: {
-    container:
-      "border-dark-red/30 bg-light-red/50 dark:border-dark-red/20 dark:bg-light-red/35",
-    row: "hover:bg-light-red/50 dark:hover:bg-light-red/35",
-    cell: "border-dark-red/20 dark:border-dark-red/15",
-  },
-  warning: {
-    container: "border-dark-yellow/40 bg-light-yellow/80",
-    row: "hover:bg-light-yellow/80",
-    cell: "border-dark-yellow/20",
-  },
-  muted: {
-    container: "border-muted-foreground/15 bg-muted/30 text-muted-foreground",
-    row: "hover:bg-muted/30",
-    cell: "border-muted-foreground/15",
-  },
-  neutral: {
-    container: "bg-card",
-    row: "hover:bg-card",
-    cell: "border-border",
-  },
-};
 
 type PrettyJsonViewTone = "danger" | "warning" | "muted" | "neutral";
 
@@ -912,28 +882,6 @@ export function PrettyJsonView(props: {
         : isMarkdownContent(parsedJson, characterLimit),
     [parsedJson, largeStringValue, characterLimit],
   );
-
-  // Nested MarkdownView is rendered without a title (this view owns the
-  // header), so the header must host the same collapse control that
-  // MarkdownView would show when it has a title. Skip gated large strings:
-  // they render through LargeStringFallback, and splitting them for a
-  // preview would undo the main-thread guard that gate exists for.
-  const systemPromptCollapsibleContent =
-    largeStringValue !== null
-      ? ""
-      : typeof markdownContent === "string"
-        ? markdownContent
-        : typeof parsedJson === "string"
-          ? parsedJson
-          : "";
-  const {
-    shouldBeCollapsible: shouldCollapseSystemPrompt,
-    isCollapsed: isSystemPromptCollapsed,
-    toggleCollapsed: toggleSystemPromptCollapsed,
-  } = useCollapsibleSystemPrompt({
-    isSystemPrompt: Boolean(props.isSystemPrompt),
-    content: systemPromptCollapsibleContent,
-  });
 
   const baseTableData = useMemo(() => {
     try {

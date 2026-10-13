@@ -28,7 +28,6 @@ import {
 import { decrypt } from "@langfuse/shared/encryption";
 import { PostHog } from "posthog-node";
 import { recordExportVolume } from "../../services/exportVolumeMetric";
-import { recordExportFreshnessLag } from "../../services/exportFreshnessLagMetric";
 import { assertExportSourceWritable } from "../exportWriteModeGuard";
 import { classifyCustomerFault } from "../integrations/customerFaultClassification";
 import { isRecordNotFoundError } from "../integrations/prismaErrors";
@@ -425,13 +424,6 @@ export const handlePostHogIntegrationProjectJob = async (
       integration: "posthog",
       bytes: executionConfig.volume.bytes,
       projectId,
-    });
-    recordExportFreshnessLag({
-      integration: "posthog",
-      window: "1h",
-      status: "success",
-      runStartTime,
-      maxExportedTimestamp: executionConfig.maxTimestamp,
     });
     logger.info(
       `[POSTHOG] PostHog integration processing complete for project ${projectId}`,

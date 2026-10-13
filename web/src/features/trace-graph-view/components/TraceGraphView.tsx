@@ -168,20 +168,6 @@ export const TraceGraphView: React.FC<TraceGraphViewProps> = ({
     });
   }, [search, nodeToObservationsMap, nodeResolution]);
 
-  // A node stands for every call of its step, so it keeps its colour when ANY
-  // observation behind it matched — including the ones no node registers, which
-  // resolve to the nearest ancestor the graph kept. `null` means no query and
-  // nothing dims; an empty set means a query that hit nothing, and the whole
-  // graph fades.
-  const matchedNodeNames = useMemo(() => {
-    if (!search) return null;
-    return matchedGraphNodeNames({
-      matchedObservationIds: search.matchedObservationIds,
-      nodeToObservationsMap,
-      resolution: nodeResolution,
-    });
-  }, [search, nodeToObservationsMap, nodeResolution]);
-
   // Reset indices when graph data changes (new trace loaded)
   useEffect(() => {
     setCurrentObservationIndices({});

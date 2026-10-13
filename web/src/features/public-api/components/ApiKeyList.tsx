@@ -41,54 +41,6 @@ export function ApiKeyList(props: { entityId: string; scope: ApiKeyScope }) {
   const hasWriteAccess =
     scope === "project" ? hasProjectWriteAccess : hasOrganizationAccess;
 
-  const columns = useMemo<LangfuseColumnDef<ApiKeyRow>[]>(
-    () => [
-      createTextTableColumn<ApiKeyRow, Date>({
-        accessorKey: "createdAt",
-        header: "Created",
-        mapValue: (value) => value?.toLocaleDateString(),
-        hideBelowMd: true,
-      }),
-      {
-        accessorKey: "createdByUser",
-        header: "Created By",
-        hideBelowMd: true,
-        cell: ({ row }) => <ApiKeyCreatedBy apiKey={row.original} />,
-      },
-      {
-        accessorKey: "note",
-        header: "Note",
-        cell: ({ row }) => (
-          <ApiKeyNote apiKey={row.original} entityId={entityId} scope={scope} />
-        ),
-      },
-      {
-        accessorKey: "publicKey",
-        header: "Public Key",
-        cell: ({ row }) => <PublicKeyCell publicKey={row.original.publicKey} />,
-      },
-      {
-        accessorKey: "displaySecretKey",
-        header: "Secret Key",
-        cell: ({ getValue }) => (
-          <span className="font-mono">{getValue<string>()}</span>
-        ),
-      },
-      {
-        accessorKey: "id",
-        header: "",
-        cell: ({ row }) => (
-          <DeleteApiKeyButton
-            entityId={entityId}
-            apiKeyId={row.original.id}
-            scope={scope}
-          />
-        ),
-      },
-    ],
-    [entityId, scope],
-  );
-
   if (!hasAccess) {
     return (
       <div>

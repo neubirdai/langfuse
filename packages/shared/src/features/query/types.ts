@@ -166,7 +166,6 @@ export type ViewVersion = z.infer<typeof viewVersions>;
 
 export const dimension = z.object({
   field: z.string(),
-  key: z.string().optional(), // required when field === "metadata"
 });
 
 /** MeasureDefinition is a single `measures` entry on a ViewDeclaration. */

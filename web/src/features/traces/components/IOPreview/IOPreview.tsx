@@ -156,12 +156,6 @@ export function IOPreview({
   showCorrections = true,
 }: IOPreviewProps) {
   const capture = usePostHogClientCapture();
-  // "Improved Message Rendering" feature preview: when enabled, the Formatted
-  // view is powered by the normalized parser instead of the legacy one.
-  const improvedRenderingEnabled = useIsFeatureEnabled("normalizedIoPreview", {
-    enableForAdmins: false,
-    projectId,
-  });
   const [dismissedTraceViewNotifications, setDismissedTraceViewNotifications] =
     useLocalStorage<string[]>(STORAGE_KEY, []);
 

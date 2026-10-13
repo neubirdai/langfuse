@@ -7,40 +7,6 @@ import {
   formatMetric,
   toFullMetricString,
 } from "@/src/features/widgets/chart-library/utils";
-import { useChartTickBudget } from "@/src/features/widgets/chart-library/useChartTickBudget";
-import {
-  prepareCategoryBars,
-  type CategoryBarLegendItem,
-} from "@/src/features/widgets/chart-library/prepareCategoryBars";
-import { cn } from "@/src/utils/tailwind";
-
-/**
- * Names every bar, in bar order, in ONE row that never wraps. This legend is
- * built for a table strip's 63px band, where the wrapping/scrolling legend the
- * time-series charts use would crowd out the plot it is explaining. Names share
- * the row and ellipsize (full name in `title`), which still identifies runs
- * whose names differ early — as model/prompt variants do.
- */
-function CategoryBarLegend({ items }: { items: CategoryBarLegendItem[] }) {
-  return (
-    <div className="mt-1 flex h-4 min-w-0 shrink-0 items-center gap-x-3 overflow-hidden">
-      {items.map((item) => (
-        <div key={item.category} className="flex min-w-0 items-center gap-1.5">
-          <div
-            className="h-2 w-2 shrink-0 rounded-[2px]"
-            style={{ backgroundColor: item.color }}
-          />
-          <span
-            className="text-muted-foreground truncate text-xs leading-4"
-            title={item.category}
-          >
-            {item.category}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function VerticalBarChart({
   data,
