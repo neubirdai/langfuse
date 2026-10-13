@@ -30,7 +30,6 @@ import { AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useCopyToClipboard } from "@/src/hooks/useCopyToClipboard";
 
 const addDomainSchema = z.object({
   domain: z

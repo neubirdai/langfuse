@@ -132,33 +132,12 @@ const valueColumnsClass = (showBaselineDelta: boolean) =>
     : "flex shrink-0 items-center justify-end gap-1";
 
 /**
- * How one score reads in a cell: a categorical score's modal value, a numeric
- * score's average. Shared with the hover sentence beside it, which has to
- * quote the same value the cell shows.
- */
-const scoreValueOf = (aggregate?: AggregatedScoreData | null): string => {
-  if (!aggregate) return EMPTY_VALUE_PLACEHOLDER;
-  if (aggregate.type === "CATEGORICAL") {
-    if (aggregate.valueCounts && aggregate.valueCounts.length > 0) {
-      return [...aggregate.valueCounts].sort((a, b) => b.count - a.count)[0]
-        .value;
-    }
-    return aggregate.values?.[0] ?? EMPTY_VALUE_PLACEHOLDER;
-  }
-  return aggregate.average !== undefined
-    ? aggregate.average.toFixed(2)
-    : EMPTY_VALUE_PLACEHOLDER;
-};
-
-/**
  * Simple score display component for grid cells.
  * Keeps score details together in a single hover card.
  */
 const ScoreItem = ({
   scoreKey,
   aggregate,
-  baselineAggregate,
-  baselineExperimentName,
   diff,
   projectId,
   level,
@@ -167,8 +146,6 @@ const ScoreItem = ({
 }: {
   scoreKey: string;
   aggregate: AggregatedScoreData | null;
-  baselineAggregate?: AggregatedScoreData | null;
-  baselineExperimentName?: string;
   diff?: BaselineDiff | null;
   projectId: string;
   level: Extract<ScoreLevel, "observation" | "trace">;
@@ -194,22 +171,6 @@ const ScoreItem = ({
       staleTime: Infinity,
     },
   );
-
-  // `true → false` and `+0.07` do not say which side is the baseline.
-  const diffTitle = diff
-    ? describeRunComparison({
-        baselineName: baselineExperimentName,
-        ...(diff.type === "CATEGORICAL"
-          ? {
-              baselineText: diff.from ?? "several values",
-              currentText: diff.to ?? "several values",
-            }
-          : {
-              baselineText: scoreValueOf(baselineAggregate),
-              currentText: scoreValueOf(aggregate),
-            }),
-      })
-    : undefined;
 
   return (
     <HoverCard onOpenChange={setIsOpen}>
@@ -332,12 +293,6 @@ const getScoreRowDefinition = (
       aggregate={
         level === "trace" ? data.traceScores[scoreKey] : data.scores[scoreKey]
       }
-      baselineAggregate={
-        level === "trace"
-          ? data.baselineTraceScores?.[scoreKey]
-          : data.baselineScores?.[scoreKey]
-      }
-      baselineExperimentName={data.baselineExperimentName}
       diff={
         level === "trace"
           ? data.traceScoreDiffs?.[scoreKey]
@@ -452,212 +407,6 @@ const CellMetadataFooter = ({
             </Badge>
           </div>
         </div>
-      )}
-    </div>
-  );
-};
-
-/** Metadata fields that used to be a line each inside the cell. */
-const METADATA_KEYS = [
-  "totalCost",
-  "latencyMs",
-  "level",
-  "itemId",
-  "observationId",
-  "traceId",
-  "startTime",
-] as const;
-
-const isMetadataFieldVisible = (
-  columnVisibility: VisibilityState,
-  key: (typeof METADATA_KEYS)[number],
-) => columnVisibility[key] !== false;
-
-const hasVisibleCellMetadata = (columnVisibility: VisibilityState) =>
-  METADATA_KEYS.some((key) => isMetadataFieldVisible(columnVisibility, key));
-
-/** The footer fields that live behind the identifiers hover card. */
-const IDENTIFIER_KEYS = [
-  "itemId",
-  "observationId",
-  "traceId",
-  "startTime",
-] as const;
-
-const hasVisibleCellIdentifiers = (columnVisibility: VisibilityState) =>
-  IDENTIFIER_KEYS.some((key) => isMetadataFieldVisible(columnVisibility, key));
-
-/**
- * The item's identifiers, one hover away. They are the same on every row of a
- * run and the peek view already carries them, so they don't earn a line each in
- * a cell whose payload is the output — but they stay reachable here, including
- * the link out to the execution trace.
- */
-const CellIdentifiers = ({
-  data,
-  columnVisibility,
-}: {
-  data: GridCellData;
-  columnVisibility: VisibilityState;
-}) => {
-  const visible = (key: (typeof METADATA_KEYS)[number]) =>
-    isMetadataFieldVisible(columnVisibility, key);
-
-  const rows: Array<{ label: string; value: React.ReactNode }> = [
-    ...(visible("itemId")
-      ? [
-          {
-            label: "Item ID",
-            value: <span className="font-mono text-xs">{data.itemId}</span>,
-          },
-        ]
-      : []),
-    ...(visible("observationId")
-      ? [
-          {
-            label: "Observation",
-            value: (
-              <span className="font-mono text-xs">{data.observationId}</span>
-            ),
-          },
-        ]
-      : []),
-    ...(visible("traceId")
-      ? [
-          {
-            label: "Execution Trace",
-            value: (
-              <Link
-                href={`/project/${encodeURIComponent(data.projectId)}/traces/${encodeURIComponent(data.traceId)}?observation=${encodeURIComponent(data.observationId)}`}
-                className="text-primary inline-flex max-w-full items-center gap-1 hover:underline"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <span
-                  className="truncate font-mono text-xs"
-                  title={data.traceId}
-                >
-                  {data.traceId}
-                </span>
-                <ExternalLink className="h-3 w-3 shrink-0" />
-              </Link>
-            ),
-          },
-        ]
-      : []),
-    ...(visible("startTime")
-      ? [
-          {
-            label: "Start Time",
-            value: (
-              <span
-                className="text-xs"
-                title={
-                  buildLocalIsoDatePresentation({ date: data.startTime })?.title
-                }
-              >
-                {
-                  buildLocalIsoDatePresentation({ date: data.startTime })
-                    ?.display
-                }
-              </span>
-            ),
-          },
-        ]
-      : []),
-  ];
-
-  return (
-    <HoverCard>
-      <HoverCardTrigger asChild>
-        <button
-          type="button"
-          className="text-muted-foreground hover:text-foreground cursor-default text-[10px] font-bold uppercase underline decoration-dotted"
-          onClick={(event) => event.stopPropagation()}
-        >
-          IDs
-        </button>
-      </HoverCardTrigger>
-      <HoverCardContent
-        side="left"
-        align="start"
-        className="flex w-auto max-w-96 flex-col gap-1 p-2"
-      >
-        {rows.map((row) => (
-          <MetadataItem key={row.label} label={row.label}>
-            {row.value}
-          </MetadataItem>
-        ))}
-      </HoverCardContent>
-    </HoverCard>
-  );
-};
-
-/**
- * One line of per-item metadata under the scores: the two metrics, the status,
- * and the identifiers behind a hover. Replaces the five-line labelled block
- * that made a comparison row ~380px of chrome around a 64px output.
- */
-const CellMetadataFooter = ({
-  data,
-  columnVisibility,
-}: {
-  data: GridCellData;
-  columnVisibility: VisibilityState;
-}) => {
-  const visible = (key: (typeof METADATA_KEYS)[number]) =>
-    isMetadataFieldVisible(columnVisibility, key);
-
-  return (
-    <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-      {visible("totalCost") && (
-        // Same rule as the diff layout's metric columns: the delta wraps
-        // whole rather than being clipped mid-number.
-        <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
-          {data.totalCost ? (
-            usdFormatter(data.totalCost, 2, 6)
-          ) : (
-            <NotRecordedMetric metric="cost" />
-          )}
-          {data.totalCostDiff && (
-            <DiffLabel
-              diff={data.totalCostDiff}
-              preferNegativeDiff
-              formatValue={(value) => usdFormatter(value, 2, 6)}
-              title={describeRunComparison({
-                baselineName: data.baselineExperimentName,
-                baselineText: usdFormatter(data.baselineTotalCost ?? 0, 2, 6),
-                currentText: usdFormatter(data.totalCost ?? 0, 2, 6),
-                verb: "cost",
-              })}
-            />
-          )}
-        </span>
-      )}
-      {visible("latencyMs") && (
-        <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5">
-          {data.latencyMs != null ? (
-            latencyFormatter(data.latencyMs)
-          ) : (
-            <NotRecordedMetric metric="latency" />
-          )}
-          {data.latencyDiff && (
-            <DiffLabel
-              diff={data.latencyDiff}
-              preferNegativeDiff
-              formatValue={(value) => latencyFormatter(value)}
-              title={describeRunComparison({
-                baselineName: data.baselineExperimentName,
-                baselineText: latencyFormatter(data.baselineLatencyMs ?? 0),
-                currentText: latencyFormatter(data.latencyMs ?? 0),
-                verb: "took",
-              })}
-            />
-          )}
-        </span>
-      )}
-      {visible("level") && <span>{data.level}</span>}
-      {hasVisibleCellIdentifiers(columnVisibility) && (
-        <CellIdentifiers data={data} columnVisibility={columnVisibility} />
       )}
     </div>
   );

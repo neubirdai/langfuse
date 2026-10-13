@@ -35,12 +35,6 @@ const DEFAULT_BORDER_CLASS = "border-observation-span";
  */
 export const SEARCH_DIM_OPACITY = "opacity-30";
 
-/**
- * How far a search miss drops — the same value the timeline dims its rows by,
- * so the two views answer one query with one visual language.
- */
-export const SEARCH_DIM_OPACITY = "opacity-30";
-
 const isStartNode = (id: string) =>
   id === LANGFUSE_START_NODE_NAME || id === LANGGRAPH_START_NODE_NAME;
 const isEndNode = (id: string) =>

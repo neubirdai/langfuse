@@ -24,6 +24,8 @@ type ExperimentDisplaySettingsProps = {
   onItemVisibilityChange: (visibility: "baseline-only" | "all") => void;
   hasComparisons: boolean;
   hasBaseline: boolean;
+  ioRenderMode: IoRenderMode;
+  onIoRenderModeChange: (mode: IoRenderMode) => void;
 };
 
 /** A menu row that reads as a radio option. */
@@ -64,6 +66,8 @@ export function ExperimentDisplaySettings({
   onItemVisibilityChange,
   hasComparisons,
   hasBaseline,
+  ioRenderMode,
+  onIoRenderModeChange,
 }: ExperimentDisplaySettingsProps) {
   const isItemVisibilityDisabled = !hasComparisons || !hasBaseline;
 

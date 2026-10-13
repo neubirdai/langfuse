@@ -617,9 +617,6 @@ export default function ExperimentItemsTable({
     limit: "pageSize",
   });
 
-  // Medium by default: with the ids out of the cell a row no longer needs the
-  // tallest option to show its output, and two rows per screen was the
-  // complaint. Large stays one click away for reading long outputs.
   const [rowHeight, setRowHeight] = useRowHeightLocalStorage(
     "experiment-items-compact",
     "s",
@@ -1582,38 +1579,10 @@ export default function ExperimentItemsTable({
     },
   ];
 
-  const scoreColumnIds = useMemo(
-    () =>
-      [...observationScoreColumns, ...traceScoreColumns].map(
-        (column) => column.accessorKey,
-      ),
-    [observationScoreColumns, traceScoreColumns],
-  );
-
-  // Score columns are now visible by default. A returning user has `false`
-  // persisted for every one of them from the previous default, so this one-time
-  // migration reaches them too — see `revealScoreColumns` for how a user who
-  // picked their own score columns is left alone. It is consumed once and for
-  // good, so it waits for the score columns to be known rather than running
-  // against an empty or half-loaded set.
-  const columnVisibilityMigrations = useMemo(
-    () => [
-      {
-        versionKey: `experimentItemsColumnVisibility-scoresVisible-v1-${projectId}`,
-        apply: (visibility: VisibilityState) =>
-          isFilterOptionsLoading
-            ? null
-            : revealScoreColumns(visibility, scoreColumnIds),
-      },
-    ],
-    [projectId, scoreColumnIds, isFilterOptionsLoading],
-  );
-
   const [columnVisibility, setColumnVisibilityState] =
     useColumnVisibility<ExperimentItemsTableRow>(
       `experimentItemsColumnVisibility-compare-v2-${projectId}`,
       columns,
-      columnVisibilityMigrations,
     );
 
   // the score columns moved ahead of the metrics and ids so their

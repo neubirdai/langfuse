@@ -1,4 +1,3 @@
-/* eslint-disable @repo/no-exotic-operators */
 import {
   clickhouseClient,
   ClickhouseClientType,

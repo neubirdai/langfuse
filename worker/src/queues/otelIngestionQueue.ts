@@ -37,7 +37,6 @@ import {
   v4WritesToLegacyTables,
 } from "../env";
 import { IngestionService } from "../services/IngestionService";
-import { trackTraceBatchActivity } from "../features/traceBatching/traceBatching";
 import { prisma } from "@langfuse/shared/src/db";
 import { ClickhouseWriter } from "../services/ClickhouseWriter";
 import { ForbiddenError } from "@langfuse/shared";

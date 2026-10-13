@@ -112,11 +112,6 @@ export interface IOPreviewPrettyProps extends ExpansionStateProps {
   showCorrections?: boolean;
   contentMode?: IOPreviewContentMode;
   showSystemPrompt?: boolean;
-  // Which parser produces the preview; the normalized parser is admin-only
-  // while it is being validated. Legacy remains the safe default.
-  parser?: IOPreviewParserMode;
-  // Called once after a normalized parser comparison has settled.
-  onParserComparison?: (outcome: IOPreviewParserComparisonOutcome) => void;
 }
 
 /**
@@ -161,8 +156,6 @@ export function IOPreviewPretty({
   showCorrections = true,
   contentMode = "all",
   showSystemPrompt,
-  parser = "legacy",
-  onParserComparison,
 }: IOPreviewPrettyProps) {
   // Use pre-parsed data if available (from useParsedObservation hook),
   // otherwise parse with size/depth limits to prevent UI freeze
@@ -211,46 +204,6 @@ export function IOPreviewPretty({
     toolNameToDefinitionNumber,
     inputMessageCount,
   } = parserResult;
-
-  const characterLimit = useMarkdownRenderCharacterLimit();
-
-  const {
-    allMessages,
-    additionalInput,
-    allTools,
-    toolCallCounts,
-    toolCallsByName,
-    messageToToolCallNumbers,
-    toolNameToDefinitionNumber,
-    inputMessageCount,
-  } = parserResult;
-
-  const capturedComparisonRecord = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (
-      parser !== "normalized" ||
-      comparisonOutcome === undefined ||
-      !onParserComparison ||
-      isLoading ||
-      isParsing
-    ) {
-      return;
-    }
-
-    const recordKey = `${observationId ? "observation" : "trace"}:${observationId ?? traceId}`;
-    if (capturedComparisonRecord.current === recordKey) return;
-
-    capturedComparisonRecord.current = recordKey;
-    onParserComparison(comparisonOutcome);
-  }, [
-    comparisonOutcome,
-    isLoading,
-    isParsing,
-    observationId,
-    onParserComparison,
-    parser,
-    traceId,
-  ]);
 
   const characterLimit = useMarkdownRenderCharacterLimit();
 

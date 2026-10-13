@@ -78,11 +78,6 @@ export function EventsChartView({
     [config, filters],
   );
 
-  const widgetInput = useMemo(
-    () => chartConfigToWidgetInput({ config, filters }),
-    [config, filters],
-  );
-
   return (
     <ChartViewPanel
       config={config}

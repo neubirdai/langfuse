@@ -418,20 +418,6 @@ export default [
     },
   },
 
-  {
-    name: "langfuse/web/component-margin-rules",
-    files: ["src/components/**/*.{ts,tsx}"],
-    ignores: ["src/components/**/*.stories.{ts,tsx}"],
-    rules: {
-      // Margin makes components harder to compose and should therefore be applied by the parent.
-      // See: https://mxstbr.com/thoughts/margin for a discussion of this pattern.
-      "@repo/no-margin-on-root-elements": [
-        "warn",
-        { classNameFunctions: ["cn", "clsx"] },
-      ],
-    },
-  },
-
   // We're using the in-app-agent directory as a testing ground for some new eslint-rules.
   {
     ...reactYouMightNotNeedAnEffect.configs.recommended,

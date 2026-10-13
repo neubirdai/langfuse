@@ -15,11 +15,10 @@ const originalCloudRegion = vi.hoisted(() => {
   return cloudRegion;
 });
 
-// Override recordIncrement + recordHistogram + recordDistribution so the
-// attempt counter, per-stage timing, and freshness-lag metrics are assertable.
+// Override recordIncrement + recordHistogram so the attempt counter and
+// per-stage timing metrics are assertable.
 const mockRecordIncrement = vi.hoisted(() => vi.fn());
 const mockRecordHistogram = vi.hoisted(() => vi.fn());
-const mockRecordDistribution = vi.hoisted(() => vi.fn());
 // Stubbable endpoint preflight — the customer-fault tests reject it to drive an
 // in-try failure without infra. Defaults to the real impl for other tests.
 const mockValidateBlobStorageEndpoint = vi.hoisted(() => vi.fn());
@@ -42,7 +41,6 @@ vi.mock("@langfuse/shared/src/server", async (importOriginal) => {
     ...actual,
     recordIncrement: mockRecordIncrement,
     recordHistogram: mockRecordHistogram,
-    recordDistribution: mockRecordDistribution,
     validateBlobStorageEndpoint: mockValidateBlobStorageEndpoint,
     dispatchProjectNotification: mockDispatchProjectNotification,
   };
@@ -66,7 +64,6 @@ import {
   StorageServiceFactory,
   BlobStorageIntegrationProcessingQueue,
 } from "@langfuse/shared/src/server";
-import { EXPORT_FRESHNESS_LAG_METRIC } from "../services/exportFreshnessLagMetric";
 import { prisma } from "@langfuse/shared/src/db";
 import { Job, UnrecoverableError } from "bullmq";
 import {

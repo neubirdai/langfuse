@@ -175,17 +175,6 @@ export function TraceDataProvider({
     [uiData.roots, detachedObservationId, detachedObservationIsMisplaced],
   );
 
-  const traceLevelScoreOwnerIdSet = useMemo(
-    () =>
-      traceLevelScoreOwnerIds(
-        uiData.roots,
-        // Only a misplaced row is an impostor among the roots; a genuine root
-        // that happened to fall past the cap is still a root.
-        detachedObservationIsMisplaced ? detachedObservationId : null,
-      ),
-    [uiData.roots, detachedObservationId, detachedObservationIsMisplaced],
-  );
-
   // Merge scores with optimistic cache
   const mergedScores = useMergedScores(
     serverScores,

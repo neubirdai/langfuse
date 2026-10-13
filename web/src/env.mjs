@@ -403,21 +403,6 @@ export const env = createEnv({
       .enum(["legacy", "shadow", "enforce"])
       .default("legacy"),
 
-    // The gateway data plane calls /resolve on every LLM request, so the
-    // lookup is cached. The TTL bounds how long a revoked key or a disabled
-    // connection can still be used if explicit invalidation is missed.
-    LANGFUSE_AI_GATEWAY_CACHE_RESOLVE_ENABLED: z
-      .enum(["true", "false"])
-      .default("true"),
-    LANGFUSE_AI_GATEWAY_CACHE_RESOLVE_TTL_SECONDS: z.coerce
-      .number()
-      .default(60),
-
-    // auth migration; self-host and default stay legacy
-    API_AUTH_MIGRATION: z
-      .enum(["legacy", "shadow", "enforce"])
-      .default("legacy"),
-
     // Multimodal media upload to S3
     LANGFUSE_S3_MEDIA_MAX_CONTENT_LENGTH: z.coerce
       .number()
