@@ -121,14 +121,15 @@ const ftsTokenPrefilterPredicate = (
 ): string =>
   `hasAllTokens(${fieldExpr}, ${ftsSearchTokenPrefilterExpr(valueParam, normalizeValue)})`;
 
-const ftsTextTokenPredicate = (fieldExpr: string, valueParam: string): string =>
-  ftsTokenPrefilterPredicate(normalizeFtsTextExpr(fieldExpr), valueParam, true);
-
-export const ftsTextTokenConjunct = (
+// Bare `hasAllTokens` index prefilter. Callers include it only when the search
+// value yields at least one token (`hasFtsSearchToken`): a tokenless value
+// makes `tokens()` empty, leaving the prefilter a no-op that only costs
+// skip-index pruning on the surrounding OR.
+export const ftsTextTokenPredicate = (
   fieldExpr: string,
   valueParam: string,
 ): string =>
-  `(empty(${ftsSearchTokensExpr(valueParam, true)}) OR ${ftsTextTokenPredicate(fieldExpr, valueParam)})`;
+  ftsTokenPrefilterPredicate(normalizeFtsTextExpr(fieldExpr), valueParam, true);
 
 const ftsTextIndexedSubstringCondition = (
   fieldExpr: string,
@@ -158,6 +159,9 @@ type FtsMetadataArrayConditionContext = {
   valuesColumn: string;
   valueAccessor: string;
   valueParam: string;
+  // Whether the search value yields at least one token; gates the text-index
+  // prefilter so tokenless values fall back to the exact check alone.
+  hasToken: boolean;
 };
 
 type FtsOperatorDescriptor = {
@@ -165,6 +169,7 @@ type FtsOperatorDescriptor = {
     fieldExpr: string,
     valueParam: string,
     exactCondition: string,
+    hasToken: boolean,
   ) => string;
   metadataArrayCondition: (ctx: FtsMetadataArrayConditionContext) => string;
 };
@@ -183,18 +188,23 @@ type FtsOperatorDescriptors = {
 
 export const FTS_OPERATOR_DESCRIPTORS = {
   "=": {
-    textCondition: (fieldExpr, valueParam, exactCondition) =>
-      `(${exactCondition} AND ${ftsTextTokenConjunct(fieldExpr, valueParam)})`,
+    textCondition: (fieldExpr, valueParam, exactCondition, hasToken) =>
+      hasToken
+        ? `(${exactCondition} AND ${ftsTextTokenPredicate(fieldExpr, valueParam)})`
+        : exactCondition,
     metadataArrayCondition: ({
       hasKey,
       valuesColumn,
       valueAccessor,
       valueParam,
+      hasToken,
     }) =>
-      `${hasKey} AND ${ftsMetadataArrayEqualityTokenConjunct(valuesColumn, valueParam)} AND (${valueAccessor} = ${valueParam})`,
+      hasToken
+        ? `${hasKey} AND ${ftsMetadataArrayTokenConjunct(valuesColumn, valueParam)} AND (${valueAccessor} = ${valueParam})`
+        : `${hasKey} AND (${valueAccessor} = ${valueParam})`,
   },
   [FTS_MATCH_OPERATOR]: {
-    textCondition: (fieldExpr, valueParam, _exactCondition) =>
+    textCondition: (fieldExpr, valueParam, _exactCondition, _hasToken) =>
       ftsTextIndexedSubstringCondition(fieldExpr, valueParam),
     metadataArrayCondition: ftsMetadataArrayIndexedSubstringCondition,
   },

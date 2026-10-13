@@ -15,26 +15,32 @@ const loadContextId = "sa2026083102o-load";
 
 const customerId = "cus_LqT4v8";
 const refundId = "re_18Lk1Q";
-const findChargesToolCallId = "call_find_2";
-const createRefundToolCallId = "call_act_2";
+export const findChargesToolCallId = "call_find_2";
+export const createRefundToolCallId = "call_act_2";
 
-const customerMessage =
+export const customerMessage =
   "Hi — I was charged twice for my subscription this month (invoices inv_20260709 and inv_20260709-2, $99 each). Can you refund the duplicate?";
-const copilotSystemPrompt =
+export const copilotSystemPrompt =
   "You are Acme's support copilot. Resolve the customer's billing issue end-to-end using the available tools.";
-const finalReply =
+export const finalReply =
   "Hi Jordan, thanks for flagging this! I've confirmed the duplicate $99.00 charge and issued a refund (re_18Lk1Q). You should see it back on your card within 5–10 business days.";
 
 // Tool-call arguments as the model emitted them (a JSON string inside the
 // chat-completions payload) and as the TOOL observation received them.
-const findChargesArguments = { customer_id: customerId, period: "2026-07" };
-const createRefundArguments = { charge_id: "ch_3PqK9b", reason: "duplicate" };
+export const findChargesArguments = {
+  customer_id: customerId,
+  period: "2026-07",
+};
+export const createRefundArguments = {
+  charge_id: "ch_3PqK9b",
+  reason: "duplicate",
+};
 
 const initialHistory = [
   { role: "system", content: copilotSystemPrompt },
   { role: "user", content: customerMessage },
 ];
-const classification = {
+export const classification = {
   role: "assistant",
   content: JSON.stringify({
     intent: "billing.duplicate_charge",
@@ -56,7 +62,7 @@ const findChargesCall = {
     },
   ],
 };
-const charges = {
+export const charges = {
   charges: [{ id: "ch_3PqK8r" }, { id: "ch_3PqK9b" }],
   duplicate_confidence: 0.98,
 };
@@ -79,7 +85,11 @@ const refundCall = {
     },
   ],
 };
-const refund = { refund_id: refundId, status: "succeeded", amount_usd: 99 };
+export const refund = {
+  refund_id: refundId,
+  status: "succeeded",
+  amount_usd: 99,
+};
 const refundResult = {
   role: "tool",
   tool_call_id: createRefundToolCallId,
@@ -365,104 +375,133 @@ const observations = [
 
 export const supportCopilotRefundLoopFixture = {
   name: "support copilot refund loop with cumulative conversation history",
-  scope: "trace",
   description:
     "Five generations replay all prior messages. Matching TOOL observations supply authoritative results, while replayed history is deduplicated and retains first-emitter provenance.",
   observations,
   expected: {
     threads: [
       {
-        observations: ["cls", "llm1", "find", "llm2", "ref", "llm3", "drf"].map(
-          (suffix) => ({ id: `sa2026083102o-${suffix}`, traceId }),
-        ),
-        messages: [
-          {
-            role: "system",
-            source: "input",
-            observationId: "sa2026083102o-cls",
-            traceId,
-            parts: [{ type: "text", text: copilotSystemPrompt }],
-          },
-          {
-            role: "user",
-            source: "input",
-            observationId: "sa2026083102o-cls",
-            traceId,
-            parts: [{ type: "text", text: customerMessage }],
-          },
-          {
-            role: "assistant",
-            source: "output",
-            observationId: "sa2026083102o-cls",
-            traceId,
-            parts: [{ type: "text", text: classification.content }],
-          },
-          {
-            role: "assistant",
-            source: "output",
-            observationId: "sa2026083102o-llm1",
-            traceId,
-            parts: [
-              {
-                type: "tool-call",
-                toolCallId: findChargesToolCallId,
-                toolName: "stripe_find_charges",
-                input: findChargesArguments,
-                toolType: "function",
-              },
-            ],
-          },
-          {
-            role: "tool",
-            source: "output",
-            observationId: "sa2026083102o-find",
-            traceId,
-            parts: [{ type: "data", value: charges }],
-          },
-          {
-            role: "assistant",
-            source: "output",
-            observationId: "sa2026083102o-llm2",
-            traceId,
-            parts: [
-              {
-                type: "tool-call",
-                toolCallId: createRefundToolCallId,
-                toolName: "stripe_create_refund",
-                input: createRefundArguments,
-                toolType: "function",
-              },
-            ],
-          },
-          {
-            role: "tool",
-            source: "output",
-            observationId: "sa2026083102o-ref",
-            traceId,
-            parts: [{ type: "data", value: refund }],
-          },
-          {
-            role: "assistant",
-            source: "output",
-            observationId: "sa2026083102o-llm3",
-            traceId,
-            parts: [{ type: "text", text: "Resolution complete." }],
-          },
-          {
-            role: "user",
-            source: "input",
-            observationId: "sa2026083102o-drf",
-            traceId,
-            parts: [{ type: "text", text: "Draft the reply." }],
-          },
-          {
-            role: "assistant",
-            source: "output",
-            observationId: "sa2026083102o-drf",
-            traceId,
-            parts: [{ type: "text", text: finalReply }],
-          },
-        ],
+        conversationHistory: [],
+        currentTurn: {
+          nestingLevel: 2,
+          observations: [
+            "cls",
+            "llm1",
+            "find",
+            "llm2",
+            "ref",
+            "llm3",
+            "drf",
+          ].map((suffix) => ({ id: `sa2026083102o-${suffix}`, traceId })),
+          messages: [
+            {
+              role: "system",
+              source: "input",
+              observationId: "sa2026083102o-cls",
+              startTime: new Date("2026-08-31T12:33:14.205Z"),
+              endTime: new Date("2026-08-31T12:33:14.818Z"),
+              traceId,
+              parts: [{ type: "text", text: copilotSystemPrompt }],
+            },
+            {
+              role: "user",
+              source: "input",
+              observationId: "sa2026083102o-cls",
+              startTime: new Date("2026-08-31T12:33:14.205Z"),
+              endTime: new Date("2026-08-31T12:33:14.818Z"),
+              traceId,
+              parts: [{ type: "text", text: customerMessage }],
+            },
+            {
+              role: "assistant",
+              source: "output",
+              observationId: "sa2026083102o-cls",
+              startTime: new Date("2026-08-31T12:33:14.205Z"),
+              endTime: new Date("2026-08-31T12:33:14.818Z"),
+              traceId,
+              parts: [{ type: "text", text: classification.content }],
+            },
+            {
+              role: "assistant",
+              source: "output",
+              observationId: "sa2026083102o-llm1",
+              startTime: new Date("2026-08-31T12:33:16.561Z"),
+              endTime: new Date("2026-08-31T12:33:17.389Z"),
+              traceId,
+              parts: [
+                {
+                  type: "tool-call",
+                  toolCallId: findChargesToolCallId,
+                  toolName: "stripe_find_charges",
+                  input: findChargesArguments,
+                  toolType: "function",
+                },
+              ],
+            },
+            {
+              role: "tool",
+              source: "output",
+              observationId: "sa2026083102o-find",
+              startTime: new Date("2026-08-31T12:33:17.441Z"),
+              endTime: new Date("2026-08-31T12:33:18.118Z"),
+              traceId,
+              parts: [{ type: "data", value: charges }],
+            },
+            {
+              role: "assistant",
+              source: "output",
+              observationId: "sa2026083102o-llm2",
+              startTime: new Date("2026-08-31T12:33:18.172Z"),
+              endTime: new Date("2026-08-31T12:33:19.924Z"),
+              traceId,
+              parts: [
+                {
+                  type: "tool-call",
+                  toolCallId: createRefundToolCallId,
+                  toolName: "stripe_create_refund",
+                  input: createRefundArguments,
+                  toolType: "function",
+                },
+              ],
+            },
+            {
+              role: "tool",
+              source: "output",
+              observationId: "sa2026083102o-ref",
+              startTime: new Date("2026-08-31T12:33:19.978Z"),
+              endTime: new Date("2026-08-31T12:33:20.893Z"),
+              traceId,
+              parts: [{ type: "data", value: refund }],
+            },
+            {
+              role: "assistant",
+              source: "output",
+              observationId: "sa2026083102o-llm3",
+              startTime: new Date("2026-08-31T12:33:20.947Z"),
+              endTime: new Date("2026-08-31T12:33:22.731Z"),
+              traceId,
+              parts: [{ type: "text", text: "Resolution complete." }],
+            },
+            {
+              role: "user",
+              source: "input",
+              observationId: "sa2026083102o-drf",
+              startTime: new Date("2026-08-31T12:33:22.790Z"),
+              endTime: new Date("2026-08-31T12:33:24.377Z"),
+              traceId,
+              parts: [{ type: "text", text: "Draft the reply." }],
+            },
+            {
+              role: "assistant",
+              source: "output",
+              observationId: "sa2026083102o-drf",
+              startTime: new Date("2026-08-31T12:33:22.790Z"),
+              endTime: new Date("2026-08-31T12:33:24.377Z"),
+              traceId,
+              parts: [{ type: "text", text: finalReply }],
+            },
+          ],
+        },
       },
     ],
   },

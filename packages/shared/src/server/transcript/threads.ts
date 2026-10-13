@@ -1,16 +1,24 @@
-import type { Observation } from "../../domain";
 import type { NormalizedMessage } from "../../utils/normalized-io";
-import type { Thread, ThreadMessage } from "./types";
+import type { Thread, ThreadMessage, Turn } from "./types";
+import type { OrderedObservation } from "./ordering";
 import type { createToolCallRegistry } from "./tool-calls";
 
-export type TranscriptObservation = Observation & { traceId: string };
+export type TranscriptObservation = OrderedObservation & { traceId: string };
 
 export type KeyedMessage = {
   message: NormalizedMessage;
   key: string;
 };
+export type AssembledTurn = Pick<Turn, "messages"> & {
+  observations: Pick<
+    TranscriptObservation,
+    "id" | "traceId" | "type" | "nestingLevel"
+  >[];
+};
+
 export type ThreadState = {
-  thread: Thread;
+  /** Every message of the thread in one list; `splitTurn` derives the public shape. */
+  thread: AssembledTurn;
   messages: KeyedMessage[];
   shownCounts: Map<string, number>;
 };
@@ -75,6 +83,8 @@ export function append(
       parts: [],
       observationId: observation.id,
       traceId: observation.traceId,
+      startTime: observation.startTime,
+      endTime: observation.endTime,
     };
     // Anchor output calls before attaching any results carried by the same message.
     if (isOutput) thread.messages.push(emitted);
@@ -112,7 +122,7 @@ export function append(
 }
 
 export function addContributor(
-  thread: Thread,
+  thread: AssembledTurn,
   observation: TranscriptObservation,
 ) {
   if (
@@ -124,6 +134,53 @@ export function addContributor(
     thread.observations.push({
       id: observation.id,
       traceId: observation.traceId,
+      type: observation.type,
+      nestingLevel: observation.nestingLevel,
     });
   }
+}
+
+/** Split a thread into replayed history and the turn the last trace added. */
+export function splitTurn(thread: AssembledTurn): Thread {
+  const { messages, observations } = thread;
+  // Earlier traces of a session are history; the last contributing trace is
+  // the current turn.
+  const currentTraceId = observations.at(-1)?.traceId;
+  const traceStart =
+    messages.findLastIndex(({ traceId }) => traceId !== currentTraceId) + 1;
+  // Within that trace, input replayed before the first output is history up
+  // to the previous turn's last assistant or tool message. What follows is new.
+  const trace = messages.slice(traceStart);
+  const firstOutput = trace.findIndex(({ source }) => source === "output");
+  const replayed = trace.slice(0, firstOutput === -1 ? undefined : firstOutput);
+  const turnStart =
+    traceStart +
+    replayed.findLastIndex(
+      ({ role }) => role === "assistant" || role === "tool",
+    ) +
+    1;
+  const current = messages.slice(turnStart);
+  const currentObservations = observations.filter(({ id, traceId }) =>
+    current.some(
+      (message) => message.observationId === id && message.traceId === traceId,
+    ),
+  );
+  const firstGeneration = currentObservations.find(
+    ({ type }) => type === "GENERATION",
+  );
+  return {
+    conversationHistory: messages
+      .slice(0, turnStart)
+      .map(
+        ({ observationId, traceId, startTime, endTime, ...message }) => message,
+      ),
+    currentTurn: {
+      messages: current,
+      nestingLevel: firstGeneration?.nestingLevel ?? 0,
+      observations: currentObservations.map(({ id, traceId }) => ({
+        id,
+        traceId,
+      })),
+    },
+  };
 }
