@@ -101,47 +101,6 @@ export const eventsTableCachedInputTokensSql =
 export const eventsTableCachedInputCostSql =
   cachedInputMetricSql("e.cost_details");
 
-const isCachedInputMetric = (key: string): boolean => {
-  const normalizedKey = key.toLowerCase();
-  return (
-    normalizedKey.includes("cached") || normalizedKey.includes("cache_read")
-  );
-};
-
-const findCachedInputMetric = (
-  details?: Record<string, number> | null,
-): number | undefined => {
-  const values = Object.entries(details ?? {})
-    .filter(([key]) => isCachedInputMetric(key))
-    .map(([, value]) => Number(value));
-
-  return values.length > 0
-    ? values.reduce((sum, value) => sum + value, 0)
-    : undefined;
-};
-
-export const getCachedInputMetric = (
-  details?: Record<string, number> | null,
-): number | undefined => findCachedInputMetric(details);
-
-export const getCachedInputCost = (
-  details?: Record<string, number> | null,
-): number | undefined => findCachedInputMetric(details);
-
-const cachedInputMetricSql = (detailsColumn: string): string => {
-  const keyPredicate = (key: string) =>
-    `(positionCaseInsensitive(${key}, 'cached') > 0 OR positionCaseInsensitive(${key}, 'cache_read') > 0)`;
-  const filteredDetails = `mapFilter(x -> ${keyPredicate("x.1")}, ${detailsColumn})`;
-  const sum = `arraySum(mapValues(${filteredDetails}))`;
-
-  return `if(mapExists((k, v) -> ${keyPredicate("k")}, ${detailsColumn}), ${sum}, NULL)`;
-};
-
-export const eventsTableCachedInputTokensSql =
-  cachedInputMetricSql("e.usage_details");
-export const eventsTableCachedInputCostSql =
-  cachedInputMetricSql("e.cost_details");
-
 type MutableDeep<T> = T extends readonly (infer U)[]
   ? MutableDeep<U>[]
   : T extends object

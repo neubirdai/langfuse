@@ -38,19 +38,6 @@ export function ObservationLevelTag({
   );
 }
 
-const observationLevelToStatus = {
-  ERROR: "error",
-  WARNING: "warning",
-  DEBUG: "debug",
-  DEFAULT: "default",
-} as const satisfies Record<ObservationLevelType, string>;
-
-export function getObservationLevelStatus(level: string): string {
-  return Object.hasOwn(observationLevelToStatus, level)
-    ? observationLevelToStatus[level as ObservationLevelType]
-    : level;
-}
-
 export const LevelColors = {
   DEFAULT: { text: "", bg: "" },
   DEBUG: { text: "text-muted-foreground", bg: "bg-tertiary" },
