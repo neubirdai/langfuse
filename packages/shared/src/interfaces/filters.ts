@@ -204,20 +204,6 @@ export const singleFilterList = z.preprocess(
   z.array(singleFilter),
 ) as z.ZodType<z.output<typeof singleFilter>[], z.input<typeof singleFilter>[]>;
 
-// Single choke point for parsing arrays of filters. `z.preprocess` runs the
-// legacy-empty-substring coercion before validation, so both fresh API/tRPC
-// input and persisted reads route through one place instead of remembering to
-// wrap each call site. Prefer this over a bare `z.array(singleFilter)`.
-// The cast pins the input type to `SingleFilter[]`. Without it `z.preprocess`
-// infers `unknown` input (the coercer takes `unknown`), which would surface as
-// `unknown` on tRPC mutation variables and form values that consume `z.input`.
-// A legacy `contains ""` filter is itself a valid `singleFilter`, so the coerced
-// shape is fully within this input type.
-export const singleFilterList = z.preprocess(
-  coerceLegacyEmptyMetadataFilters,
-  z.array(singleFilter),
-) as z.ZodType<z.output<typeof singleFilter>[], z.input<typeof singleFilter>[]>;
-
 const eventsTableStringOperator = z.union([
   z.enum(filterOperators.string),
   z.literal(FTS_MATCH_OPERATOR),
