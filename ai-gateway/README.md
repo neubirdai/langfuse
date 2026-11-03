@@ -73,16 +73,17 @@ do not load dotenv files:
 | ---------------------------------------------- | -------------- | -------------------------------------------------- |
 | `LANGFUSE_AI_GATEWAY_WEB_URL` | unset; inference disabled | Trusted Web base URL, including any deployment prefix |
 | `LANGFUSE_AI_GATEWAY_SERVICE_KEY` | unset | Required with Web URL; same key configured in Web |
+| `LANGFUSE_AI_GATEWAY_ALLOW_HTTP_WEB_URL` | `false` | `true`, `false`; `true` also accepts a plain `http://` Web URL on any host. Only for internal traffic, such as Web's in-cluster Kubernetes Service (`http://<release>-web.<namespace>.svc.cluster.local:3000`) or another private network; never for a URL that crosses the public internet, because resolve responses carry provider API keys and requests carry the service key and ingestion tokens unencrypted. Resolution, model catalogs and trace uploads all use this URL. The gateway logs a warning at startup when it is used |
 | `LANGFUSE_AI_GATEWAY_LISTEN_ADDRESS`           | `0.0.0.0:8080` | IP address and port; IPv6 uses `[::]:8080`         |
 | `LANGFUSE_AI_GATEWAY_AUTO_INCREMENT_LISTEN_PORT` | `false` | `true`, `false`; the pnpm dev task sets `true` |
 | `LANGFUSE_LOG_FORMAT`                          | `text`         | `text`, `json`                                     |
 | `LANGFUSE_LOG_LEVEL`                           | `info`         | `debug`, `info`, `warn`, `error`, `fatal` |
-| `LANGFUSE_AI_GATEWAY_SHUTDOWN_TIMEOUT_SECONDS` | `10`           | Integer from 1 to 300                              |
-| `LANGFUSE_AI_GATEWAY_MAX_ACTIVE_REQUESTS` | `128` | Positive integer up to Tokio's semaphore capacity; buffered and active requests per instance |
-| `LANGFUSE_AI_GATEWAY_MAX_CONCURRENT_RESOLUTIONS` | `128` | Positive integer up to Tokio's semaphore capacity; separate model-catalog and Web-resolution budgets per instance |
+| `LANGFUSE_AI_GATEWAY_CONNECTION_DRAIN_TIMEOUT_SECONDS` | `10`           | Integer from 1 to 300; connection drain after the shutdown signal. Replaces the deprecated `LANGFUSE_AI_GATEWAY_SHUTDOWN_TIMEOUT_SECONDS`, which is still read when the new name is unset. On ECS behind an ALB, the deregistration delay drains streams before SIGTERM, so use `1`. On Kubernetes the gateway drains streams itself, so set it to the stream time to protect (for example `300`) |
+| `LANGFUSE_AI_GATEWAY_TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS` | `10` | Integer from 1 to 300; telemetry flush after the drain ends. On ECS use most of `stopTimeout` (max 120), for example `115`. On Kubernetes `30` is enough; set `terminationGracePeriodSeconds` above the `preStop` sleep plus both timeouts |
 | `LANGFUSE_AI_GATEWAY_TELEMETRY_BUFFER_BYTES` | `67108864` (64 MiB) | Integer from 4194304 (4 MiB) to 4294967296 (4 GiB); span and credential bytes an instance holds for upload before dropping new records |
 | `LANGFUSE_AI_GATEWAY_MAX_REQUEST_BYTES` | `16777216` (16 MiB) | Integer from 1048576 (1 MiB) to 4294967295; largest accepted request body |
-| `LANGFUSE_AI_GATEWAY_SHARED_REQUEST_BUFFER_BYTES` | `1073741824` (1 GiB) | Integer from the request limit up to Tokio's semaphore capacity; request body bytes all in-flight requests of an instance may buffer together |
+| `LANGFUSE_AI_GATEWAY_MEMORY_BUDGET_BYTES` | `1073741824` (1 GiB) | Integer from the request limit plus the overhead up to Tokio's semaphore capacity; bytes all in-flight requests and model catalogs of an instance may reserve together |
+| `LANGFUSE_AI_GATEWAY_REQUEST_MEMORY_OVERHEAD_BYTES` | `2097152` (2 MiB) | Integer from 0 to 4294967295; fixed bytes each request reserves on top of its body for response capture and buffers |
 | `LANGFUSE_AI_GATEWAY_MAX_EXECUTION_SECONDS` | `600` | Integer of at least 60; ceiling from execution admission until the response completes. Web ingestion tokens last 15 minutes, so traces of longer executions may be dropped |
 | `LANGFUSE_AI_GATEWAY_STALL_TIMEOUT_SECONDS` | `120` | Integer from 1 to the execution ceiling; longest wait without progress |
 
@@ -177,8 +178,7 @@ does not set CORS headers, so no `Access-Control-Expose-Headers` is involved.
 
 Once Web resolution succeeds, the request also carries its tenant, and once it is
 sent upstream, the provider connection it was sent to. Requests rejected before
-resolution, including invalid or oversized bodies, carry none of them. A resolved
-request rejected by execution admission carries only the tenant. Provider failures
+resolution, including invalid or oversized bodies, carry none of them. Provider failures
 before response headers (502/504) still name the connection that was tried.
 
 | Response header | Server span field | JSON log key | Value |
@@ -204,7 +204,7 @@ has no unattributed wall time:
 
 | Span | Covers |
 | --- | --- |
-| `resolution` | Resolution admission, the `resolver` Web call, and execution admission; `gateway.outcome` is `admitted`, `resolution_failed`, or `busy` |
+| `resolution` | The `resolver` Web call; `gateway.outcome` is `admitted` or `resolution_failed` |
 | `request.body` | Buffering the caller's request body, mostly upload time; `http.request.body.size` |
 | `request.capture` | Parsing the request for inference telemetry; CPU-bound and proportional to `http.request.body.size` |
 | `provider.headers` | The provider HTTP send through response headers, including connection setup |
@@ -244,11 +244,15 @@ Gateway-specific metrics:
   `http.server.response.body.size` (`gateway.provider`), in bytes: the buffered
   request body, and the bytes relayed from the provider, including truncated or
   cancelled streams.
-- `gateway.active`, `gateway.admission.capacity`, and `gateway.active.peak`
-  (`phase`): in-flight, configured, and most-held-since-last-export slots for
-  model_catalog/resolution/execution.
+- `gateway.active` and `gateway.active.peak` (`phase`): in-flight and
+  most-in-flight-since-last-export model_catalog/resolution/execution work.
+- `gateway.memory.budget`, `gateway.memory.reserved`, and
+  `gateway.memory.reserved.peak`, in bytes: the configured memory budget, the bytes
+  in-flight requests hold, and the most held since the last export. Peak utilisation
+  is `gateway.memory.reserved.peak / gateway.memory.budget`.
 - `gateway.phase.duration` (execution/provider.first_byte), `gateway.executions`,
-  `gateway.admission.rejected`, and `gateway.telemetry.records`.
+  `gateway.admission.rejected` (`phase`: `request`, `request_body` or
+  `model_catalog`), and `gateway.telemetry.records`.
 
 Durations use seconds; first-byte timing measures provider bytes arriving at the
 gateway, not first-token delivery to the caller. Metric attributes contain
@@ -256,7 +260,7 @@ bounded categories, not tenant or request identifiers.
 
 Trace export uses a 512-span queue, batches of up to 64, and a one-second interval.
 Metrics export every 30 seconds. Export calls use a three-second timeout; failures
-do not fail inference. Shutdown flushes within the remaining shared drain deadline.
+do not fail inference. Shutdown flushes within the remaining telemetry shutdown budget.
 Telemetry delivery warnings report the first failure/drop and every hundredth;
 metrics count each occurrence. This is best-effort operational telemetry.
 
@@ -394,22 +398,28 @@ error type follows the status (`authentication_error`, `permission_error`,
 `not_found_error`, `request_too_large`, `invalid_request_error`, `overloaded_error`,
 `api_error`).
 
-After validating the credential header, the gateway buffers and validates the request
-under the active-request admission budget and a shared request-byte budget, then resolves the credential and
-model-aware route through Web under a separate budget. A declared `Content-Length` is
-checked against the request limit before reading. The byte budget covers the buffer's
-allocation and grows as bytes arrive, so a client that declares a large body and stalls
-holds only what it sent. The body slot and its bytes stay reserved with the execution
-until the response ends. Model catalogs use another budget so slow catalog discovery
-cannot block inference resolution.
-Execution capacity remains reserved through response completion. An exhausted budget
-returns 503 immediately without a waiting queue. Request-body and execution budgets
-use the active-request limit, and buffered bodies also share
-`LANGFUSE_AI_GATEWAY_SHARED_REQUEST_BUFFER_BYTES`; model-catalog and Web-call budgets use the resolution
-limit. Their defaults of 128 are provisional
-guardrails, not measured capacity: tune them using load tests for the instance
-resources, request sizes and stream durations. These limits bound work; they do not
-guarantee fairness between clients or tenants.
+Admission is bounded by memory only. After validating the credential header, the
+gateway reserves a fixed per-request overhead from the instance's memory budget, then
+buffers and validates the request and resolves the credential and model-aware route
+through Web. A declared `Content-Length` is checked against the request limit before
+reading. The reservation grows with the body buffer's allocation as bytes arrive, so a
+client that declares a large body and stalls holds only the overhead and what it sent.
+The whole reservation stays held until the response ends. Model catalog requests
+reserve the overhead, grow it with Web's catalog buffer as it arrives, then to three
+times the catalog for parsing and the provider-shaped response, and hold it until the
+client has read that response; the response is relayed under the same stall timeout and
+execution deadline as provider responses. An exhausted budget returns 503 immediately without a
+waiting queue. There is no request-count limit; file descriptors are bounded by the
+container.
+
+The overhead stands in for what a request holds besides its body: retained capture
+output (up to 1 MiB), one inspected response event (up to 1 MiB), the relay chunk and
+resolution context. The 2 MiB default sits above the typical request: on staging,
+responses average 8 KB (Anthropic) to 210 KB (OpenAI), with a largest of 3 MB. With
+the 1 GiB budget it admits about 400 typical concurrent requests. The parsed request
+input kept for capture is covered by the body's reservation, which outlives the
+buffered bytes. These limits bound work; they do not guarantee fairness between
+clients or tenants.
 
 Request bodies are limited to 16 MiB by default in both namespaces. The body read deadline
 scales with that limit: at least 30 seconds, and enough for the maximal body at 10 MiB per
@@ -421,7 +431,7 @@ upstream chunk, without the downstream accepting a chunk, or, for streamed calls
 headers. A non-streamed generation waits for headers until the ceiling, because
 providers send nothing until the response is generated. Response size is not capped: a single task pumps chunks
 through a one-slot channel, with chunks at most 64 KiB. It stops reading when that
-channel fills. Completion, disconnect, stall and ceiling release admission and context;
+channel fills. Completion, disconnect, stall and ceiling release the memory reservation and context;
 both timeouts run even when the downstream stops polling. A failure after headers
 terminates the response body without adding an error event or retrying.
 
@@ -491,6 +501,7 @@ each field describes:
 | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `organization.id`, `project.id`                                                             | Resolved Langfuse organization and ingestion project                        |
 | `api_key.id`, `connection.id`                                                               | Authenticated gateway key and selected Langfuse connection                  |
+| `api_key.user.id`                                                                           | Langfuse user the gateway key belongs to; null for keys created before keys were bound to users |
 | `ingestion.mode`                                                                            | Effective capture mode                                                      |
 | `request.api_format`                                                                        | Native API contract: `openai.responses`, `openai.chat-completions` or `anthropic.messages` |
 | `request.metadata`, `request.prompt_cache_key`, `request.safety_identifier`, `request.user` | Native caller-supplied fields, captured only in full mode                   |
@@ -537,7 +548,7 @@ span records `gateway.telemetry.attempts`. Sanitized logs
 record failures/drops; shutdown reports accepted, failed and dropped counts.
 
 SIGTERM marks the gateway unready, drains inference, then flushes open batches and
-finishes uploads within the remaining shared shutdown budget. At the deadline, unfinished uploads,
+finishes uploads within the telemetry shutdown budget, which starts when draining ends. At the deadline, unfinished uploads,
 including batches waiting to retry, are cancelled and counted as drops. Process crashes or forced shutdown can lose telemetry;
 these records are not a durable accounting ledger.
 
@@ -774,7 +785,7 @@ batched upload. Capture and upload run independently of log level; debug emissio
 alone is gated.
 
 Capture is limited to 5 MiB request inspection, 1 MiB JSON/SSE event inspection,
-1 MiB retained output and 256 output items per execution. The active-request limit
+1 MiB retained output and 256 output items per execution. The memory budget
 bounds the number of captures. Trusted key metadata is bounded by the resolver's
 256 KiB response limit. In full mode, an input that is not recorded (over 5 MiB,
 content-encoded or not a JSON object) is explained in generation metadata:
@@ -804,12 +815,20 @@ key metadata remain in Langfuse ingestion and are excluded from operational logs
 - SIGTERM or Ctrl-C starts graceful shutdown. In-flight requests may finish
   within the configured timeout. Deadline expiry exits nonzero and terminates
   remaining runtime tasks; ordinary shutdown exits zero.
-- The shutdown deadline starts on the shutdown signal. New inference requests
-  are rejected while draining; existing response streams share this budget.
+- The drain deadline (`LANGFUSE_AI_GATEWAY_CONNECTION_DRAIN_TIMEOUT_SECONDS`) starts on the shutdown signal. New inference requests are rejected while draining; existing response streams share this budget.
+- Inference telemetry and operational OTLP export then flush within `LANGFUSE_AI_GATEWAY_TELEMETRY_SHUTDOWN_TIMEOUT_SECONDS`, starting when draining ends, so a drain that hits its deadline does not drop open batches.
 
 ## Container
 
-From the repository root:
+Each Langfuse release publishes a multi-platform (linux/amd64, linux/arm64)
+image to `langfuse/ai-gateway` on Docker Hub and
+`ghcr.io/langfuse/ai-gateway`, tagged like the web and worker images.
+Every release publishes `<version>` and `sha-<commit>`. Stable releases also
+update `<major>.<minor>` and `<major>`, plus `latest` for v4; release candidates
+(`-rc`) do not move these tags. Release images build on the Iron Bank UBI9
+bases.
+
+To build locally, from the repository root:
 
 ```sh
 docker build --target runtime \
@@ -818,7 +837,7 @@ docker build --target runtime \
 docker run --rm --name langfuse-ai-gateway-dev \
   -e LANGFUSE_LOG_FORMAT=json -p 127.0.0.1:8080:8080 langfuse-ai-gateway:dev
 # In another terminal:
-docker stop --time 15 langfuse-ai-gateway-dev
+docker stop --time 25 langfuse-ai-gateway-dev
 bash ai-gateway/scripts/smoke-image.sh langfuse-ai-gateway:dev
 ```
 
@@ -828,7 +847,7 @@ package version, or override `BUILD_ID` at runtime.
 
 The runtime image runs as UID/GID 10001, includes CA certificates, and executes
 the binary directly so it receives signals. Set the container/orchestrator stop
-grace period longer than the gateway shutdown timeout. The smoke test uses an
+grace period longer than the gateway connection drain timeout plus the telemetry shutdown timeout. The smoke test uses an
 isolated container and an ephemeral host port, checks read-only/non-root startup,
 probes, rejection of unauthenticated inference and a clean SIGTERM exit, then removes it.
 
@@ -843,13 +862,7 @@ the file locally: `cargo about generate --locked --fail about.hbs`.
 
 ### Web resolution client
 
-`resolution::ControlPlaneClient` resolves a gateway key through an operator-configured Web
-base URL. The binary initializes it when a Web URL is configured. The
-caller supplies the existing `LANGFUSE_AI_GATEWAY_SERVICE_KEY` and a trusted Web
-base URL to `ControlPlaneConfig::new`. HTTPS is required except on loopback for local
-development. URLs cannot contain credentials, a query or fragment. Include the
-Web deployment's `NEXT_PUBLIC_BASE_PATH`, if set: both `https://host/app` and
-`https://host/app/` resolve through `/app/api/internal/ai-gateway/v1/resolve`.
+`resolution::ControlPlaneClient` resolves a gateway key through an operator-configured Web base URL. The binary initializes it when a Web URL is configured. The caller supplies the existing `LANGFUSE_AI_GATEWAY_SERVICE_KEY` and a trusted Web base URL to `ControlPlaneConfig::new`. HTTPS is required except on loopback for local development; `ControlPlaneConfig::with_plain_http`, which the binary uses when `LANGFUSE_AI_GATEWAY_ALLOW_HTTP_WEB_URL=true`, also accepts HTTP on any host, for internal traffic only. URLs cannot contain credentials, a query or fragment. Include the Web deployment's `NEXT_PUBLIC_BASE_PATH`, if set: both `https://host/app` and `https://host/app/` resolve through `/app/api/internal/ai-gateway/v1/resolve`.
 
 ```rust,no_run
 use ai_gateway::resolution::{ApiFormat, ResolutionError, ControlPlaneClient, ControlPlaneConfig};
@@ -939,7 +952,7 @@ cargo test --locked
 - `main.rs`: configuration, logging, signal registration and process exit.
 - `http.rs`: credential extraction, bounded body reads and gateway error envelopes.
 - `inference.rs`: `InferenceService` coordinates resolution, admission and forwarding.
-- `providers/mod.rs`: `ProviderTransport` with shared admission, the `Route` enum of
+- `providers/mod.rs`: `ProviderTransport`, the `Route` enum of
   official operations (method, upstream path and capture), model rewriting and credential
   placement.
 - `providers/model_list`: provider-native OpenAI and Anthropic model catalog responses.

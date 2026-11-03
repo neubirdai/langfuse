@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import { testFeatureFlags } from "@/src/__tests__/fixtures/feature-flags";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -607,6 +608,7 @@ describe("AI gateway live end-to-end", () => {
               organization_id: ORGANIZATION_ID,
               project_id: expect.stringMatching(/\S/),
               key_id: keyId,
+              user_id: expect.stringMatching(/\S/),
               key_metadata: {
                 test: true,
                 provider,
@@ -620,7 +622,7 @@ describe("AI gateway live end-to-end", () => {
               expires_at: expect.any(Number),
             });
 
-            const ingestionToken = resolved.ingestion.access_token;
+            const ingestionToken = resolved.ingestion!.access_token;
             await ingestTrace(ingestionToken, { provider, apiFormat });
           },
         );
@@ -1197,7 +1199,7 @@ async function startGatewayProcess() {
       LANGFUSE_AI_GATEWAY_SERVICE_KEY: env.LANGFUSE_AI_GATEWAY_SERVICE_KEY,
       LANGFUSE_AI_GATEWAY_LISTEN_ADDRESS: `127.0.0.1:${port}`,
       LANGFUSE_AI_GATEWAY_AUTO_INCREMENT_LISTEN_PORT: "false",
-      LANGFUSE_AI_GATEWAY_SHUTDOWN_TIMEOUT_SECONDS: "5",
+      LANGFUSE_AI_GATEWAY_CONNECTION_DRAIN_TIMEOUT_SECONDS: "5",
       LANGFUSE_LOG_FORMAT: "json",
       LANGFUSE_LOG_LEVEL: "info",
     },

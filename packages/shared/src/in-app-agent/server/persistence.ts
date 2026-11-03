@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import { compactEvents } from "@ag-ui/client";
 import { EventType } from "@ag-ui/core";
 
@@ -43,7 +44,7 @@ import { IN_APP_AGENT_SANDBOX_TOOL_NAMES } from "./mcpPolicy";
 import { getToolFailureMessage } from "./toolErrors";
 
 export const ACTIVE_RUN_CONFLICT_MESSAGE =
-  "Assistant is already responding in this conversation";
+  "Halo is already responding in this conversation";
 
 /** Owner-only authorization with a non-enumerating failure. */
 export function assertOwnedConversation(params: {

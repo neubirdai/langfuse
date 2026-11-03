@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 "use client";
 
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cva } from "class-variance-authority";
-import { EllipsisVertical, type LucideIcon } from "lucide-react";
+import { EllipsisVertical, type IconComponent } from "@langfuse/icons";
 import Link, { type LinkProps } from "next/link";
 import { flushSync } from "react-dom";
 
@@ -296,7 +297,7 @@ function TabsList({
 
 type TabsTriggerProps = {
   disabled?: boolean;
-  icon?: LucideIcon;
+  icon?: IconComponent;
   /** Marks an internal-only feature with the Internal badge, in the row and in the overflow menu. */
   internal?: boolean;
 } & (
@@ -391,7 +392,7 @@ function TabsTriggerContent({
 >) {
   return (
     <>
-      {Icon ? <Icon aria-hidden="true" className="icon-base shrink-0" /> : null}
+      {Icon ? <Icon aria-hidden="true" size="base" /> : null}
       {label === undefined ? (
         children
       ) : (

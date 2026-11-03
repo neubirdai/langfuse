@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unstable-nested-components */
 import { useCallback, useMemo, useState } from "react";
 import type { OrderByState } from "@langfuse/shared";
 import type { OnChangeFn, PaginationState } from "@tanstack/react-table";
@@ -82,6 +83,8 @@ export function GatewayConnectionModelsTable({
         minSize: 180,
         isFlexWidth: true,
         enableSorting: true,
+        headerClassName: "pl-2",
+        cellClassName: "pl-2",
         cell: ({ row }) => (
           <span className="block truncate" title={row.original.id}>
             {row.original.id}
