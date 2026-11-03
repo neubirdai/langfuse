@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -101,7 +102,7 @@ function ProviderBadge({
   const ProviderIcon = providerIcons[model.provider];
   const content = (
     <>
-      <ProviderIcon aria-hidden className="icon-sm shrink-0" />
+      <ProviderIcon aria-hidden size="sm" />
       <span className="truncate py-0.5" title={model.connectionName}>
         {model.connectionName}
       </span>

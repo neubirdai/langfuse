@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 /**
  * ConnectedObservationDetailView - Connects observation details to application data.
  *
@@ -35,22 +36,22 @@ import { getDetailTabs } from "../../fns/getDetailTabs";
 import { resolveDetailTab } from "../../fns/resolveDetailTab";
 import { ScoresTable } from "@/src/features/scores";
 import { getMostRecentCorrection } from "@/src/features/corrections";
-import { useJsonExpansion } from "@/src/features/traces/contexts/JsonExpansionContext";
+import { useJsonExpansion } from "@/src/features/traces/contexts/JsonExpansionProvider";
 import { useMedia } from "@/src/features/traces/hooks/useMedia";
 import {
   type DetailTab,
   useSelection,
-} from "@/src/features/traces/contexts/SelectionContext";
+} from "@/src/features/traces/contexts/SelectionProvider";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics";
 import { useTraceAnalyticsDimensions } from "@/src/features/traces/hooks/useTraceAnalyticsDimensions";
-import { useViewPreferences } from "@/src/features/traces/contexts/ViewPreferencesContext";
+import { useViewPreferences } from "@/src/features/traces/contexts/ViewPreferencesProvider";
 import {
   jsonViewToggleTab,
   normalizeJsonViewPreference,
 } from "@/src/components/ui/jsonViewPreference";
 
 // Contexts and hooks
-import { useTraceData } from "@/src/features/traces/contexts/TraceDataContext";
+import { useTraceData } from "@/src/features/traces/contexts/TraceDataProvider";
 import { useParsedObservation } from "@/src/features/traces/hooks/useParsedObservation";
 import { api } from "@/src/utils/api";
 
@@ -71,7 +72,6 @@ import {
   useInternalFeaturesEnabled,
   useIsFeatureEnabled,
 } from "@/src/features/feature-flags";
-import { TraceMessagesView } from "../TraceMessagesView/TraceMessagesView";
 import { DetailAttributesTab } from "../DetailAttributesTab";
 import { buildModelParameters } from "@/src/features/traces/fns/buildModelParameters";
 import { buildObservationAttributes } from "@/src/features/traces/fns/buildObservationAttributes";
@@ -484,13 +484,6 @@ export function ConnectedObservationDetailView({
               }
             />
 
-            {selectedTab === "messages" && (
-              <Tabs.Content value="messages" layout="fill">
-                <div className="min-h-0 flex-1 overflow-auto px-4">
-                  <TraceMessagesView />
-                </div>
-              </Tabs.Content>
-            )}
             <Tabs.Content value="preview" layout="fill">
               <ObservationPreview
                 currentView={currentView}

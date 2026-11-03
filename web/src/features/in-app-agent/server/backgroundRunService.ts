@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import { EventType } from "@ag-ui/core";
 import { randomUUID } from "crypto";
 
@@ -227,7 +228,7 @@ export async function startBackgroundRun(params: {
     throw new BaseError(
       "PreconditionFailedError",
       412,
-      "Assistant model is not configured.",
+      "Halo model is not configured.",
       true,
     );
   }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import Header from "@/src/components/layouts/header";
 import { ApiKeyList } from "@/src/features/public-api/components/ApiKeyList";
 import { DeleteProjectDialogController } from "@/src/features/projects/components/DeleteProjectDialogController";
@@ -5,7 +6,7 @@ import { HostNameProject } from "@/src/features/projects/components/HostNameProj
 import RenameProject from "@/src/features/projects/components/RenameProject";
 import { Button } from "@/src/components/ui/button";
 import Link from "next/link";
-import { LlmApiKeyList } from "@/src/features/public-api/components/LLMApiKeyList";
+import { LlmApiKeyList } from "@/src/features/public-api/components/LlmApiKeyList";
 import { PagedSettingsContainer } from "@/src/components/PagedSettingsContainer";
 import { useQueryProject } from "@/src/features/projects/hooks";
 import { ConnectedMembershipInvitesSettingsTable } from "@/src/features/rbac/components/MembershipInvitesSettingsTable/ConnectedMembershipInvitesSettingsTable";
@@ -15,7 +16,7 @@ import {
   useHasOrganizationAccess,
 } from "@/src/features/rbac";
 import { JSONView } from "@/src/components/ui/CodeJsonViewer";
-import { PostHogLogo } from "@/src/components/PosthogLogo";
+import { PostHogLogo } from "@/src/components/PostHogLogo";
 import { MixpanelLogo } from "@/src/components/MixpanelLogo";
 import { Card } from "@/src/components/ui/card";
 import { TransferProjectDialogController } from "@/src/features/projects/components/TransferProjectDialogController";
@@ -23,16 +24,16 @@ import { useHasEntitlement } from "@/src/features/entitlements";
 import { useRouter } from "next/router";
 import { SettingsDangerZone } from "@/src/components/SettingsDangerZone";
 import { ActionButton } from "@/src/components/ActionButton";
-import { Webhook } from "lucide-react";
+import { Webhook } from "@langfuse/icons";
 import { BatchExportsSettingsPage } from "@/src/features/batch-exports";
 import { BatchActionsSettingsPage } from "@/src/features/batch-actions";
 import { AuditLogsSettingsPage } from "@/src/ee/features/audit-log-viewer";
 import { ModelsSettings } from "@/src/features/models";
 import ConfigureRetention from "@/src/features/projects/components/ConfigureRetention";
-import ContainerPage from "@/src/components/layouts/container-page";
+import ContainerPage from "@/src/components/layouts/ContainerPage";
 import { NoDataOrLoading } from "@/src/components/NoDataOrLoading";
 import { ProtectedLabelsSettings } from "@/src/features/prompts";
-import { SiSlack } from "react-icons/si";
+import { SiSlack } from "@langfuse/icons/si";
 import { ScoreConfigSettings } from "@/src/features/score-configs";
 import { env } from "@/src/env.mjs";
 import { PersonalNotificationSettings } from "@/src/features/notifications/components/PersonalNotificationSettings";
@@ -591,7 +592,7 @@ const Integrations = (props: { projectId: string }) => {
             isLoading={slack.query.isLoading}
             hasAccess={hasAccess}
           >
-            <SiSlack className="text-foreground icon-lg" />
+            <SiSlack size="lg" color="foreground" />
             <span className="font-bold">Slack</span>
           </IntegrationCardHeader>
           <p className="text-primary mb-4 text-sm">
@@ -615,7 +616,7 @@ const Integrations = (props: { projectId: string }) => {
             isLoading={webCallouts.query.isLoading}
             hasAccess={hasAccess}
           >
-            <Webhook className="text-foreground icon-lg" />
+            <Webhook size="lg" color="foreground" />
             <span className="font-bold">Web Callouts</span>
           </IntegrationCardHeader>
           <p className="text-primary mb-4 text-sm">
