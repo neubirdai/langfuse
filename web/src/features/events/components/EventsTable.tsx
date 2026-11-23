@@ -9,7 +9,6 @@ import {
   toObservedOptions,
   withMetadataPathOptions,
 } from "@/src/features/search-bar/lib/observed-options";
-import { useSearchBarEnabled } from "@/src/features/search-bar/hooks/useSearchBarEnabled";
 import { useFullTextSearch } from "@/src/features/search-bar/hooks/useFullTextSearch";
 
 import { EmptyValue } from "@/src/components/design-system/table/components/EmptyValue/EmptyValue";
@@ -22,6 +21,7 @@ import {
 } from "@/src/components/table/data-table-controls";
 import { ResizableFilterLayout } from "@/src/components/table/resizable-filter-layout";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import isEqual from "lodash/isEqual";
 import { startOfMinute } from "date-fns";
 import { usePaginationState } from "@/src/hooks/usePaginationState";
 import { buildSidebarFilterSessionContextId } from "@/src/features/filters/lib/persistedSidebarFilterQuery";
@@ -92,6 +92,7 @@ import { useTableDateRange } from "@/src/hooks/useTableDateRange";
 import { useLiveTableDateRange } from "@/src/hooks/useLiveTableDateRange";
 import {
   isLiveTailTimeSort,
+  paginationWindowResetKey,
   usePaginationWindowPin,
 } from "@/src/components/table/hooks/usePaginationWindowPin";
 import {
@@ -159,12 +160,18 @@ import {
   REFRESH_INTERVALS,
   type RefreshInterval,
 } from "@/src/components/table/utils/refresh-intervals";
+import { useEffectiveRefreshInterval } from "@/src/components/table/hooks/useEffectiveRefreshInterval";
 import useSessionStorage from "@/src/components/useSessionStorage";
 import { api } from "@/src/utils/api";
 import { RunEvaluationDialog } from "@/src/features/batch-actions/components/RunEvaluationDialog/index";
 import { AddObservationsToDatasetDialog } from "@/src/features/batch-actions/components/AddObservationsToDatasetDialog/AddObservationsToDatasetDialog";
 import { useHasEntitlement } from "@/src/features/entitlements/hooks";
-import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import {
+  markTraceQueryPendingDeletion,
+  markTracesPendingDeletion,
+} from "@/src/features/traces/pendingTraceDeletions";
+import { usePendingTraceDeletions } from "@/src/features/traces/usePendingTraceDeletions";
+import { traceDeleteCandidateFromEventsRow } from "@/src/features/traces/pendingTraceDeletionMatch";
 import { MobileFullTextSearch } from "@/src/features/events/components/MobileFullTextSearch";
 import { CategoryPresetChips } from "@/src/features/events/components/CategoryPresetChips";
 import { TableViewPresetsDrawer } from "@/src/components/table/table-view-presets/components/data-table-view-presets-drawer";
@@ -177,6 +184,7 @@ import {
   chartSearchFieldReason,
   CHART_SEARCH_QUERY_REASON,
 } from "@/src/features/chart-view/lib/chartFilterCompatibility";
+import type { CompareOp } from "@/src/features/search-bar/lib/ast";
 import { getEventsTableStatePolicy } from "@/src/features/events/lib/eventsTableStatePolicy";
 import {
   useFacetOptionsWithObservedMetadata,
@@ -469,6 +477,7 @@ export default function ObservationsEventsTable({
     },
     [allowedValues, setRawRefreshInterval],
   );
+  const effectiveRefreshInterval = useEffectiveRefreshInterval(refreshInterval);
 
   // When the chart/outlier-strip window (below) last advanced. Truncated to the
   // minute: a to-the-millisecond bound re-keyed the chart query on every tick,
@@ -493,10 +502,10 @@ export default function ObservationsEventsTable({
   }, [utils]);
 
   useEffect(() => {
-    if (!refreshInterval) return;
-    const id = setInterval(handleRefresh, refreshInterval);
+    if (!effectiveRefreshInterval) return;
+    const id = setInterval(handleRefresh, effectiveRefreshInterval);
     return () => clearInterval(id);
-  }, [refreshInterval, handleRefresh]);
+  }, [effectiveRefreshInterval, handleRefresh]);
 
   const { range: tableDateRange, anchoredTo } =
     useLiveTableDateRange(timeRange);
@@ -545,9 +554,9 @@ export default function ObservationsEventsTable({
     persistAsDefault: false,
   });
 
-  // Facets describe the whole window (see facetStartTimeFilter below); the paged
-  // row/count queries take the pinned upper bound instead, so offset paging does
-  // not repeat or skip rows while the window keeps taking in newly ingested ones.
+  // Facets describe the live window (see facetStartTimeFilter below). Row and
+  // count queries freeze both bounds once the reader leaves page 1, so offset
+  // paging does not repeat, skip, or recount rows while new ones arrive.
   const {
     range: rowsDateRange,
     pinOnLeavingFirstPage,
@@ -555,7 +564,15 @@ export default function ObservationsEventsTable({
   } = usePaginationWindowPin(
     dateRange,
     limitRows ? 0 : paginationState.page - 1,
-    { enabled: isLiveTailTimeSort(orderByState, "startTime") },
+    {
+      enabled: isLiveTailTimeSort(orderByState, "startTime"),
+      resetKey: paginationWindowResetKey({
+        orderBy: orderByState,
+        pageSize: paginationState.limit,
+        timeRange,
+        externalRange: externalDateRange,
+      }),
+    },
   );
   const dateRangeFilter: FilterState = toStartTimeFilterState(rowsDateRange);
 
@@ -602,11 +619,22 @@ export default function ObservationsEventsTable({
     (change: ExplicitFilterStateChange) => {
       onAppRootExplicitFilterStateChange(change);
       demoteViewOnUserFilterEdit(change, viewControllersRef.current);
-      if (change.origin === "user" && change.action === "clear") {
-        resetSearchBarDraftRef.current?.(change.nextFilters);
+      if (change.origin === "user") {
+        // A search-bar blur commits the current filters even when they did
+        // not change. That write is still origin "user", so only a real edit
+        // or an explicit clear may move the paging window.
+        if (
+          change.action === "clear" ||
+          !isEqual(change.previousFilters, change.nextFilters)
+        ) {
+          resetPin();
+        }
+        if (change.action === "clear") {
+          resetSearchBarDraftRef.current?.(change.nextFilters);
+        }
       }
     },
-    [onAppRootExplicitFilterStateChange],
+    [onAppRootExplicitFilterStateChange, resetPin],
   );
 
   // Route-state half of the sidebar filters, ahead of the facet-options query
@@ -791,17 +819,13 @@ export default function ObservationsEventsTable({
     requestColumns(queryFilter.expanded);
   }, [queryFilter.expanded, requestColumns]);
 
-  // Grammar search bar: an ADDITIONAL editor that coexists with the facet
-  // sidebar, and the two stay in sync. Generally available on the v4 events
-  // tables (no longer a per-user Feature Preview opt-in — useSearchBarEnabled()
-  // is now always true). The sidebar's FilterState (+ the table's full-text
-  // search) remains the single source of truth — the bar reads from and writes
-  // to it. Only the legacy toolbar search field is replaced (full-text search —
-  // bare text and content:/input:/output: — goes inline in the bar); the
-  // sidebar and time/refresh controls stay.
-  const searchBarEnabled = useSearchBarEnabled();
-  const searchBarMode =
-    searchBarEnabled && showSearchBar && !externalFilterState;
+  // Grammar search bar: an additional editor that coexists with the facet
+  // sidebar, and the two stay in sync. The sidebar's FilterState (+ the table's
+  // full-text search) remains the single source of truth — the bar reads from
+  // and writes to it. Only the legacy toolbar search field is replaced
+  // (full-text search — bare text and content:/input:/output: — goes inline in
+  // the bar); the sidebar and time/refresh controls stay.
+  const searchBarMode = showSearchBar && !externalFilterState;
   const searchRegistry = eventsSearchRegistry(
     [
       ...(eventsFilterConfig.omittedFilterColumns ?? []),
@@ -1118,14 +1142,6 @@ export default function ObservationsEventsTable({
   });
 
   const traceDeleteMutation = api.traces.deleteMany.useMutation({
-    onSuccess: () => {
-      showSuccessToast({
-        operation: "trace.bulk_delete",
-        title: "Traces deleted",
-        description:
-          "Selected traces will be deleted. Traces are removed asynchronously and may continue to be visible for up to 15 minutes.",
-      });
-    },
     onSettled: () => {
       utils.events.all.invalidate();
       utils.events.countAll.invalidate();
@@ -1161,7 +1177,7 @@ export default function ObservationsEventsTable({
     // delete with nothing resolvable is a no-op.
     if (!selectAll && selectedTraceIds.length === 0) return;
 
-    await traceDeleteMutation.mutateAsync({
+    const { cutoffCreatedAt } = await traceDeleteMutation.mutateAsync({
       projectId,
       traceIds: selectedTraceIds,
       query: {
@@ -1176,6 +1192,28 @@ export default function ObservationsEventsTable({
       },
       isBatchAction: selectAll,
     });
+    if (selectAll && cutoffCreatedAt) {
+      markTraceQueryPendingDeletion(projectId, {
+        source: "events",
+        filter: filterState,
+        searchQuery: searchQuery || undefined,
+        searchType,
+        cutoffCreatedAt,
+      });
+    }
+    // The loaded page is hidden by id too, which covers queries that cannot
+    // be evaluated in the browser.
+    const pageTraceIds = [
+      ...new Set(
+        (observations.rows ?? []).flatMap((observation) =>
+          observation.traceId ? [observation.traceId] : [],
+        ),
+      ),
+    ];
+    markTracesPendingDeletion(
+      projectId,
+      selectAll ? pageTraceIds : selectedTraceIds,
+    );
     setSelectedRows({});
   };
 
@@ -1842,6 +1880,19 @@ export default function ObservationsEventsTable({
     };
   }, [peekNavigationProps, showPeekPanel]);
 
+  const pendingTraceDeletions = usePendingTraceDeletions(projectId);
+  const pendingTraceIds = useMemo(
+    () =>
+      pendingTraceDeletions.hiddenTraceIds(
+        "events",
+        (observations.rows ?? []).flatMap((observation) => {
+          const candidate = traceDeleteCandidateFromEventsRow(observation);
+          return candidate ? [candidate] : [];
+        }),
+      ),
+    [pendingTraceDeletions, observations.rows],
+  );
+
   const rows: EventsTableRow[] = useMemo(() => {
     const result =
       observations.status === "success" && observations.rows
@@ -1912,6 +1963,12 @@ export default function ObservationsEventsTable({
 
     return result;
   }, [observations]);
+
+  const visibleRows = useMemo(
+    () =>
+      rows.filter((row) => !row.traceId || !pendingTraceIds.has(row.traceId)),
+    [rows, pendingTraceIds],
+  );
 
   const selectedObservationIds = useMemo(() => {
     const rowIds = new Set(observations.rows?.map((o) => o.id));
@@ -1987,6 +2044,9 @@ export default function ObservationsEventsTable({
                       size={showControlsInPageHeader ? "large" : "default"}
                       key={`${viewControllers.filterEditorResetKey}-${queryFilter.draftResetKey}`}
                       registry={searchRegistry}
+                      managedEnvironmentPolicy={
+                        queryFilter.managedEnvironmentPolicyConfig
+                      }
                       projectId={projectId}
                       tableName={eventsFilterConfig.tableName}
                       isV4={true}
@@ -1996,8 +2056,8 @@ export default function ObservationsEventsTable({
                       erroredColumns={erroredColumns}
                       fieldReason={
                         chartActive
-                          ? (name: string) =>
-                              chartSearchFieldReason(name, searchRegistry)
+                          ? (name: string, op?: CompareOp) =>
+                              chartSearchFieldReason(name, searchRegistry, op)
                           : undefined
                       }
                       freeTextReason={
@@ -2128,6 +2188,9 @@ export default function ObservationsEventsTable({
                     size={showControlsInPageHeader ? "large" : "default"}
                     key={`${viewControllers.filterEditorResetKey}-${queryFilter.draftResetKey}`}
                     registry={searchRegistry}
+                    managedEnvironmentPolicy={
+                      queryFilter.managedEnvironmentPolicyConfig
+                    }
                     projectId={projectId}
                     tableName={eventsFilterConfig.tableName}
                     isV4={true}
@@ -2137,8 +2200,8 @@ export default function ObservationsEventsTable({
                     erroredColumns={erroredColumns}
                     fieldReason={
                       chartActive
-                        ? (name: string) =>
-                            chartSearchFieldReason(name, searchRegistry)
+                        ? (name: string, op?: CompareOp) =>
+                            chartSearchFieldReason(name, searchRegistry, op)
                         : undefined
                     }
                     freeTextReason={
@@ -2150,7 +2213,7 @@ export default function ObservationsEventsTable({
                     onRequestColumns={requestColumns}
                     aiDataContext={aiDataContext}
                     aiScoreNames={aiScoreNames}
-                    className="px-3 pt-3"
+                    spacing="page"
                   />
                 </div>
               </div>
@@ -2419,7 +2482,7 @@ export default function ObservationsEventsTable({
                       : {
                           isLoading: false,
                           isError: false,
-                          data: rows,
+                          data: visibleRows,
                         }
                 }
                 noResultsMessage={
@@ -2450,9 +2513,9 @@ export default function ObservationsEventsTable({
                                   pageSize: paginationState.limit,
                                 })
                               : updater;
-                          // Leaving page 1 freezes the paged set at the newest
-                          // row still on screen, so page 2 continues where this
-                          // page ends even if rows keep arriving.
+                          // Leaving page 1 freezes both bounds at the newest
+                          // row still on screen. Later pages pass their own
+                          // top row; the hook keeps the page-1 snapshot.
                           pinOnLeavingFirstPage(
                             newState.pageIndex,
                             rows[0]?.startTime ?? undefined,

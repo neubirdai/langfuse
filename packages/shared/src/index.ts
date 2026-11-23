@@ -90,6 +90,7 @@ export * from "./features/evals/experimentRuleNormalization";
 // table actions
 export * from "./features/batchExport/types";
 export * from "./features/batchAction/types";
+export * from "./features/batchAction/traceDeletePredicate";
 export * from "./features/batchAction/addToDatasetTypes";
 export * from "./features/batchAction/applyFieldMapping";
 export { BatchTableNames } from "./interfaces/tableNames";
@@ -304,6 +305,10 @@ export { CORRECTION_SCORES_BILLABLE_FROM } from "./domain/scores";
 export { type ListableScoreDataType } from "./domain/scores";
 export { type ListableScore } from "./domain/scores";
 export { TableViewPresetTableName } from "./domain/table-view-presets";
+export {
+  SessionViewInputSchema,
+  SessionViewPreferencesSchema,
+} from "./domain/session-views";
 export { SystemTableViewPresetCategory } from "./domain/table-view-presets";
 export { SYSTEM_TABLE_VIEW_PRESET_CATEGORY_META } from "./domain/table-view-presets";
 export { SYSTEM_TABLE_VIEW_PRESET_CATEGORIES_ORDERED } from "./domain/table-view-presets";
