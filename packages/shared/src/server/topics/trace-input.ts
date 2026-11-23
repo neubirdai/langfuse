@@ -1,19 +1,12 @@
-/* eslint-disable @typescript-eslint/no-use-before-define */
-import { isRootObservation } from "../../eventsTable";
 import { EventsQueryBuilder } from "../queries/clickhouse-sql/event-query-builder";
 import {
   queryClickhouse,
   queryClickhouseStream,
 } from "../repositories/clickhouse";
 import { convertDateToClickhouseDateTime } from "../clickhouse/client";
-import {
-  assembleTranscript,
-  orderObservations,
-  type TranscriptObservation,
-} from "../transcript";
-
-/** Historical summaries are reusable only with the same transcript producer. */
-export const TOPICS_TRANSCRIPT_VERSION = "shared-transcript-v3";
+import { assembleTranscriptContext } from "../transcript/context";
+import { orderObservations } from "../transcript/ordering";
+import type { TranscriptObservation } from "../transcript/types";
 
 const MAX_OBSERVATIONS = 2_000;
 const MAX_SNAPSHOT_BYTES = 10 * 1024 * 1024;
@@ -34,11 +27,12 @@ type SnapshotRow = {
   trace_name: string;
   span_id: string;
   parent_span_id: string | null;
-  is_app_root: boolean;
   start_time: string;
   end_time: string | null;
   type: TranscriptObservation["type"];
   name: string;
+  level: TranscriptObservation["level"];
+  status_message: string | null;
   input: string;
   output: string;
   metadata: Record<string, string>;
@@ -85,13 +79,14 @@ export async function loadTopicTranscript(params: {
       "e.session_id",
       "e.environment",
       "e.trace_name",
-      "e.is_app_root",
       "e.span_id",
       "e.parent_span_id",
       "e.start_time",
       "e.end_time",
       "e.type",
       "e.name",
+      "e.level",
+      "e.status_message",
     )
     .selectIO(false)
     .selectMetadataExpanded()
@@ -111,13 +106,13 @@ export async function loadTopicTranscript(params: {
     )
     .orderByColumns([
       { column: "e.event_ts", direction: "DESC" },
-      /** Use the same environment tie-breakers as Topics root discovery. */
+      /** Use the same environment tie-breakers as Topics trace selection. */
       { column: "e.span_id", direction: "DESC" },
       { column: "e.environment", direction: "DESC" },
       // Equal storage timestamps need a stable choice; they do not establish causal order.
       {
         column:
-          "cityHash64(tuple(e.environment, e.trace_name, e.is_app_root, e.parent_span_id, e.start_time, e.end_time, e.type, e.name, e.level, e.status_message, e.input, e.output, e.metadata_names, e.metadata_values))",
+          "cityHash64(tuple(e.environment, e.trace_name, e.parent_span_id, e.start_time, e.end_time, e.type, e.name, e.level, e.status_message, e.input, e.output, e.metadata_names, e.metadata_values))",
         direction: "DESC",
       },
     ])
@@ -128,7 +123,6 @@ export async function loadTopicTranscript(params: {
   let sessionId: string | null = null;
   let environment = "";
   let traceName = "";
-  let rootName = "";
   let bytes = 0;
   try {
     for await (const row of queryClickhouseStream<SnapshotRow>({
@@ -150,15 +144,6 @@ export async function loadTopicTranscript(params: {
       // Rows arrive newest first; retain the latest non-empty session and name metadata.
       if (!sessionId && row.session_id) sessionId = row.session_id;
       if (!traceName && row.trace_name) traceName = row.trace_name;
-      if (
-        !rootName &&
-        row.name &&
-        isRootObservation({
-          parentObservationId: row.parent_span_id,
-          isAppRoot: row.is_app_root,
-        })
-      )
-        rootName = row.name;
       bytes += Buffer.byteLength(JSON.stringify(row));
       if (bytes > MAX_SNAPSHOT_BYTES || observations.length >= MAX_OBSERVATIONS)
         throw new TopicTraceTooLarge();
@@ -174,6 +159,8 @@ export async function loadTopicTranscript(params: {
         input: row.input,
         output: row.output,
         metadata: row.metadata,
+        level: row.level,
+        statusMessage: row.status_message || null,
       });
     }
   } catch (error) {
@@ -193,13 +180,15 @@ export async function loadTopicTranscript(params: {
     if (a.id === b.id) return 0;
     return a.id < b.id ? -1 : 1;
   });
+  // Uncapped, like trace-batch; the summary input limit rejects oversized traces.
+  const context = assembleTranscriptContext(orderObservations(observations));
   return {
     unitStartTime: observations[0].startTime.toISOString(),
     sessionId,
     environment,
-    traceName: traceName || rootName,
-    // Uncapped, like trace-batch; the summary input limit rejects oversized traces.
-    transcript: assembleTranscript(orderObservations(observations)),
+    traceName,
+    transcript: context?.transcript ?? null,
+    executionIssues: context?.executionIssues ?? [],
   };
 }
 

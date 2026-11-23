@@ -1,6 +1,7 @@
 import {
   useMemo,
   useState,
+  type CSSProperties,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
@@ -26,10 +27,14 @@ type TopicGridProps = {
   perDot: number;
   topics: GridTopic[];
   rowsById: Map<string, FacetRow>;
+  /** Facet trace total for the touch preview's share; map points are only the discovery cohort. */
+  total?: number | null;
   selectedIndex: number | null;
   onSelectTopic: (topicId: string | null) => void;
   onSelectTrace: (traceId: string) => void;
   previewOnSelect?: boolean;
+  /** Matches the trace list header in the side-by-side layout so both dividers line up. */
+  barHeight?: number;
 };
 
 type GridHoverCardProps = {
@@ -273,9 +278,11 @@ export function TopicGrid({
   perDot,
   topics,
   rowsById,
+  total,
   selectedIndex,
   onSelectTopic,
   onSelectTrace,
+  barHeight,
   previewOnSelect = false,
 }: TopicGridProps) {
   const [zoom, setZoom] = useState(0);
@@ -405,7 +412,17 @@ export function TopicGrid({
 
   return (
     <>
-      <div className="flex h-12 shrink-0 items-center justify-end gap-2 px-4">
+      <div
+        className={cn(
+          "flex h-12 shrink-0 items-center justify-end gap-2 px-4",
+          barHeight && "lg:h-(--bar-height)",
+        )}
+        style={
+          barHeight
+            ? ({ "--bar-height": `${barHeight}px` } as CSSProperties)
+            : undefined
+        }
+      >
         <div className="flex items-center gap-0.5">
           <IconButton
             icon={Minus}
@@ -517,7 +534,7 @@ export function TopicGrid({
             <div className="pointer-events-none absolute right-2 bottom-2 left-2">
               <TopicPreviewCard
                 topic={topics[hoveredLabelIndex]}
-                total={rowsById.size}
+                total={total}
               />
             </div>
           )}
