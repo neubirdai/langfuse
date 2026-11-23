@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-use-before-define */
 import { env } from "@/src/env.mjs";
-import { auditLog } from "@/src/features/audit-logs/server";
-import { throwIfNoProjectAccess } from "@/src/features/rbac";
+import { auditLog } from "@/src/features/audit-logs/auditLog";
+import { throwIfNoProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import {
   createTRPCRouter,
   protectedProjectProcedure,
@@ -231,10 +230,11 @@ export const queueRouter = createTRPCRouter({
         });
 
         const scoreConfigsById = new Map(
-          filterAndValidateDbScoreConfigList(configs).map((config) => [
-            config.id,
-            config,
-          ]),
+          filterAndValidateDbScoreConfigList(configs, (error) =>
+            logger.warn("Invalid score config omitted from response", {
+              error,
+            }),
+          ).map((config) => [config.id, config]),
         );
 
         return {
@@ -279,6 +279,7 @@ export const queueRouter = createTRPCRouter({
             name: true,
             annotationQueueItem: {
               where: {
+                projectId: input.projectId,
                 objectId: input.objectId,
                 objectType: input.objectType,
               },

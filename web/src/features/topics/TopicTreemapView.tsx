@@ -1,68 +1,92 @@
 import { useState } from "react";
+import { useMediaQuery } from "react-responsive";
 import { type DataTablePeekViewProps } from "@/src/components/table/peek";
 import { TopicsEmptyState } from "./TopicsEmptyState";
-import { type Facet } from "./facet-topics";
+import {
+  type Facet,
+  type TopicTraceQuery,
+  type UseTopicTraces,
+} from "./facet-topics";
 import {
   prepareTopicDisplay,
   UNASSIGNED_TOPIC_ID,
 } from "./prepare-topic-display";
 import { TopicTreemap } from "./TopicTreemap";
 import { TopicTraceList } from "./TopicTraceList";
+import { TopicsSplit } from "./TopicsSplit";
 
 type TopicTreemapViewProps = {
   projectId: string;
   facet: Facet;
   peekView: DataTablePeekViewProps;
-  onGenerateTopics: () => void;
-  canGenerateTopics: boolean;
+  /** Treemap left, traces right on wide screens. */
+  sideBySide?: boolean;
+  /** Applied to the trace list only when side by side, so the peek matches its width. */
+  tracePanelRef?: (element: HTMLElement | null) => void;
+  useTraces: UseTopicTraces;
 };
 
 export function TopicTreemapView({
   projectId,
   facet,
   peekView,
-  onGenerateTopics,
-  canGenerateTopics,
+  sideBySide = false,
+  tracePanelRef,
+  useTraces,
 }: TopicTreemapViewProps) {
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
-  if (facet.topics.length === 0) {
-    return (
-      <TopicsEmptyState
-        onGenerateTopics={onGenerateTopics}
-        canGenerateTopics={canGenerateTopics}
-      />
-    );
-  }
   const { topics, total } = prepareTopicDisplay(facet, "treemap");
   const selected =
     topics.find((topic) => topic.id === selectedTopicId) ?? topics[0];
-  const selectedRowTopicId =
-    selected.id === UNASSIGNED_TOPIC_ID ? null : selected.id;
-  const rows = facet.rows.filter(
-    (row) => (row.topicId ?? null) === selectedRowTopicId,
-  );
+  const traces = useTraces(selected ? topicQuery(selected.id) : null);
+  const isWide = useMediaQuery({ query: "(min-width: 1024px)" });
+  const horizontal = sideBySide && isWide;
+  if (facet.topics.length === 0 || !selected) {
+    return <TopicsEmptyState />;
+  }
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="m-4 flex min-h-48 shrink-0 basis-1/2">
-        <TopicTreemap
-          total={total}
-          topics={topics}
-          selectedTopicId={selected.id}
-          onSelectTopic={setSelectedTopicId}
+    <TopicsSplit
+      id="topics-treemap-split"
+      orientation={horizontal ? "horizontal" : "vertical"}
+      defaultTopicsSize={horizontal ? "60%" : "50%"}
+      topics={
+        <div className="flex min-h-0 flex-1 p-4">
+          <TopicTreemap
+            total={total}
+            topics={topics}
+            selectedTopicId={selected.id}
+            onSelectTopic={setSelectedTopicId}
+          />
+        </div>
+      }
+      traces={
+        <TopicTraceList
+          key={selected.id}
+          projectId={projectId}
+          title={selected.name}
+          description={
+            selected.id === UNASSIGNED_TOPIC_ID
+              ? undefined
+              : selected.description
+          }
+          swatchColor={selected.color}
+          traces={traces}
+          totalCount={selected.count}
+          tracingTopic={
+            selected.id === UNASSIGNED_TOPIC_ID
+              ? undefined
+              : { facet, name: selected.name }
+          }
+          peekView={peekView}
+          tracePanelRef={horizontal ? tracePanelRef : undefined}
+          divider="none"
         />
-      </div>
-      <TopicTraceList
-        key={selected.id}
-        projectId={projectId}
-        title={selected.name}
-        description={
-          selected.id === UNASSIGNED_TOPIC_ID ? undefined : selected.description
-        }
-        swatchColor={selected.color}
-        rows={rows}
-        peekView={peekView}
-        divider="top"
-      />
-    </div>
+      }
+    />
   );
+}
+
+function topicQuery(topicId: string): TopicTraceQuery {
+  if (topicId === UNASSIGNED_TOPIC_ID) return { assigned: false };
+  return { topicIds: { operator: "any of", values: [topicId] } };
 }

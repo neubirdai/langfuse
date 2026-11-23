@@ -1,11 +1,11 @@
 import {
+  Eye,
   History,
-  Play,
-  RefreshCw,
+  Pencil,
+  Plus,
   Settings,
   type IconComponent,
 } from "@langfuse/icons";
-import { type Status } from "@/src/components/ui/StatusBadge/StatusBadge";
 
 export type AutomaticProcessingState =
   | { status: "unconfigured" }
@@ -14,143 +14,104 @@ export type AutomaticProcessingState =
   | { status: "paused"; shortLabel: string };
 
 type TopicAction = {
-  id: "automatic" | "manual" | "configure" | "history" | "refresh";
+  id: "edit" | "new-analysis" | "configure" | "history";
   label: string;
   icon: IconComponent;
   onSelect: () => void;
   disabledReason?: string;
   badge?: string;
-  variant: "primary" | "secondary";
 };
 
-export type AutomaticProcessingAction = TopicAction & {
-  badge: string;
-  badgeStatus: Status;
-};
-
-const processingPresentation = {
-  unconfigured: { badge: "Off", badgeStatus: "inactive", variant: "secondary" },
-  off: { badge: "Off", badgeStatus: "inactive", variant: "primary" },
-  on: { badge: "On", badgeStatus: "active", variant: "secondary" },
-  paused: { badge: "Paused", badgeStatus: "paused", variant: "primary" },
-} satisfies Record<
-  AutomaticProcessingState["status"],
-  Pick<AutomaticProcessingAction, "badge" | "badgeStatus" | "variant">
->;
-
-function processingDisabledReason(
-  state: AutomaticProcessingState,
+function newAnalysisDisabledReason(
   canWrite: boolean,
-  saving: boolean,
+  state: AutomaticProcessingState,
 ) {
-  if (state.status === "unconfigured") return "Configure Topics first.";
   if (!canWrite) return "You need permission to edit Topics.";
-  if (saving) return "Saving settings…";
+  if (state.status === "unconfigured") return "Set up Topics first.";
   return undefined;
 }
 
-export function prepareAutomaticProcessingAction({
-  state,
-  canWrite,
-  saving,
-  onSelect,
-}: {
-  state: AutomaticProcessingState;
-  canWrite: boolean;
-  saving: boolean;
-  onSelect: () => void;
-}): AutomaticProcessingAction {
-  const disabledReason = processingDisabledReason(state, canWrite, saving);
-  return {
-    id: "automatic",
-    label: "Automatic processing",
-    icon: RefreshCw,
-    ...processingPresentation[state.status],
-    disabledReason:
-      disabledReason && state.status === "paused"
-        ? `${state.shortLabel}. ${disabledReason}`
-        : disabledReason,
-    onSelect,
-  };
-}
-
-/** One action policy for inline controls and both overflow-menu presentations. */
+/** One action policy for the Edit scan button and both overflow-menu presentations. */
 export function prepareTopicsActions({
   automaticProcessing,
   canWrite,
-  configured,
   configureAvailable,
-  configureVariant,
-  manualAvailable,
   menuOnly,
-  onAutomaticProcessing,
   onConfigure,
-  onManualProcessing,
   onHistory,
-  onRefresh,
+  onNewAnalysis,
+  onEditRun,
+  showUnassigned,
+  onShowUnassignedChange,
 }: {
   automaticProcessing: { state: AutomaticProcessingState; saving: boolean };
   canWrite: boolean;
-  configured: boolean;
   configureAvailable: boolean;
-  configureVariant: "primary" | "secondary";
-  manualAvailable: boolean;
   menuOnly: boolean;
-  onAutomaticProcessing: () => void;
   onConfigure: () => void;
-  onManualProcessing: () => void;
   onHistory: () => void;
-  onRefresh: () => void;
+  /** Starts a one-off analysis; absent where none can start. */
+  onNewAnalysis?: () => void;
+  /** Edits the selected live run; absent for past runs or without write access. */
+  onEditRun?: () => void;
+  showUnassigned: boolean;
+  onShowUnassignedChange: (show: boolean) => void;
 }) {
-  const automatic = menuOnly
-    ? null
-    : prepareAutomaticProcessingAction({
-        ...automaticProcessing,
-        canWrite,
-        onSelect: onAutomaticProcessing,
-      });
-  const configure: TopicAction = {
-    id: "configure",
-    label: "Configure Topics",
-    icon: Settings,
-    variant: configureVariant,
-    onSelect: onConfigure,
-    disabledReason:
-      !configured && !configureAvailable ? "Loading configuration…" : undefined,
-  };
-  const manual: TopicAction = {
-    id: "manual",
-    label: "Manual processing",
-    icon: Play,
-    variant: "secondary",
-    onSelect: onManualProcessing,
-  };
-  const inline: TopicAction[] = [];
+  const { state } = automaticProcessing;
   const menu: TopicAction[] = [];
-  if (automatic) menu.push(automatic);
-  if (!menuOnly && !configured) inline.push(configure);
-  if (!menuOnly && manualAvailable) {
-    inline.push(manual);
-    menu.push(manual);
-  }
-  if (configured || !menuOnly) menu.push(configure);
+  // Handheld headers show only the menu, so it carries Edit scan there.
+  if (onEditRun && menuOnly)
+    menu.push({
+      id: "edit",
+      label: "Edit scan",
+      icon: Pencil,
+      onSelect: onEditRun,
+    });
   menu.push(
     {
       id: "history",
       label: "History",
       icon: History,
-      variant: "secondary",
       onSelect: onHistory,
     },
     {
-      id: "refresh",
-      label: "Refresh results",
-      icon: RefreshCw,
-      variant: "secondary",
-      onSelect: onRefresh,
+      id: "configure",
+      label: "Settings",
+      icon: Settings,
+      disabledReason: configureAvailable
+        ? undefined
+        : "Topics settings are still loading.",
+      onSelect: onConfigure,
     },
   );
-  return { automatic, inline, menu };
+  const display = {
+    id: "show-unassigned",
+    label: "Show unassigned",
+    icon: Eye,
+    checked: showUnassigned,
+    onCheckedChange: onShowUnassignedChange,
+  } as const;
+  const newAnalysis = onNewAnalysis
+    ? {
+        onSelect: onNewAnalysis,
+        disabledReason: newAnalysisDisabledReason(canWrite, state),
+      }
+    : null;
+  if (newAnalysis)
+    menu.unshift({
+      id: "new-analysis",
+      label: "New scan",
+      icon: Plus,
+      disabledReason: newAnalysis.disabledReason,
+      onSelect: newAnalysis.onSelect,
+    });
+  const editRun = onEditRun && !menuOnly ? { onSelect: onEditRun } : null;
+  return {
+    editRun,
+    newScan: newAnalysis,
+    menu,
+    display,
+  };
 }
 
 export type TopicsActions = ReturnType<typeof prepareTopicsActions>;

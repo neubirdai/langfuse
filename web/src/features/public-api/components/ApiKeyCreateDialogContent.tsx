@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-deprecated, @typescript-eslint/no-use-before-define -- Legacy UI usage retained during migration to design-system components. */
+/* eslint-disable @typescript-eslint/no-deprecated -- Legacy UI usage retained during migration to design-system components. */
 import React, { useState } from "react";
 import { ArrowUpRight } from "@langfuse/icons";
 import { useSession } from "next-auth/react";
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/src/components/ui/button";
 import {
   DialogBody,
+  DialogClose,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -25,11 +26,9 @@ import {
   SelectTrigger,
 } from "@/src/components/ui/select";
 import { withoutGatewayRole } from "@/src/features/ai-gateway/fns/separateGatewayApiKeys";
-import {
-  ApiKeyExpirationInput,
-  type ApiKeyExpirationPreset,
-  resolveApiKeyExpiration,
-} from "@/src/features/apiKey";
+import { ApiKeyExpirationInput } from "@/src/features/apiKey/components/ApiKeyExpirationInput/ApiKeyExpirationInput";
+import type { ApiKeyExpirationPreset } from "@/src/features/apiKey/constants/apiKeyExpirationOptions";
+import { resolveApiKeyExpiration } from "@/src/features/apiKey/fns/resolveApiKeyExpiration";
 import { ApiKeyDetailContent } from "@/src/features/public-api/components/ApiKeyDetailContent";
 import { rolePermissionCountLabel } from "@/src/features/rbac/components/RolePermissionList";
 import { RolePermissionPopup } from "@/src/features/rbac/components/RolePermissionPopup";
@@ -75,7 +74,7 @@ export function ApiKeyCreateDialogContent(
     const { secretKey, publicKey, baseUrl } = props;
 
     return (
-      <DialogContent closeOnInteractionOutside>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>API Keys</DialogTitle>
         </DialogHeader>
@@ -88,6 +87,11 @@ export function ApiKeyCreateDialogContent(
             showMcpSection={true}
           />
         </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button>Done</Button>
+          </DialogClose>
+        </DialogFooter>
       </DialogContent>
     );
   }

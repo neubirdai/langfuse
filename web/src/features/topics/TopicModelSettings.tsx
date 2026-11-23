@@ -12,7 +12,9 @@ export type ConfigureTopicsSettingsInput = {
   traceIdleMs: number | null;
   connections: Connection[];
   facets: TopicFacet[];
+  /** The project's only rule; null with none or several. */
   rule: TopicRule | null;
+  ruleCount: number;
 };
 
 export type TopicSetupNoticeState = {
@@ -54,6 +56,7 @@ export function useTopicModelSettings({
   const automaticProcessing = useAutomaticProcessing({
     projectId,
     rule,
+    hasRules: Boolean(rules.data?.length),
     stored: settings.data,
   });
 
@@ -78,6 +81,7 @@ export function useTopicModelSettings({
           connections: connections.data.data,
           facets,
           rule,
+          ruleCount: rules.data.length,
         }
       : null;
 
@@ -90,10 +94,6 @@ export function useTopicModelSettings({
       error: configurationError
         ? `Could not load Topics configuration: ${configurationError.message} Reload the page to retry.`
         : null,
-      triggerVariant:
-        configureSettings && !configured
-          ? ("primary" as const)
-          : ("secondary" as const),
     },
     automaticProcessing: {
       ...automaticProcessing,
@@ -101,7 +101,6 @@ export function useTopicModelSettings({
         projectId,
         rule,
         stored: settings.data,
-        traceIdleMs: readinessSettings.data?.traceIdleMs ?? null,
         save: automaticProcessing.save,
         saving: automaticProcessing.saving,
       },
