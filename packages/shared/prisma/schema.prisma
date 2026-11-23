@@ -76,6 +76,8 @@ model User {
   dashboardUpdated          Dashboard[]                 @relation("UpdatedByUser")
   tableViewPresetCreated    TableViewPreset[]           @relation("CreatedByUser")
   tableViewPresetUpdated    TableViewPreset[]           @relation("UpdatedByUser")
+  sessionViewsCreated       SessionView[]
+  sessionViewPinOverrides   SessionViewPinOverride[]
   monitorsCreated           Monitor[]                   @relation("CreatedByUser")
   monitorsUpdated           Monitor[]                   @relation("UpdatedByUser")
   topicConfigsCreated       TopicConfig[]               @relation("CreatedByUser")
@@ -95,6 +97,8 @@ model User {
   evaluatorsCreated         Evaluator[]                 @relation("EvaluatorCreatedByUser")
   evaluatorVersionsCreated  EvaluatorVersion[]          @relation("EvaluatorVersionCreatedByUser")
   evaluationRulesCreated    EvaluationRule[]            @relation("EvaluationRuleCreatedByUser")
+  gatewaySpendLimitsOwned   GatewaySpendLimit[]         @relation("GatewaySpendLimitOwner")
+  gatewaySpendLimits        GatewaySpendLimit[]         @relation("GatewaySpendLimitUser")
 
   deprecatedRoleAssignments RoleAssignment[] @relation("DeprecatedRoleAssignmentUser") @ignore
 
@@ -142,6 +146,7 @@ model Organization {
   verifiedDomains                  VerifiedDomain[]
   gatewayConfig                    GatewayConfig?
   gatewayAiConnections             GatewayAiConnection[]
+  gatewaySpendLimits               GatewaySpendLimit[]
   organizationLlmApiKeys           LlmApiKeys[]             @relation("OrganizationLlmApiKeys")
   roleAssignments                  RoleAssignment[]         @relation("RoleAssignmentTenant")
 
@@ -204,6 +209,8 @@ model Project {
   Dashboard                         Dashboard[]
   DashboardWidget                   DashboardWidget[]
   TableViewPreset                   TableViewPreset[]
+  sessionViews                      SessionView[]
+  sessionViewPinOverrides           SessionViewPinOverride[]
   actions                           Action[]
   triggers                          Trigger[]
   automationExecutions              AutomationExecution[]
@@ -262,6 +269,7 @@ model ApiKey {
   createdByApiKey     ApiKey?                   @relation("ApiKeyCreatedByApiKey", fields: [createdByApiKeyId], references: [id], onDelete: SetNull)
   apiKeysCreated      ApiKey[]                  @relation("ApiKeyCreatedByApiKey")
   gatewayAssociation  GatewayApiKeyAssociation?
+  gatewaySpendLimits  GatewaySpendLimit[]
   roleAssignments     RoleAssignment[]
 
   deprecatedRoleAssignments RoleAssignment[] @relation("DeprecatedRoleAssignmentApiKey") @ignore
@@ -287,6 +295,7 @@ enum SystemRole {
   SCORES_INGEST
   INGEST
   AI_GATEWAY
+  APPLICATION
 }
 
 model RoleAssignment {
@@ -345,6 +354,7 @@ enum GatewayProvider {
   VERCEL           @map("vercel")
   AZURE            @map("azure")
   GOOGLE_AI_STUDIO @map("google_ai_studio")
+  VERTEX           @map("vertex")
 }
 
 enum GatewayConnectionStatus {
@@ -398,6 +408,72 @@ model GatewayApiKeyAssociation {
   allowedModels Json?  @map("allowed_models") @db.JsonB
 
   @@map("gateway_api_key_associations")
+}
+
+enum GatewaySpendLimitScope {
+  API_KEY
+  USER
+  // The organization's fallback for keys or users without a limit of their own; no subject column is set. One per organization and scope (partial unique index in the migration).
+  API_KEY_DEFAULT
+  USER_DEFAULT
+}
+
+enum GatewaySpendLimitInterval {
+  DAILY
+  WEEKLY
+  MONTHLY
+  TOTAL
+}
+
+// USD spend cap the AI gateway checks before each request. Windows are UTC
+// calendar windows (weeks start Monday); TOTAL never refreshes.
+model GatewaySpendLimit {
+  id                String                    @id @default(cuid())
+  organizationId    String                    @map("organization_id")
+  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Each scope has its own subject column, set exactly for that scope (checked in the database).
+  scope             GatewaySpendLimitScope
+  apiKeyId          String?                   @map("api_key_id")
+  apiKey            ApiKey?                   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  // Caps the spend of all the user's gateway keys in the organization.
+  userId            String?                   @map("user_id")
+  user              User?                     @relation("GatewaySpendLimitUser", fields: [userId], references: [id], onDelete: Cascade)
+  interval          GatewaySpendLimitInterval
+  limitUsd          Decimal                   @map("limit_usd")
+  // When the limit starts counting spend, set when it is created; earlier spend does not count. The gateway's usage counters and the alert rows are keyed by it, so moving it starts counting afresh.
+  countingStartedAt DateTime                  @map("counting_started_at")
+  // Whoever last created or updated the limit. Gateway members may change only their own limits; admins may change all.
+  ownerUserId       String?                   @map("owner_user_id")
+  ownerUser         User?                     @relation("GatewaySpendLimitOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @default(now()) @updatedAt @map("updated_at")
+  alerts            GatewaySpendLimitAlert[]
+
+  @@unique([apiKeyId, interval])
+  @@unique([organizationId, userId, interval])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("gateway_spend_limits")
+}
+
+enum GatewaySpendLimitAlertType {
+  EXCEEDED
+}
+
+/// One notification per limit, subject, alert type, counting start and window, so the gateway may report a limit any number of times.
+model GatewaySpendLimitAlert {
+  id                String                     @id @default(cuid())
+  spendLimitId      String                     @map("spend_limit_id")
+  spendLimit        GatewaySpendLimit          @relation(fields: [spendLimitId], references: [id], onDelete: Cascade)
+  // The key or user a default limit was reached for; empty for a limit of one key or user.
+  subjectId         String                     @default("") @map("subject_id")
+  type              GatewaySpendLimitAlertType
+  countingStartedAt DateTime                   @map("counting_started_at")
+  windowStart       DateTime                   @map("window_start")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+
+  @@unique([spendLimitId, subjectId, type, countingStartedAt, windowStart], map: "gateway_spend_limit_alerts_limit_type_counting_window_key")
+  @@map("gateway_spend_limit_alerts")
 }
 
 enum InAppAgentConversationVisibilityScope {
@@ -531,16 +607,19 @@ model LlmApiKeys {
   extraHeaders      String?  @map("extra_headers")
   extraHeaderKeys   String[] @default([]) @map("extra_header_keys")
   config            Json?
+  // Encrypted. Bedrock IAM role auth: sent when assuming the customer's role.
+  // Derived by Langfuse, never accepted as input, and kept when the role changes.
+  externalId        String?  @map("external_id")
 
   projectId      String?       @map("project_id")
   project        Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   organizationId String?       @map("organization_id")
   organization   Organization? @relation("OrganizationLlmApiKeys", fields: [organizationId], references: [id], onDelete: Cascade)
 
-  DefaultLlmModel DefaultLlmModel[] @relation("LlmApiKeyId")
-  topicSummaryConfigs    TopicConfig[] @relation("TopicConfigSummaryLlmApiKey")
-  topicEmbeddingConfigs  TopicConfig[] @relation("TopicConfigEmbeddingLlmApiKey")
-  topicClusteringConfigs TopicConfig[] @relation("TopicConfigClusteringLlmApiKey")
+  DefaultLlmModel        DefaultLlmModel[] @relation("LlmApiKeyId")
+  topicSummaryConfigs    TopicConfig[]     @relation("TopicConfigSummaryLlmApiKey")
+  topicEmbeddingConfigs  TopicConfig[]     @relation("TopicConfigEmbeddingLlmApiKey")
+  topicClusteringConfigs TopicConfig[]     @relation("TopicConfigClusteringLlmApiKey")
 
   @@unique([projectId, provider])
   @@unique([organizationId, provider])
@@ -1005,15 +1084,15 @@ model SkillFile {
 }
 
 model SkillBlob {
-  id         String    @id @default(cuid())
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
 
   projectId String  @map("project_id")
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   sha256Hash    String @map("sha_256_hash") @db.Char(44)
   contentType   String @map("content_type")
-  contentLength Int @map("content_length")
+  contentLength Int    @map("content_length")
   content       String @db.Text
 
   files SkillFile[]
@@ -1028,8 +1107,11 @@ model Model {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  projectId String?  @map("project_id")
-  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Owner of the definition; a check constraint ties it to project_id (LANGFUSE: null, PROJECT: set).
+  // Filter visibility on scope, never on project_id IS NULL.
+  scope     ModelScope
+  projectId String?    @map("project_id")
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   modelName       String        @map("model_name")
   matchPattern    String        @map("match_pattern")
@@ -1045,7 +1127,13 @@ model Model {
 
   @@unique([projectId, modelName, startDate, unit])
   @@index(modelName)
+  @@index([scope])
   @@map("models")
+}
+
+enum ModelScope {
+  LANGFUSE
+  PROJECT
 }
 
 model Price {
@@ -1173,7 +1261,7 @@ model Evaluator {
 
   name            String
   type            EvalTemplateType
-  isBuiltIn       Boolean              @default(false) @map("is_built_in")
+  isBuiltIn       Boolean               @default(false) @map("is_built_in")
   description     String?
   createdByUserId String?               @map("created_by_user_id")
   createdByUser   User?                 @relation("EvaluatorCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -1325,8 +1413,8 @@ model TracingReadinessSettings {
   updatedBy     String? @map("updated_by")
   updatedByUser User?   @relation("UpdatedByUser", fields: [updatedBy], references: [id], onDelete: SetNull)
 
-  // A trace is due this long after its latest event. Null uses
-  // LANGFUSE_TRACE_BATCH_IDLE_MS. Bounds are enforced on write, not in the DB.
+  // A trace is due this long after its latest event. Null uses the worker's
+  // default idle time. Bounds are enforced on write, not in the DB.
   traceIdleMs Int? @map("trace_idle_ms")
 
   @@map("tracing_readiness_settings")
@@ -1433,7 +1521,7 @@ model TopicConfig {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   // Kill switch for automatic trace processing; facet rules are kept while off.
-  enabled Boolean @default(false)
+  enabled      Boolean               @default(false)
   // Same columns as Evaluator, set when a configured connection is no longer valid.
   blockedAt    DateTime?             @map("blocked_at")
   blockReason  EvaluatorBlockReason? @map("block_reason")
@@ -1509,7 +1597,7 @@ model PosthogIntegration {
   // True while the integration is exporting history (new, re-enabled, or export
   // mode reset), so the export staleness gauge can separate it from steady
   // state. Cleared by the worker once a run lands within an hour of its start.
-  backfill               Boolean                          @default(true)
+  backfill Boolean @default(true)
 
   // Last deterministic customer-config fault (bad hostname) that disabled the
   // integration. Written by the worker, surfaced in the integration settings
@@ -1533,7 +1621,7 @@ model MixpanelIntegration {
   // True while the integration is exporting history (new, re-enabled, or export
   // mode reset), so the export staleness gauge can separate it from steady
   // state. Cleared by the worker once a run lands within an hour of its start.
-  backfill                      Boolean                          @default(true)
+  backfill Boolean @default(true)
 
   @@map("mixpanel_integrations")
 }
@@ -1579,7 +1667,7 @@ model BlobStorageIntegration {
   // True while the integration is exporting history (new, re-enabled, or export
   // mode reset), so the export staleness gauge can separate it from steady
   // state. Cleared by the worker once a run lands within an hour of its start.
-  backfill     Boolean   @default(true)
+  backfill Boolean @default(true)
 
   // Error tracking
   lastError   String?   @map("last_error")
@@ -1977,6 +2065,55 @@ model TableViewPreset {
 
   @@unique([projectId, tableName, name])
   @@map("table_view_presets")
+}
+
+enum SessionViewMode {
+  conversational
+  list
+}
+
+enum SessionUnmatchedTraces {
+  show
+  hide
+}
+
+model SessionView {
+  isPinnedByDefaultForProject Boolean                  @default(false) @map("is_pinned_by_default_for_project")
+  pins                        SessionViewPinOverride[]
+  id                          String                   @id @default(cuid())
+  projectId                   String                   @map("project_id")
+  project                     Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name                        String
+  filters                     Json
+  viewMode                    SessionViewMode          @map("view_mode")
+  unmatchedTraces             SessionUnmatchedTraces   @map("unmatched_traces")
+  createdBy                   String?                  @map("created_by")
+  createdByUser               User?                    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt                   DateTime                 @default(now()) @map("created_at")
+  updatedAt                   DateTime                 @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([projectId, name])
+  @@unique([projectId, id])
+  @@map("session_views")
+}
+
+model SessionViewPinOverride {
+  id        String       @id @default(cuid())
+  projectId String       @map("project_id")
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String       @map("user_id")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Null identifies the built-in Messages view.
+  viewId    String?      @map("view_id")
+  view      SessionView? @relation(fields: [projectId, viewId], references: [projectId, id], onDelete: Cascade)
+  isPinned  Boolean      @default(true) @map("is_pinned")
+  position  Int
+
+  // A partial unique index in the migration enforces one Messages override per user/project.
+  @@unique([projectId, userId, viewId])
+  @@index([userId])
+  @@index([projectId, viewId])
+  @@map("session_view_pin_overrides")
 }
 
 model DefaultView {
